@@ -2,7 +2,9 @@ __author__ = 'jgarman'
 
 from cbint.utils.detonation import DetonationDaemon
 from cbint.utils.detonation.binary_analysis import (BinaryAnalysisProvider, AnalysisPermanentError,
-                                                    AnalysisTemporaryError, AnalysisResult, BinaryConsumerThread)
+                                                    AnalysisTemporaryError, AnalysisResult)
+import cbint.utils.feed
+
 import yara
 
 
@@ -33,22 +35,24 @@ class YaraProvider(BinaryAnalysisProvider):
 
 
 class YaraConnector(DetonationDaemon):
-    def __init__(self, name, **kwargs):
-        super(YaraConnector, self).__init__(name, **kwargs)
-
-    def validate_config(self):
-        super(YaraConnector, self).validate_config()
-
-    def run(self):
-        work_queue = self.initialize_queue()
-
-        consumer_threads = []
-
+    def get_provider(self):
         yara_provider = YaraProvider("/Users/jgarman/tmp/yara.rule")
-        for i in range(10):
-            consumer_threads.append(BinaryConsumerThread(work_queue, self.cb, yara_provider))
+        return yara_provider
 
-        for t in consumer_threads:
-            t.start()
+    def get_metadata(self):
+        return cbint.utils.feed.generate_feed(self.name, summary="Yara stuff",
+                        tech_data="There are no requirements to share any data with Carbon Black to use this feed.",
+                        provider_url="http://yara/", icon_path='',
+                        display_name="Yara thing", category="Connectors")
 
-        self.start_binary_collectors()
+
+if __name__ == '__main__':
+    import os
+
+    my_path = os.path.dirname(os.path.abspath(__file__))
+    temp_directory = "/tmp/yara"
+
+    config_path = os.path.join(my_path, "testing.conf")
+    daemon = YaraConnector('yaratest', configfile=config_path, work_directory=temp_directory,
+                                logfile=os.path.join(temp_directory, 'test.log'), debug=True)
+    daemon.start()
