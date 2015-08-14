@@ -4,8 +4,12 @@ from cbint.utils.detonation import DetonationDaemon
 from cbint.utils.detonation.binary_analysis import (BinaryAnalysisProvider, AnalysisPermanentError,
                                                     AnalysisTemporaryError, AnalysisResult)
 import cbint.utils.feed
-
 import yara
+import time
+import logging
+
+
+log = logging.getLogger(__name__)
 
 
 class YaraProvider(BinaryAnalysisProvider):
@@ -18,9 +22,17 @@ class YaraProvider(BinaryAnalysisProvider):
         return None
 
     def analyze_binary(self, md5sum, binary_file_stream):
+        start_dl_time = time.time()
         d = binary_file_stream.read()
+        end_dl_time = time.time()
+
+        log.debug("%s: Took %0.3f seconds to download the file" % (md5sum, end_dl_time-start_dl_time))
+
         try:
+            start_analyze_time = time.time()
             matches = self.yara_rules.match(data=d, timeout=60)
+            end_analyze_time = time.time()
+            log.debug("%s: Took %0.3f seconds to analyze the file" % (md5sum, end_analyze_time-start_analyze_time))
         except yara.TimeoutError:
             raise AnalysisPermanentError("Analysis timed out after 60 seconds")
         except yara.Error:
@@ -35,6 +47,14 @@ class YaraProvider(BinaryAnalysisProvider):
 
 
 class YaraConnector(DetonationDaemon):
+    @property
+    def num_quick_scan_threads(self):
+        return 0
+
+    @property
+    def num_deep_scan_threads(self):
+        return 10
+
     def get_provider(self):
         yara_provider = YaraProvider("/Users/jgarman/tmp/yara.rule")
         return yara_provider
