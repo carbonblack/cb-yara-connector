@@ -1,6 +1,6 @@
 __author__ = 'jgarman'
 
-from cbint.utils.detonation import DetonationDaemon
+from cbint.utils.detonation import DetonationDaemon, ConfigurationError
 from cbint.utils.detonation.binary_analysis import (BinaryAnalysisProvider, AnalysisPermanentError,
                                                     AnalysisTemporaryError, AnalysisResult)
 import cbint.utils.feed
@@ -56,7 +56,7 @@ class YaraConnector(DetonationDaemon):
         return 10
 
     def get_provider(self):
-        yara_provider = YaraProvider("/Users/jgarman/tmp/yara.rule")
+        yara_provider = YaraProvider(self.yara_rule_directory)
         return yara_provider
 
     def get_metadata(self):
@@ -64,6 +64,15 @@ class YaraConnector(DetonationDaemon):
                         tech_data="There are no requirements to share any data with Carbon Black to use this feed.",
                         provider_url="http://yara/", icon_path='',
                         display_name="Yara thing", category="Connectors")
+
+    def validate_config(self):
+        super(YaraConnector, self).validate_config()
+
+        self.yara_rule_directory = self.get_config_string("yara_rule_directory", None)
+        if not self.yara_rule_directory:
+            raise ConfigurationError("A yara_rule_directory stanza is required in the configuration file")
+
+        return True
 
 
 if __name__ == '__main__':
