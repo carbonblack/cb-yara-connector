@@ -82,6 +82,10 @@ def get_mocked_server(binary_directory):
 
         return Response(response=zipfile_contents.getvalue(), mimetype='application/zip')
 
+    @mocked_cb_server.route('/api/info')
+    def info():
+        return Response(response=json.dumps({"version": "5.1.0"}), mimetype='application/json')
+
     return mocked_cb_server
 
 

@@ -7,15 +7,32 @@ import cbint.utils.feed
 import yara
 import time
 import logging
+import os
 
 
 log = logging.getLogger(__name__)
 
 
 class YaraProvider(BinaryAnalysisProvider):
-    def __init__(self, yara_rules):
-        super(YaraProvider, self).__init__('yara')
-        self.yara_rules = yara.compile(filepath=yara_rules)
+    def __init__(self, name, yara_rule_directory):
+        super(YaraProvider, self).__init__(name)
+        self.yara_rules = self.compile_rules(yara_rule_directory)
+
+    def compile_rules(self, pathname):
+        rule_map = {}
+        for fn in os.listdir(pathname):
+            fullpath = os.path.join(pathname, fn)
+            if not os.path.isfile(fullpath):
+                continue
+
+            last_dot = fn.rfind('.')
+            if last_dot != -1:
+                namespace = fn[:last_dot]
+            else:
+                namespace = fn
+            rule_map[namespace] = fullpath
+
+        return yara.compile(filepaths=rule_map)
 
     # take default definition of check_result_for (return None)
     def check_result_for(self, md5sum):
@@ -34,9 +51,9 @@ class YaraProvider(BinaryAnalysisProvider):
             end_analyze_time = time.time()
             log.debug("%s: Took %0.3f seconds to analyze the file" % (md5sum, end_analyze_time-start_analyze_time))
         except yara.TimeoutError:
-            raise AnalysisPermanentError("Analysis timed out after 60 seconds")
+            raise AnalysisPermanentError(message="Analysis timed out after 60 seconds")
         except yara.Error:
-            raise AnalysisTemporaryError("Yara exception", retry_in=10)
+            raise AnalysisTemporaryError(message="Yara exception", retry_in=10)
         else:
             if matches:
                 return AnalysisResult(message="Matched yara rules",
@@ -56,7 +73,7 @@ class YaraConnector(DetonationDaemon):
         return 10
 
     def get_provider(self):
-        yara_provider = YaraProvider(self.yara_rule_directory)
+        yara_provider = YaraProvider(self.name, self.yara_rule_directory)
         return yara_provider
 
     def get_metadata(self):

@@ -2,7 +2,7 @@ __author__ = 'jgarman'
 
 import unittest
 from cbint.utils.detonation import DetonationDaemon, CbAPIProducerThread
-from cbint.utils.detonation.binary_analysis import BinaryConsumerThread
+from cbint.utils.detonation.binary_analysis import DeepAnalysisThread
 from cbopensource.connectors.yara.bridge import YaraConnector, YaraProvider
 import os
 import sys
@@ -10,6 +10,7 @@ import tempfile
 from time import sleep
 import multiprocessing
 import socket
+import threading
 
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -41,24 +42,28 @@ class YaraTest(unittest.TestCase):
     def setUp(self):
         self.temp_directory = tempfile.mkdtemp()
         config_path = os.path.join(test_dir, "data", "daemon.conf")
-        self.daemon = YaraConnector('yara-test', configfile=config_path, work_directory=self.temp_directory,
-                                    logfile=os.path.join(self.temp_directory, 'test.log'), debug=True)
-        self.daemon.validate_config()
 
         mydir = os.path.dirname(os.path.abspath(__file__))
         binaries_dir = os.path.join(mydir, 'data', 'binary_data')
         self.mock_server = get_mocked_server(binaries_dir)
-        self.mock_server_thread = multiprocessing.Process(target=self.mock_server.run, args=['127.0.0.1', 7982])
+        self.mock_server_thread = threading.Thread(target=self.mock_server.run, args=['127.0.0.1', 7982])
+        self.mock_server_thread.daemon = True
         self.mock_server_thread.start()
         sleep_till_available(('127.0.0.1', 7982))
+
+        self.daemon = YaraConnector('yara-test', configfile=config_path, work_directory=self.temp_directory,
+                                    logfile=os.path.join(self.temp_directory, 'test.log'), debug=True)
+        self.daemon.validate_config()
+
         self.daemon.initialize_queue()
 
     def test_yara(self):
         CbAPIProducerThread(self.daemon.work_queue, self.daemon.cb, self.daemon.name, rate_limiter=0,
                             stop_when_done=True).run()
 
-        yara_provider = YaraProvider(os.path.join(test_dir, 'data', 'rules.yar'))
-        t = BinaryConsumerThread(self.daemon.work_queue, self.daemon.cb, yara_provider)
+        yara_provider = YaraProvider('yara-test', os.path.join(test_dir, 'data', 'yara_rules'))
+        dirty_flag = threading.Event()
+        t = DeepAnalysisThread(self.daemon.work_queue, self.daemon.cb, yara_provider, dirty_event=dirty_flag)
         t.start()
 
         unanalyzed = self.daemon.work_queue.number_unanalyzed()
