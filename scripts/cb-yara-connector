@@ -1,0 +1,30 @@
+#!/usr/bin/env python
+
+
+import sys
+
+import cbopensource.connectors.yara.bridge as yarabridge
+from cbopensource.connectors.yara import __version__
+
+if __name__ == "__main__":
+    name = "yara"
+    daemon = yarabridge.YaraConnector(name, configfile="/etc/cb/integrations/yara/connector.conf",
+                                      work_directory="/usr/share/cb/integrations/yara/db")
+    if len(sys.argv) == 2:
+        if 'start' == sys.argv[1]:
+            daemon.start()
+        elif 'stop' == sys.argv[1]:
+            daemon.stop()
+        elif 'restart' == sys.argv[1]:
+            daemon.restart()
+        elif 'version' == sys.argv[1]:
+            print "%s - version %s" % (name, __version__)
+        else:
+            print "Unknown command: %s" % sys.argv[1]
+            sys.exit(2)
+
+    else:
+        print "Usage: %s start|stop|restart|version" % sys.argv[0]
+        sys.exit(2)
+
+    sys.exit(0)

@@ -1,0 +1,4 @@
+recursive-include cbopensource *
+recursive-include root/etc *
+recursive-include root/usr *
+recursive-include root/var *

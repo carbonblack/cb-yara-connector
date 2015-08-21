@@ -1,0 +1,6 @@
+#!/bin/sh
+
+mkdir -f /usr/share/cb/integrations/yara/db
+chkconfig --add cb-yara-connector
+chkconfig --level 345 cb-yara-connector on
+
