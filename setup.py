@@ -1,6 +1,6 @@
 __author__ = 'jgarman'
 
-from cbopensource.connectors.cyphort import __version__
+from cbopensource.connectors.yara import __version__
 
 from distutils.core import setup
 from distutils.core import Command
