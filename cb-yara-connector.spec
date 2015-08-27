@@ -1,6 +1,6 @@
 # -*- mode: python -*-
 a = Analysis(['scripts/cb-yara-connector'],
-             pathex=['/home/builduser/git/cb-yara-connector'],
+             pathex=['.'],
              hiddenimports=['unicodedata'],
              hookspath=None,
              runtime_hooks=None)
@@ -12,6 +12,6 @@ exe = EXE(pyz,
           a.datas,
           name='cb-yara-connector',
           debug=False,
-          strip=None,
+          strip=False,
           upx=True,
           console=True )
