@@ -31,7 +31,7 @@ class bdist_binaryrpm(bdist_rpm):
 
         # Lots TODO here: generate spec file on demand from the rest of this setup.py file, for starters...
         # self._make_spec_file()
-        call(['rpmbuild', '-bb', 'python-cb-yara-connector.spec'])
+        call(['rpmbuild', '-bb', '%s.spec' % self.distribution.get_name()])
 
 
 """This install_cb plugin will install all data files associated with the
