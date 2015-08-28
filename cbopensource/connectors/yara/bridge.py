@@ -70,7 +70,7 @@ class YaraConnector(DetonationDaemon):
 
     @property
     def num_deep_scan_threads(self):
-        return 10
+        return 4
 
     def get_provider(self):
         yara_provider = YaraProvider(self.name, self.yara_rule_directory)
