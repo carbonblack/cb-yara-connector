@@ -56,7 +56,7 @@ class YaraProvider(BinaryAnalysisProvider):
             raise AnalysisTemporaryError(message="Yara exception", retry_in=10)
         else:
             if matches:
-                return AnalysisResult(message="Matched yara rules",
+                return AnalysisResult(message="Matched yara rules: %s" % ', '.join([match.rule for match in matches]),
                                       extended_message="%s" % ', '.join([match.rule for match in matches]),
                                       analysis_version=1, score=100)
             else:

@@ -148,7 +148,7 @@ scripts = {
 }
 
 setup(
-    name='cb-yara-connector',
+    name='python-cb-yara-connector',
     version='1.0',
     packages=['cbopensource', 'cbopensource.connectors', 'cbopensource.connectors.yara'],
     url='https://github.com/carbonblack/cb-yara-connector',
@@ -157,11 +157,7 @@ setup(
     author_email='dev-support@bit9.com',
     description=
         'Connector for evaluating Yara signatures against the Carbon Black modulestore',
-    install_requires=['flask'],
-    extras_require= {
-    },
-    entry_points = {
-    },
+    data_files=data_files,
     classifiers=[
         'Development Status :: 4 - Beta',
 
@@ -178,5 +174,5 @@ setup(
         'Programming Language :: Python :: 2.7',
     ],
     keywords='carbonblack bit9',
-
+    cmdclass={'install_cb': install_cb, 'bdist_binaryrpm': bdist_binaryrpm}
 )
