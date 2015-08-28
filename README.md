@@ -16,7 +16,7 @@ notification for any binary executed across your network matching any of your Ya
 As root on your Carbon Black or other RPM based 64-bit Linux distribution server:
 ```
 cd /etc/yum.repos.d
-curl -O https://raw.githubusercontent.com/carbonblack/cb-isight-connector/master/CbOpenSource.repo
+curl -O https://opensource.carbonblack.com/release/x86_64/CbOpenSource.repo
 yum install python-cb-yara-connector
 ```
 
