@@ -77,10 +77,10 @@ class YaraConnector(DetonationDaemon):
         return yara_provider
 
     def get_metadata(self):
-        return cbint.utils.feed.generate_feed(self.name, summary="Yara stuff",
+        return cbint.utils.feed.generate_feed(self.name, summary="Scan binaries collected by Carbon Black with Yara.",
                         tech_data="There are no requirements to share any data with Carbon Black to use this feed.",
-                        provider_url="http://yara/", icon_path='',
-                        display_name="Yara thing", category="Connectors")
+                        provider_url="http://plusvic.github.io/yara/", icon_path='',
+                        display_name="Yara", category="Connectors")
 
     def validate_config(self):
         super(YaraConnector, self).validate_config()
