@@ -1,6 +1,6 @@
 %define name python-cb-yara-connector
-%define version 1.0
-%define unmangled_version 1.0
+%define version 1.1
+%define unmangled_version 1.1
 %define release 1
 %global _enable_debug_package 0
 %global debug_package %{nil}
