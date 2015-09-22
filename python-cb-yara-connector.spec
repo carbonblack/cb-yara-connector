@@ -34,9 +34,7 @@ python setup.py install_cb --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%post
-#!/bin/sh
-
+%posttrans
 mkdir -p /usr/share/cb/integrations/yara/db
 chkconfig --add cb-yara-connector
 chkconfig --level 345 cb-yara-connector on
@@ -44,13 +42,15 @@ chkconfig --level 345 cb-yara-connector on
 # not auto-starting because conf needs to be updated
 #/etc/init.d/cb-yara-connector start
 
-
 %preun
-#!/bin/sh
-
 /etc/init.d/cb-yara-connector stop
 
-chkconfig --del cb-yara-connector
+# only delete the chkconfig entry when we uninstall for the last time,
+# not on upgrades
+if [ "X$1" = "X0" ]
+then
+    chkconfig --del cb-yara-connector
+fi
 
 
 %files -f INSTALLED_FILES
