@@ -7,7 +7,6 @@ import cbint.utils.feed
 import yara
 import time
 import logging
-import os
 
 
 log = logging.getLogger(__name__)
@@ -39,11 +38,8 @@ class YaraProvider(BinaryAnalysisProvider):
         return None
 
     def analyze_binary(self, md5sum, binary_file_stream):
-        start_dl_time = time.time()
+        log.debug("%s: in analyze_binary" % md5sum)
         d = binary_file_stream.read()
-        end_dl_time = time.time()
-
-        log.debug("%s: Took %0.3f seconds to download the file" % (md5sum, end_dl_time-start_dl_time))
 
         try:
             start_analyze_time = time.time()
@@ -95,6 +91,8 @@ class YaraConnector(DetonationDaemon):
 
 if __name__ == '__main__':
     import os
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
 
     my_path = os.path.dirname(os.path.abspath(__file__))
     temp_directory = "/tmp/yara"
