@@ -1,5 +1,5 @@
 flask>=0.10.1
 python-dateutil>=2.4.2
--e git://github.com/carbonblack/cbapi.git#egg=cbapi&subdirectory=client_apis/python
+cbapi==0.8.0
 -e git://github.com/carbonblack/cbfeeds.git#egg=cbfeeds
 -e git://github.com/carbonblack/cb-integration.git#egg=cbint
