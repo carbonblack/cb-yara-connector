@@ -26,7 +26,7 @@ Once the software is installed via YUM, copy the `/etc/cb/integrations/yara/conn
 Also, point the Yara connector to a directory of yara rule files by editing the `yara_rule_directory` variable. A set
 of example rules are included in the `/usr/share/cb/integrations/yara/example_rules` directory.
 
-Any errors will be logged into `/var/log/cb/integrations/yara/yara.log`.
+To start the service, run `service cb-yara-connector start` as root. Any errors will be logged into `/var/log/cb/integrations/yara/yara.log`.
 
 ## Troubleshooting
 
