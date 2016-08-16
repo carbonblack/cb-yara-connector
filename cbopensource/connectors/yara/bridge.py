@@ -8,6 +8,7 @@ import yara
 import time
 import logging
 
+import os
 
 log = logging.getLogger(__name__)
 
@@ -66,8 +67,16 @@ class YaraConnector(DetonationDaemon):
 
     @property
     def num_deep_scan_threads(self):
-        return 4
+        return 10
 
+    @property
+    def up_to_date_rate_limiter(self):
+        return 0
+
+    @property
+    def historical_rate_limiter(self):
+        return 0
+    
     def get_provider(self):
         yara_provider = YaraProvider(self.name, self.yara_rule_directory)
         return yara_provider
@@ -90,7 +99,6 @@ class YaraConnector(DetonationDaemon):
 
 
 if __name__ == '__main__':
-    import os
     import logging
     logging.basicConfig(level=logging.DEBUG)
 
