@@ -18,6 +18,13 @@ listener_port=7000
 listener_address=0.0.0.0
 
 ;
+; feed_host_address
+; ipv4 address feed is on; defaults to 127.0.0.1
+; 0.0.0.0 binds to all interfaces
+;
+feed_host=0.0.0.0
+
+;
 ; yara_rule_directory
 ; directory where yara rules live.
 ;
