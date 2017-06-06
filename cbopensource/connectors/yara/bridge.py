@@ -64,7 +64,7 @@ class YaraConnector(DetonationDaemon):
 
     @property
     def integration_name(self):
-        return 'Cb Yara Connector 1.2.5'
+        return 'Cb Yara Connector 1.2.6'
 
     @property
     def num_quick_scan_threads(self):
@@ -72,7 +72,7 @@ class YaraConnector(DetonationDaemon):
 
     @property
     def num_deep_scan_threads(self):
-        return 10
+        return 2
 
     @property
     def up_to_date_rate_limiter(self):
