@@ -72,7 +72,7 @@ class YaraConnector(DetonationDaemon):
 
     @property
     def num_deep_scan_threads(self):
-        return 2
+        return 4
 
     @property
     def up_to_date_rate_limiter(self):
