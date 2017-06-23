@@ -3,7 +3,8 @@ a = Analysis(['scripts/cb-yara-connector'],
              pathex=['.'],
              hiddenimports=['unicodedata'],
              datas=[ (HOMEPATH + '/cbapi/response/models/*', 'cbapi/response/models/'),
-                     (HOMEPATH + '/cbapi/protection/models/*', 'cbapi/protection/models/') ],
+                     (HOMEPATH + '/cbapi/protection/models/*', 'cbapi/protection/models/'),
+                     (HOMEPATH + '/cbapi/defense/models/*', 'cbapi/defense/models/') ],
              hookspath=None,
              runtime_hooks=None)
 pyz = PYZ(a.pure)
