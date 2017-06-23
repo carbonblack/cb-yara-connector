@@ -148,7 +148,7 @@ scripts = {
 
 setup(
     name='python-cb-yara-connector',
-    version='1.2',
+    version='1.2.9',
     packages=['cbopensource', 'cbopensource.connectors', 'cbopensource.connectors.yara'],
     url='https://github.com/carbonblack/cb-yara-connector',
     license='MIT',
