@@ -1,6 +1,4 @@
 flask>=0.10.1
 python-dateutil>=2.4.2
-cbapi==0.8.0
-yara-python
-pyinstaller==3.1
--e git://github.com/carbonblack/cb-integration.git#egg=cbint
+cbint==0.8.11
+pyinstaller==3.1.1

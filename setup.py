@@ -103,8 +103,8 @@ class install_cb(Command):
             self.mkpath(dir)
 
             data = os.path.join('dist', scriptname)
-            (out, _) = self.copy_file(data, dir, preserve_mode=True)
-            self.outfiles.append(out)
+            out = self.copy_tree(data, dir, preserve_mode=True)
+            self.outfiles.extend(out)
 
         if self.record:
             outputs = self.get_outputs()
@@ -116,7 +116,6 @@ class install_cb(Command):
                          (self.record, outputs),
                          "writing list of installed files to '%s'" %
                          self.record)
-
 
     def get_inputs(self):
         return self.data_files or []
@@ -143,7 +142,7 @@ data_files.append('scripts/cb-yara-connector')
 scripts = {
     'cb-yara-connector': {
         'spec': 'cb-yara-connector.spec',
-        'dest': '/usr/share/cb/integrations/yara/cb-yara-connector'
+        'dest': '/usr/share/cb/integrations/yara/bin/'
     }
 }
 
@@ -153,10 +152,10 @@ setup(
     packages=['cbopensource', 'cbopensource.connectors', 'cbopensource.connectors.yara'],
     url='https://github.com/carbonblack/cb-yara-connector',
     license='MIT',
-    author='Bit9 + Carbon Black Developer Network',
-    author_email='dev-support@bit9.com',
+    author='Carbon Black Developer Network',
+    author_email='dev-support@carbonblack.com',
     description=
-        'Connector for evaluating Yara signatures against the Carbon Black modulestore',
+        'Connector between Carbon Black and Yara',
     data_files=data_files,
     classifiers=[
         'Development Status :: 4 - Beta',

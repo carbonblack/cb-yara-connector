@@ -40,10 +40,10 @@ If you want to re-run the analysis across your binaries:
 3. Remove the feed from your Cb server's Threat Intelligence page
 4. Restart the service: `service cb-yara-connector start`
 
-## Contacting Bit9 Developer Relations Support
+## Contacting Carbon Black Developer Relations Support
 
-Web: https://community.bit9.com/groups/developer-relations
-E-mail: dev-support@bit9.com
+Web: https://developer.carbonblack.com
+E-mail: dev-support@carbonblack.com
 
 ### Reporting Problems
 

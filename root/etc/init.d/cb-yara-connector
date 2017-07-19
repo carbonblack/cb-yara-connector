@@ -10,7 +10,7 @@
 # Source function library.
 . /etc/rc.d/init.d/functions
 
-exec="/usr/share/cb/integrations/yara/cb-yara-connector"
+exec="/usr/share/cb/integrations/yara/bin/cb-yara-connector"
 prog="cb-yara-connector"
 pidfile="/var/run/cb/integrations/yara.pid"
 

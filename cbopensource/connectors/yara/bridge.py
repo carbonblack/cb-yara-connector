@@ -72,13 +72,18 @@ class YaraProvider(BinaryAnalysisProvider):
 
 
 class YaraConnector(DetonationDaemon):
+
+    @property
+    def integration_name(self):
+        return 'Cb Yara Connector 1.2.9'
+
     @property
     def num_quick_scan_threads(self):
         return 0
 
     @property
     def num_deep_scan_threads(self):
-        return 10
+        return 4
 
     @property
     def up_to_date_rate_limiter(self):
