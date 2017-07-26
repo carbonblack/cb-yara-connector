@@ -1,7 +1,5 @@
 __author__ = 'jgarman'
 
-from cbopensource.connectors.yara import __version__
-
 from distutils.core import setup
 from distutils.core import Command
 from distutils.command.bdist_rpm import bdist_rpm
