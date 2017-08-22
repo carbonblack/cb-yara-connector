@@ -52,11 +52,22 @@ class YaraProvider(BinaryAnalysisProvider):
             raise AnalysisTemporaryError(message="Yara exception", retry_in=10)
         else:
             if matches:
+                score = self.getHighScore(matches)
                 return AnalysisResult(message="Matched yara rules: %s" % ', '.join([match.rule for match in matches]),
                                       extended_message="%s" % ', '.join([match.rule for match in matches]),
-                                      analysis_version=1, score=100)
+                                      analysis_version=1, score=score)
             else:
                 return AnalysisResult(score=0)
+
+    def getHighScore(self, matches):
+        score = 0
+        for match in matches:
+            if match.meta.get('score') > score:
+                score = match.meta.get('score')
+        if score == 0:
+            return 100
+        else:
+            return score
 
 
 class YaraConnector(DetonationDaemon):
