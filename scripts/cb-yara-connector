@@ -4,7 +4,6 @@
 import sys
 
 import cbopensource.connectors.yara.bridge as yarabridge
-from cbopensource.connectors.yara import __version__
 
 if __name__ == "__main__":
     name = "yara"
