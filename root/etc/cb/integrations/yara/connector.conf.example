@@ -18,6 +18,21 @@ listener_port=7000
 listener_address=0.0.0.0
 
 ;
+; binary_filter_query
+; Additional query options to filter only binaries of interest to the Yara connector
+;
+; Default=None
+;
+binary_filter_query=is_executable_image:true -(digsig_publisher:"Microsoft Corporation" and digsig_result:"Signed")
+
+;
+; Number of concurrent threads
+;
+; Default=4
+;
+yara_num_threads=8
+
+;
 ; yara_rule_directory
 ; directory where yara rules live.
 ;
