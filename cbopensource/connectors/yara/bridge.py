@@ -1,5 +1,3 @@
-__author__ = 'jgarman'
-
 from cbint.utils.detonation import DetonationDaemon, ConfigurationError
 from cbint.utils.detonation.binary_analysis import (BinaryAnalysisProvider, AnalysisPermanentError,
                                                     AnalysisTemporaryError, AnalysisResult)
@@ -11,6 +9,7 @@ import logging
 import os
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 class YaraProvider(BinaryAnalysisProvider):
@@ -46,7 +45,7 @@ class YaraProvider(BinaryAnalysisProvider):
             start_analyze_time = time.time()
             matches = self.yara_rules.match(data=d, timeout=60)
             end_analyze_time = time.time()
-            log.debug("%s: Took %0.3f seconds to analyze the file" % (md5sum, end_analyze_time-start_analyze_time))
+            log.debug("%s: Took %0.3f seconds to analyze the file" % (md5sum, end_analyze_time - start_analyze_time))
         except yara.TimeoutError:
             raise AnalysisPermanentError(message="Analysis timed out after 60 seconds")
         except yara.Error:
@@ -61,10 +60,19 @@ class YaraProvider(BinaryAnalysisProvider):
 
 
 class YaraConnector(DetonationDaemon):
-
     @property
     def integration_name(self):
-        return 'Cb Yara Connector 1.2.9'
+        return 'Cb Yara Connector 1.2.10'
+
+    @property
+    def filter_spec(self):
+        filters = []
+        additional_filter_requirements = self.get_config_string("binary_filter_query", None)
+        if additional_filter_requirements:
+            log.info("Binary Filter Query: {0}".format(additional_filter_requirements))
+            filters.append(additional_filter_requirements)
+
+        return ' '.join(filters)
 
     @property
     def num_quick_scan_threads(self):
@@ -72,7 +80,9 @@ class YaraConnector(DetonationDaemon):
 
     @property
     def num_deep_scan_threads(self):
-        return 4
+        yara_num_threads = self.get_config_integer("yara_num_threads", 4)
+        log.info("Number of deep scan threads: {0}".format(yara_num_threads))
+        return yara_num_threads
 
     @property
     def up_to_date_rate_limiter(self):
@@ -81,17 +91,17 @@ class YaraConnector(DetonationDaemon):
     @property
     def historical_rate_limiter(self):
         return 0
-    
+
     def get_provider(self):
         yara_provider = YaraProvider(self.name, self.yara_rule_directory)
         return yara_provider
 
     def get_metadata(self):
         return cbint.utils.feed.generate_feed(self.name, summary="Scan binaries collected by Carbon Black with Yara.",
-                        tech_data="There are no requirements to share any data with Carbon Black to use this feed.",
-                        provider_url="http://plusvic.github.io/yara/",
-                        icon_path='/usr/share/cb/integrations/yara/yara-logo.png',
-                        display_name="Yara", category="Connectors")
+                                              tech_data="There are no requirements to share any data with Carbon Black to use this feed.",
+                                              provider_url="http://plusvic.github.io/yara/",
+                                              icon_path='/usr/share/cb/integrations/yara/yara-logo.png',
+                                              display_name="Yara", category="Connectors")
 
     def validate_config(self):
         super(YaraConnector, self).validate_config()
@@ -105,6 +115,7 @@ class YaraConnector(DetonationDaemon):
 
 if __name__ == '__main__':
     import logging
+
     logging.basicConfig(level=logging.DEBUG)
 
     my_path = os.path.dirname(os.path.abspath(__file__))
@@ -112,5 +123,5 @@ if __name__ == '__main__':
 
     config_path = os.path.join(my_path, "testing.conf")
     daemon = YaraConnector('yaratest', configfile=config_path, work_directory=temp_directory,
-                                logfile=os.path.join(temp_directory, 'test.log'), debug=True)
+                           logfile=os.path.join(temp_directory, 'test.log'), debug=True)
     daemon.start()
