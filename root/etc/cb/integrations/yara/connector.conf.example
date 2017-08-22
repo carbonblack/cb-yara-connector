@@ -37,7 +37,7 @@ binary_filter_query=is_executable_image:true -(digsig_publisher:"Microsoft Corpo
 ;
 ; Default=4
 ;
-yara_num_threads=8
+yara_num_threads=4
 
 ;
 ; yara_rule_directory
