@@ -1,4 +1,4 @@
 flask>=0.10.1
 python-dateutil>=2.4.2
-cbint==0.8.12
+cbint==0.9.1
 pyinstaller==3.1.1
