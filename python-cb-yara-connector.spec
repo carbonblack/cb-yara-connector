@@ -1,7 +1,7 @@
 %define name python-cb-yara-connector
 %define version 1.3
 %define unmangled_version 1.3
-%define release 0
+%define release 1
 %global _enable_debug_package 0
 %global debug_package %{nil}
 %global __os_install_post /usr/lib/rpm/brp-compress %{nil}
