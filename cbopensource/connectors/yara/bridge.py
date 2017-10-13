@@ -73,7 +73,7 @@ class YaraProvider(BinaryAnalysisProvider):
 class YaraConnector(DetonationDaemon):
     @property
     def integration_name(self):
-        return 'Cb Yara Connector 1.3.0'
+        return 'Cb Yara Connector 1.3.2'
 
     @property
     def filter_spec(self):
