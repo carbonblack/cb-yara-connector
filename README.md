@@ -40,6 +40,17 @@ If you want to re-run the analysis across your binaries:
 3. Remove the feed from your Cb server's Threat Intelligence page
 4. Restart the service: `service cb-yara-connector start`
 
+## Building yara-python with crypto
+
+1. `git clone --recursive https://github.com/VirusTotal/yara-python`
+2. `cd yara-python/yara`
+3. `./bootstrap.sh`
+3. `./configure --with-crypto`
+4. `make`
+5. `mktmpenv`
+6. `python setup.py build --dynamic-linking`
+7. `python setup.py install`
+
 ## Contacting Carbon Black Developer Relations Support
 
 Web: https://developer.carbonblack.com
