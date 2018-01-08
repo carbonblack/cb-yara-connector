@@ -42,6 +42,8 @@ If you want to re-run the analysis across your binaries:
 
 ## Building yara-python with crypto
 
+This is only needed if you are building the connector from scratch.
+
 1. `git clone --recursive https://github.com/VirusTotal/yara-python`
 2. `cd yara-python/yara`
 3. `./bootstrap.sh`
