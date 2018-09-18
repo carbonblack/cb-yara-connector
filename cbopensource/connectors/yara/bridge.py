@@ -7,6 +7,7 @@ import time
 import logging
 
 import os
+import pprint
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -30,6 +31,9 @@ class YaraProvider(BinaryAnalysisProvider):
             else:
                 namespace = fn
             rule_map[namespace] = fullpath
+
+        log.info("Yara Rules to be compiled:")
+        log.info(pprint.pformat(rule_map))
 
         return yara.compile(filepaths=rule_map)
 
