@@ -1,5 +1,0 @@
-#!/bin/sh
-
-/etc/init.d/cb-yara-connector stop
-
-chkconfig --del cb-yara-connector
