@@ -1,70 +1,88 @@
-# Carbon Black - Yara Connector
 
-[Yara](http://plusvic.github.io/yara/) is the linga franca of malware analysts. 
-With a robust language to define byte strings and clean, well-designed interfaces, 
-many IR and security operations shops keep the results of their analysis in a local
-repository of yara rules.
+install zlib
+install openssl-devel
+install sqlite-devel
 
-However, monitoring activity across your network for matches to your yara rules is 
-difficult.  If possible at all, it usually involves infrequent, time-consuming scans.  
-Since Carbon Black collects all executed binaries and has a robust API, it is possible
-to configure your Carbon Black server to act as a "Yara Monitor" and automatically trigger
-notification for any binary executed across your network matching any of your Yara rules.
+# Running the agent
 
-## Installation Quickstart
+mkdir -p /usr/share/cb/integrations/yara/yara_rules`
+wget <> /usr/share/cb/integrations/yara/yara_agent
 
-As root on your Carbon Black or other RPM based 64-bit Linux distribution server:
-```
-cd /etc/yum.repos.d
-curl -O https://opensource.carbonblack.com/release/x86_64/CbOpenSource.repo
-yum install python-cb-yara-connector
-```
+## Sample Yara Agent Config
 
-Once the software is installed via YUM, copy the `/etc/cb/integrations/yara/connector.conf.example` file to 
-`/etc/cb/integrations/yara/connector.conf`. Edit this file and place your Carbon Black API key into the 
-`carbonblack_server_token` variable and your Carbon Black server's base URL into the `carbonblack_server_url` variable.
-Also, point the Yara connector to a directory of yara rule files by editing the `yara_rule_directory` variable. A set
-of example rules are included in the `/usr/share/cb/integrations/yara/example_rules` directory.
+	[general]
+	
+	;
+	; either run a single worker locally or remotely
+	; valid types are 'local' or 'remote'
+	;
+	worker_type=local
+	
+	;
+	; ONLY for worker_type of remote
+	; IP Address of workers if worker_type is remote
+	;
+	
+	;worker_ip=127.0.0.1
+	
+	;
+	; ONLY for worker_type of local
+	; Cb Response Server settings for scanning locally.
+	; For remote scanning please set these parameters in the yara worker config file
+	; Default: https://127.0.0.1
+	;
+	cb_server_url=
+	cb_server_token=
+	
+	;
+	; path to directory containing yara rules
+	;
+	yara_rules_dir=yara_rules
+	
+	;
+	; Cb Response postgres Database settings
+	;
+	postgres_host=
+	postgres_username=
+	postgres_password=
+	postgres_db=
+	postgres_port=
+	
+	;
+	; nice value used for this script
+	;
+	niceness=1
+	
+* copy the above config to `/etc/cb/integrations/yara/yara_agent.conf`
 
-To start the service, run `service cb-yara-connector start` as root. Any errors will be logged into `/var/log/cb/integrations/yara/yara.log`.
+# Example Cron Entry
 
-## Troubleshooting
+##
 
-If you suspect a problem, please first look at the Yara connector logs found here: `/var/log/cb/integrations/yara/yara.log`
-(There might be multiple files as the logger "rolls over" when the log file hits a certain size).
 
-If you want to re-run the analysis across your binaries:
 
-1. Stop the service: `service cb-yara-connector stop`
-2. Remove the database file: `rm /usr/share/cb/integrations/yara/db/sqlite.db`
-3. Remove the feed from your Cb server's Threat Intelligence page
-4. Restart the service: `service cb-yara-connector start`
+# Centos 6 Build Instructions
 
-## Building yara-python with crypto
+## Install Python 3.6
 
-This is only needed if you are building the connector from scratch.
+	./configure --prefix=/usr/local --enable-shared LDFLAGS="-Wl,-rpath /usr/local/lib"
+	make
+	make altinstall
 
-1. `git clone --recursive https://github.com/VirusTotal/yara-python`
-2. `cd yara-python/yara`
-3. `./bootstrap.sh`
-3. `./configure --with-crypto`
-4. `make`
-5. `mktmpenv`
-6. `python setup.py build --dynamic-linking`
-7. `python setup.py install`
+## Create VirtualEnv
 
-## Contacting Carbon Black Developer Relations Support
+	python3.6 -m venv venv-build
+	source ./venv-build/bin/activate
+	pip install -r requirements.txt
 
-Web: https://developer.carbonblack.com
-E-mail: dev-support@carbonblack.com
+## Create Executable
 
-### Reporting Problems
+	pyinstaller main.spec
+	
+# Centos 7 Build Instructions
 
-When you contact Bit9 Developer Relations Technical Support with an issue, please provide the following:
+## Install Python 3.6
 
-* Your name, company name, telephone number, and e-mail address
-* Product name/version, CB Server version, CB Sensor version
-* Hardware configuration of the Carbon Black Server or computer (processor, memory, and RAM) 
-* For documentation issues, specify the version of the manual you are using. 
-* Action causing the problem, error message returned, and event log output (as appropriate) 
-* Problem severity
+## Create VirtualEnv
+
+## Create Executable
