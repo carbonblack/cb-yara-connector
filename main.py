@@ -19,7 +19,8 @@ from celery import group
 from binary_database import db, BinaryDetonationResult
 import singleton
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+logging.basicConfig(format=logging_format)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -228,6 +229,9 @@ def main(yara_rule_dir):
             if len(md5_hashes) >= globals.MAX_HASHES:
                 analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
                 if analysis_results:
+                    for analysis_result in analysis_results:
+                        if analysis_result.last_error_msg:
+                            logger.error(analysis_result.last_error_msg)
                     save_results(analysis_results)
                 else:
                     logger.error(traceback.format_exc())
@@ -237,12 +241,12 @@ def main(yara_rule_dir):
         if num_total_binaries % 1000 == 0:
             elapsed_time = time.time() - start_time
             logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
-            logger.info("number binaries scanned: {0}".format(globals.g_num_binaries_analyzed))
-            logger.info("number binaries already scanned: {0}".format(num_binaries_skipped))
-            logger.info("number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
+            logger.debug("number binaries scanned: {0}".format(globals.g_num_binaries_analyzed))
+            logger.debug("number binaries already scanned: {0}".format(num_binaries_skipped))
+            logger.debug("number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
             logger.info("total binaries: {0}".format(num_total_binaries))
-            logger.info("binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
-            logger.info("num binaries score greater than 0: {0}".format(
+            logger.debug("binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
+            logger.info("num binaries score greater than zero: {0}".format(
                 len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))))
             logger.info("")
 
@@ -254,11 +258,14 @@ def main(yara_rule_dir):
 
     elapsed_time = time.time() - start_time
     logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
-    logger.info("number binaries scanned: {0}".format(globals.g_num_binaries_analyzed))
-    logger.info("number binaries skipped: {0}".format(num_binaries_skipped))
-    logger.info("number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
+    logger.debug("number binaries scanned: {0}".format(globals.g_num_binaries_analyzed))
+    logger.debug("number binaries already scanned: {0}".format(num_binaries_skipped))
+    logger.debug("number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
     logger.info("total binaries: {0}".format(num_total_binaries))
-    logger.info("binaries per second: {0}:".format(num_total_binaries / elapsed_time))
+    logger.debug("binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
+    logger.info("num binaries score greater than zero: {0}".format(
+        len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))))
+    logger.info("")
 
     generate_feed_from_db()
 
@@ -274,8 +281,6 @@ def verify_config(config_file, output_file):
         return False
 
     if 'worker_type' in config['general']:
-        logger.info(config['general']['worker_type'])
-
         if config['general']['worker_type'] == 'local':
             globals.g_remote = False
         elif config['general']['worker_type'] == 'remote':
@@ -333,9 +338,19 @@ if __name__ == "__main__":
         parser.add_argument('--output-file',
                             default='yara_feed.json',
                             help='output feed file')
-        parser.add_argument('--debug')
+        parser.add_argument('--debug', action='store_true')
 
         args = parser.parse_args()
+
+        if args.debug:
+            logger = logging.getLogger(__name__)
+            logger.setLevel(logging.DEBUG)
+
+        if args.log_file:
+            formatter = logging.Formatter(logging_format)
+            handler = logging.handlers.RotatingFileHandler(args.log_file, maxBytes=10 * 1000000, backupCount=10)
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
 
         if verify_config(args.config_file, args.output_file):
             try:
