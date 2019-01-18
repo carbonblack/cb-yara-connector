@@ -1,6 +1,3 @@
-
-
-
 # Installing Yara Agent (Centos/RHEL 6)
 
 * Create directories
@@ -11,7 +8,7 @@
 * Download Yara Agent
 
 
-	wget <> /usr/share/cb/integrations/yara/yara_agent
+	wget -O /usr/share/cb/integrations/yara/yara_agent <url to yara_agent>
 	
 * Create Yara Agent Config File
 
@@ -19,7 +16,7 @@
 #### Sample Yara Agent Config
 
 	[general]
-	
+
 	;
 	; either run a single worker locally or remotely
 	; valid types are 'local' or 'remote'
@@ -30,17 +27,7 @@
 	; ONLY for worker_type of remote
 	; IP Address of workers if worker_type is remote
 	;
-	
-	;worker_ip=127.0.0.1
-	
-	;
-	; ONLY for worker_type of local
-	; Cb Response Server settings for scanning locally.
-	; For remote scanning please set these parameters in the yara worker config file
-	; Default: https://127.0.0.1
-	;
-	cb_server_url=
-	cb_server_token=
+	broker_url=redis://
 	
 	;
 	; path to directory containing yara rules
@@ -57,9 +44,19 @@
 	postgres_port=
 	
 	;
+	; ONLY for worker_type of local
+	; Cb Response Server settings for scanning locally.
+	; For remote scanning please set these parameters in the yara worker config file
+	; Default: https://127.0.0.1
+	;
+	cb_server_url=
+	cb_server_token=
+	
+	;
 	; nice value used for this script
 	;
 	niceness=1
+
 	
 * copy and modify the above config to `/etc/cb/integrations/yara/yara_agent.conf`
 
@@ -99,13 +96,19 @@
 	python3.6 -m venv venv
 	source ./venv/bin/activate
 	pip install -r requirements.txt
-	mkdir yara_rules_remote
+	mkdir yara_rules
 	
-* Create Yara Worker Config File
+* Create Yara Worker Config File `yara_worker.conf`
 
 #### Example Yara Worker Config File
 
 	[general]
+
+	;
+	; Python Celery Broker Url. Set this full url string for Redis
+	; Example: redis://<ip_address>
+	;
+	broker_url=redis://127.0.0.1
 	
 	;
 	; Cb Response Server Configuration
@@ -118,13 +121,13 @@
 	; Directory for temporary yara rules storage
 	; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
 	;
-	yara_rules_dir=yara_rules_remote
+	yara_rules_dir=yara_rules
 	
-* Copy and modify the above
+* Copy, modify and save to `yara_worker.conf`
 	
 #### Run Yara Worker Manually
 
-	celery -A tasks worker --concurrency=10 --loglevel=info
+	celery -A tasks worker --config-file=yara_worker.conf --concurrency=10 --loglevel=info
 	
 #### Example Supervisor Config
 

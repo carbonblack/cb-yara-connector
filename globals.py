@@ -1,4 +1,3 @@
-g_redis_url = ''
 g_config = {}
 
 g_cb_server_url = 'https://127.0.0.1'
@@ -23,5 +22,3 @@ MAX_HASHES = 8
 
 g_num_binaries_not_available = 0
 g_num_binaries_analyzed = 0
-
-g_num_save_results = 0
