@@ -168,6 +168,7 @@ def analyze_binary(md5sum):
                     analysis_result.misc = generate_yara_rule_map_hash(globals.g_yara_rules_dir)
                 else:
                     analysis_result.score = 0
+                    analysis_result.short_result = "No Matches"
 
         else:
             analysis_result.binary_not_available = True
