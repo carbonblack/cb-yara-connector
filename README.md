@@ -4,15 +4,15 @@ The Yara agent must be installed on the same system as Cb Response.
 
 * Create directories
 
-
+	```
 	mkdir -p /usr/share/cb/integrations/yara/yara_rules
-	
+	```
 	
 * Download Yara Agent
 
-
+	```
 	wget -O /usr/share/cb/integrations/yara/yara_agent <url to yara_agent>
-	
+	```
 	
 * Create Yara Agent Config File
 
@@ -74,29 +74,30 @@ The Yara agent must be installed on the same system as Cb Response.
 
 * Install Python 3.6
 
-
+	```
 	sudo yum install epel-release
 	sudo yum install python36
 	sudo yum install python36-devel
-	
+	```
 	
 * Install Redis
 	
-
+	```
 	sudo yum install redis
 	sudo systemctl start redis
 	sudo systemctl enable redis
+	```
 	
 	
 * Install Supervisord
 
-
+	```
 	sudo yum install supervisor
-	
+	```
 	
 * Install Yara Worker
 
-
+	```
 	git clone https://github.com/carbonblack/cb-yara-connector.git
 	cd cb-yara-connector
 	git checkout yara_version2
@@ -104,6 +105,7 @@ The Yara agent must be installed on the same system as Cb Response.
 	source ./venv/bin/activate
 	pip install -r requirements.txt
 	mkdir yara_rules
+	```
 	
 	
 * Create Yara Worker Config File `yara_worker.conf`
@@ -152,14 +154,15 @@ The Yara agent must be installed on the same system as Cb Response.
 
 * Enabled Supervisor
 
-	
+	```
 	systemctl enable supervisord
-	
+	```
 	
 * Restart Supervisor
 
-	
+	```
 	systemctl restart supervisord
+	```
 	
 
 # Centos 6 Build Instructions (Development)
@@ -172,16 +175,21 @@ The Yara agent must be installed on the same system as Cb Response.
 
 ## Install Python 3.6
 
+	
 	./configure --prefix=/usr/local --enable-shared LDFLAGS="-Wl,-rpath /usr/local/lib"
 	make
 	make altinstall
 
+
 ## Create VirtualEnv
+
 
 	python3.6 -m venv venv-build
 	source ./venv-build/bin/activate
 	pip install -r requirements.txt
 
+
 ## Create Executable
+
 
 	pyinstaller main.spec
