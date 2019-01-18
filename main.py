@@ -151,59 +151,6 @@ def save_results(analysis_results):
                 generate_feed_from_db()
 
 
-def queue_save_results(md5_hashes):
-    try:
-        scan_group = list()
-        for md5_hash in md5_hashes:
-            scan_group.append(analyze_binary.s(md5_hash))
-        job = group(scan_group)
-
-        result = job.apply_async()
-
-        time_waited = 0
-        while not result.ready():
-            if time_waited == 100:
-                break
-            else:
-                time.sleep(.1)
-                time_waited += 1
-
-        if result.successful():
-            for analysis_result in result.get(timeout=30):
-                if analysis_result.binary_not_available:
-                    globals.g_num_binaries_not_available += 1
-                    continue
-                try:
-                    bdr = BinaryDetonationResult()
-                    bdr.md5 = analysis_result.md5
-                    bdr.last_scan_date = datetime.now()
-                    bdr.score = analysis_result.score
-                    bdr.last_error_msg = analysis_result.last_error_msg
-                    bdr.last_success_msg = analysis_result.short_result
-                    bdr.misc = json.dumps(globals.g_yara_rule_map_hash_list)
-                    bdr.save()
-
-                except:
-                    logger.error("Error saving to database")
-                    logger.error(traceback.format_exc())
-                if analysis_result.score > 0:
-                    fields = {'iocs': {'md5': [analysis_result.md5]},
-                              'score': analysis_result.score,
-                              'timestamp': int(time.mktime(time.gmtime())),
-                              'link': '',
-                              'id': f'binary_{analysis_result.md5}',
-                              'title': '',
-                              'description': analysis_result.short_result
-                              }
-
-                    globals.g_reports.append(CbReport(**fields))
-        else:
-            logger.error(result.traceback())
-    except:
-        logger.error(traceback.format_exc())
-        time.sleep(5)
-
-
 def print_statistics():
     pass
 
@@ -280,7 +227,11 @@ def main(yara_rule_dir):
 
             if len(md5_hashes) >= globals.MAX_HASHES:
                 analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
-                save_results(analysis_results)
+                if analysis_results:
+                    save_results(analysis_results)
+                else:
+                    logger.error(traceback.format_exc())
+                    logger.error("analysis_results is None")
                 md5_hashes = list()
 
         if num_total_binaries % 1000 == 0:
@@ -322,7 +273,8 @@ def verify_config(config_file, output_file):
         logger.error("Config file does not have a \'general\' section")
         return False
 
-    if 'worker_type' not in config['general']:
+    if 'worker_type' in config['general']:
+        logger.info(config['general']['worker_type'])
 
         if config['general']['worker_type'] == 'local':
             globals.g_remote = False
@@ -332,6 +284,8 @@ def verify_config(config_file, output_file):
                 globals.worker_ip = config['general']['worker_ip']
         else:
             logger.error("invalid worker_type specified.  Must be \'local\' or \'remote\'")
+    else:
+        logger.warn("Config file does not specify worker_type, assuming local")
 
     if 'yara_rules_dir' in config['general']:
         globals.g_yara_rules_dir = config['general']['yara_rules_dir']
@@ -389,6 +343,7 @@ if __name__ == "__main__":
                 db.initialize(database)
                 db.connect()
                 db.create_tables([BinaryDetonationResult])
+                generate_feed_from_db()
                 main('yara_rules')
             except:
                 logger.error(traceback.format_exc())
