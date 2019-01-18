@@ -4,7 +4,7 @@ g_config = {}
 g_cb_server_url = 'https://127.0.0.1'
 g_cb_server_token = ''
 
-worker_ip = "127.0.0.1"
+broker_url = ''
 
 g_yara_rules_dir = 'yara_rules'
 output_file = 'yara_feed.json'

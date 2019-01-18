@@ -1,6 +1,7 @@
 from celery import Celery, bootsteps
+import globals
 
-app = Celery('tasks', backend='redis://localhost', broker='redis://localhost')
+app = Celery()
 app.conf.task_serializer = "pickle"
 app.conf.result_serializer = "pickle"
 app.conf.accept_content = {"pickle"}
@@ -41,6 +42,11 @@ def verify_config(config_file):
     if 'cb_server_token' in config['general']:
         globals.g_cb_server_token = config['general']['cb_server_token']
 
+    if 'broker_url' in config['general']:
+        app.conf.update(
+            broker_url=config['general']['broker_url'],
+            result_backend=config['general']['broker_url'])
+
     return True
 
 
@@ -55,8 +61,6 @@ class MyBootstep(bootsteps.Step):
 
     def __init__(self, worker, config_file='yara_worker.conf', **options):
         super().__init__(self)
-        global g_config
-        global g_yara_rules_dir
         verify_config(config_file)
 
         # g_yara_rules_dir = yara_rules_dir

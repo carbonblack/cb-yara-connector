@@ -8,7 +8,7 @@ import psycopg2
 import json
 from datetime import datetime
 from peewee import SqliteDatabase
-from tasks import analyze_binary, update_yara_rules_remote, generate_rule_map
+from tasks import analyze_binary, update_yara_rules_remote, generate_rule_map, app
 import globals
 import argparse
 import configparser
@@ -280,8 +280,10 @@ def verify_config(config_file, output_file):
             globals.g_remote = False
         elif config['general']['worker_type'] == 'remote':
             globals.g_remote = True
-            if 'worker_ip' in config['general']:
-                globals.worker_ip = config['general']['worker_ip']
+            if 'broker_url' in config['general']:
+                app.conf.update(
+                    broker_url=config['general']['broker_url'],
+                    result_backend=config['general']['broker_url'])
         else:
             logger.error("invalid worker_type specified.  Must be \'local\' or \'remote\'")
     else:
