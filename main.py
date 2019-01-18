@@ -234,8 +234,7 @@ def main(yara_rule_dir):
                             logger.error(analysis_result.last_error_msg)
                     save_results(analysis_results)
                 else:
-                    logger.error(traceback.format_exc())
-                    logger.error("analysis_results is None")
+                    pass
                 md5_hashes = list()
 
         if num_total_binaries % 1000 == 0:

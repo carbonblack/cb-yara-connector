@@ -11,7 +11,7 @@ The Yara agent must be installed on the same system as Cb Response.
 * Download Yara Agent
 
 	```
-	wget -O /usr/share/cb/integrations/yara/yara_agent <url to yara_agent>
+	wget -O /usr/share/cb/integrations/yara/yara_agent https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.0/yara_agent
 	```
 	
 * Create Yara Agent Config File
@@ -163,17 +163,17 @@ The Yara agent must be installed on the same system as Cb Response.
 	```
 	systemctl restart supervisord
 	```
-	
+# Development Notes	
 
-# Centos 6 Build Instructions (Development)
+## Yara Agent Build Instructions (Centos 6)
 
-## Install Dependencies
+### Install Dependencies
 
 * zlib-devel
 * openssl-devel
 * sqlite-devel
 
-## Install Python 3.6
+### Install Python 3.6
 
 	
 	./configure --prefix=/usr/local --enable-shared LDFLAGS="-Wl,-rpath /usr/local/lib"
@@ -181,7 +181,7 @@ The Yara agent must be installed on the same system as Cb Response.
 	make altinstall
 
 
-## Create VirtualEnv
+### Create VirtualEnv
 
 
 	python3.6 -m venv venv-build
@@ -189,7 +189,7 @@ The Yara agent must be installed on the same system as Cb Response.
 	pip install -r requirements.txt
 
 
-## Create Executable
+### Create Executable
 
 
 	pyinstaller main.spec
