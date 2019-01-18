@@ -1,14 +1,18 @@
 # Installing Yara Agent (Centos/RHEL 6)
 
+The Yara agent must be installed on the same system as Cb Response.
+
 * Create directories
 
 
 	mkdir -p /usr/share/cb/integrations/yara/yara_rules
 	
+	
 * Download Yara Agent
 
 
 	wget -O /usr/share/cb/integrations/yara/yara_agent <url to yara_agent>
+	
 	
 * Create Yara Agent Config File
 
@@ -27,7 +31,7 @@
 	; ONLY for worker_type of remote
 	; IP Address of workers if worker_type is remote
 	;
-	broker_url=redis://
+	;broker_url=redis://
 	
 	;
 	; path to directory containing yara rules
@@ -60,7 +64,7 @@
 	
 * copy and modify the above config to `/etc/cb/integrations/yara/yara_agent.conf`
 
-#### Run Yara Agent Manually
+#### Running Yara Agent Manually
 
 	./yara_agent --config-file=/etc/cb/integrations/yara/yara_agent.conf
 
@@ -75,6 +79,7 @@
 	sudo yum install python36
 	sudo yum install python36-devel
 	
+	
 * Install Redis
 	
 
@@ -82,10 +87,12 @@
 	sudo systemctl start redis
 	sudo systemctl enable redis
 	
+	
 * Install Supervisord
 
 
 	sudo yum install supervisor
+	
 	
 * Install Yara Worker
 
@@ -97,6 +104,7 @@
 	source ./venv/bin/activate
 	pip install -r requirements.txt
 	mkdir yara_rules
+	
 	
 * Create Yara Worker Config File `yara_worker.conf`
 
@@ -147,10 +155,12 @@
 	
 	systemctl enable supervisord
 	
+	
 * Restart Supervisor
 
 	
 	systemctl restart supervisord
+	
 
 # Centos 6 Build Instructions (Development)
 
