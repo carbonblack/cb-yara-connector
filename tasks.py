@@ -24,9 +24,28 @@ g_config = dict()
 g_yara_rules_dir = ""
 
 
+def verify_config(config_file):
+    config = configparser.ConfigParser()
+    config.read(config_file)
+
+    if not config.has_section('general'):
+        logger.error("Config file does not have a \'general\' section")
+        return False
+
+    if 'yara_rules_dir' in config['general']:
+        globals.g_yara_rules_dir = config['general']['yara_rules_dir']
+
+    if 'cb_server_url' in config['general']:
+        globals.g_cb_server_url = config['general']['cb_server_url']
+
+    if 'cb_server_token' in config['general']:
+        globals.g_cb_server_token = config['general']['cb_server_token']
+
+    return True
+
+
 def add_worker_arguments(parser):
     parser.add_argument('--config-file', default='yara_worker.conf', help='Yara Worker Config')
-    parser.add_argument('--yara-rules-dir', default='yara_rules', help='Yara Rules Directory')
 
 
 app.user_options['worker'].add(add_worker_arguments)
@@ -34,13 +53,13 @@ app.user_options['worker'].add(add_worker_arguments)
 
 class MyBootstep(bootsteps.Step):
 
-    def __init__(self, worker, config_file='yara_worker.conf', yara_rules_dir='yara_rules', **options):
+    def __init__(self, worker, config_file='yara_worker.conf', **options):
         super().__init__(self)
         global g_config
         global g_yara_rules_dir
-        g_config = configparser.ConfigParser()
-        g_config.read(config_file)
-        g_yara_rules_dir = yara_rules_dir
+        verify_config(config_file)
+
+        # g_yara_rules_dir = yara_rules_dir
 
 
 app.steps['worker'].add(MyBootstep)
@@ -103,7 +122,8 @@ def analyze_binary(md5sum):
 
         cb = CbResponseAPI(url=globals.g_cb_server_url,
                            token=globals.g_cb_server_token,
-                           ssl_verify=False)
+                           ssl_verify=False,
+                           timeout=5)
 
         binary_query = cb.select(Binary).where(f"md5:{md5sum}")
 
@@ -118,7 +138,7 @@ def analyze_binary(md5sum):
             yara_rules = yara.compile(filepaths=yara_rule_map)
 
             try:
-                #matches = "debug"
+                # matches = "debug"
                 matches = yara_rules.match(data=binary_data, timeout=30)
             except yara.TimeoutError:
                 #
@@ -137,8 +157,9 @@ def analyze_binary(md5sum):
                 if matches:
                     score = getHighScore(matches)
                     analysis_result.score = score
-                    analysis_result.short_result = "Matched yara rules: %s" % ', '.join([match.rule for match in matches])
-                    #analysis_result.short_result = "Matched yara rules: debug"
+                    analysis_result.short_result = "Matched yara rules: %s" % ', '.join(
+                        [match.rule for match in matches])
+                    # analysis_result.short_result = "Matched yara rules: debug"
                     analysis_result.long_result = analysis_result.long_result
                     analysis_result.misc = generate_yara_rule_map_hash(globals.g_yara_rules_dir)
                 else:

@@ -1,14 +1,22 @@
 
-install zlib
-install openssl-devel
-install sqlite-devel
 
-# Running the agent
 
-mkdir -p /usr/share/cb/integrations/yara/yara_rules`
-wget <> /usr/share/cb/integrations/yara/yara_agent
+# Installing Yara Agent (Centos/RHEL 6)
 
-## Sample Yara Agent Config
+* Create directories
+
+
+	mkdir -p /usr/share/cb/integrations/yara/yara_rules
+	
+* Download Yara Agent
+
+
+	wget <> /usr/share/cb/integrations/yara/yara_agent
+	
+* Create Yara Agent Config File
+
+
+#### Sample Yara Agent Config
 
 	[general]
 	
@@ -53,15 +61,101 @@ wget <> /usr/share/cb/integrations/yara/yara_agent
 	;
 	niceness=1
 	
-* copy the above config to `/etc/cb/integrations/yara/yara_agent.conf`
+* copy and modify the above config to `/etc/cb/integrations/yara/yara_agent.conf`
 
-# Example Cron Entry
+#### Run Yara Agent Manually
 
-##
+	./yara_agent --config-file=/etc/cb/integrations/yara/yara_agent.conf
+
+#### Example Cron Entry
+
+# Remote Worker Installation (Centos/RHEL 7)
+
+* Install Python 3.6
 
 
+	sudo yum install epel-release
+	sudo yum install python36
+	sudo yum install python36-devel
+	
+* Install Redis
+	
 
-# Centos 6 Build Instructions
+	sudo yum install redis
+	sudo systemctl start redis
+	sudo systemctl enable redis
+	
+* Install Supervisord
+
+
+	sudo yum install supervisor
+	
+* Install Yara Worker
+
+
+	git clone https://github.com/carbonblack/cb-yara-connector.git
+	cd cb-yara-connector
+	git checkout yara_version2
+	python3.6 -m venv venv
+	source ./venv/bin/activate
+	pip install -r requirements.txt
+	mkdir yara_rules_remote
+	
+* Create Yara Worker Config File
+
+#### Example Yara Worker Config File
+
+	[general]
+	
+	;
+	; Cb Response Server Configuration
+	; Used for downloading binaries
+	;
+	cb_server_url=
+	cb_server_token=
+	
+	;
+	; Directory for temporary yara rules storage
+	; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
+	;
+	yara_rules_dir=yara_rules_remote
+	
+* Copy and modify the above
+	
+#### Run Yara Worker Manually
+
+	celery -A tasks worker --concurrency=10 --loglevel=info
+	
+#### Example Supervisor Config
+
+	[program:yara_workers]
+	stdout_logfile=/var/log/yara_worker.log
+	stderr_logfile=/var/log/yara_worker.log
+	user=<username>
+	directory=/home/<username>/cb-yara-connector
+	command=/home/<username>/cb-yara-connector/venv/bin/celery -A tasks worker --config-file=yara_worker.conf --concurrency=10 --loglevel=info
+	autostart=true
+	autorestart=true
+	
+* Copy the above, modify and add to `/etc/supervisord.conf`
+
+* Enabled Supervisor
+
+	
+	systemctl enable supervisord
+	
+* Restart Supervisor
+
+	
+	systemctl restart supervisord
+
+# Centos 6 Build Instructions (Development)
+
+## Install Dependencies
+
+* zlib-devel
+* openssl-devel
+* sqlite-devel
 
 ## Install Python 3.6
 
@@ -78,11 +172,3 @@ wget <> /usr/share/cb/integrations/yara/yara_agent
 ## Create Executable
 
 	pyinstaller main.spec
-	
-# Centos 7 Build Instructions
-
-## Install Python 3.6
-
-## Create VirtualEnv
-
-## Create Executable

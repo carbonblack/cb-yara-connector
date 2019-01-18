@@ -19,7 +19,7 @@ g_postgres_password = ''
 g_postgres_port = 5002
 g_postgres_db = 'cb'
 
-MAX_HASHES = 2
+MAX_HASHES = 8
 
 g_num_binaries_not_available = 0
 g_num_binaries_analyzed = 0
