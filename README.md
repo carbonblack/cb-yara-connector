@@ -14,6 +14,12 @@ The Yara agent must be installed on the same system as Cb Response.
 	wget -O /usr/share/cb/integrations/yara/yara_agent https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.0/yara_agent
 	```
 	
+* Download Yara Logo
+
+	```
+	wget -O /usr/share/cb/integrations/yara/yara-logo.png https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.0/yara-logo.png
+	```
+	
 * Create Yara Agent Config File
 
 
