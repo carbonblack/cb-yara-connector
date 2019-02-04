@@ -78,6 +78,13 @@ The Yara agent must be installed on the same system as Cb Response.
 
 # Remote Worker Installation (Centos/RHEL 7)
 
+* Install Git and GCC
+
+	```
+	sudo yum install git
+	sudo yum install gcc
+	```
+
 * Install Python 3.6
 
 	```
@@ -110,6 +117,7 @@ The Yara agent must be installed on the same system as Cb Response.
 	python3.6 -m venv venv
 	source ./venv/bin/activate
 	pip install -r requirements.txt
+	deactivate
 	mkdir yara_rules
 	```
 	
