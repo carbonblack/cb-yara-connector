@@ -13,6 +13,7 @@ import globals
 import argparse
 import configparser
 import hashlib
+import yara
 
 from feed import CbFeed, CbFeedInfo, CbReport
 from celery import group
@@ -38,7 +39,7 @@ def generate_feed_from_db():
                   'score': binary.score,
                   'timestamp': int(time.mktime(time.gmtime())),
                   'link': '',
-                  'id': f'binary_{binary.md5}',
+                  'id': 'binary_{0}'.format(binary.md5),
                   'title': '',
                   'description': binary.last_success_msg
                   }
@@ -156,7 +157,7 @@ def print_statistics():
     pass
 
 
-def main(yara_rule_dir):
+def perform(yara_rule_dir):
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
         generate_rule_map_remote(yara_rule_dir)
@@ -319,8 +320,9 @@ def verify_config(config_file, output_file):
 
     return True
 
+def main():
+    global logger
 
-if __name__ == "__main__":
     try:
         me = singleton.SingleInstance()
     except:
@@ -337,6 +339,9 @@ if __name__ == "__main__":
         parser.add_argument('--output-file',
                             default='yara_feed.json',
                             help='output feed file')
+        parser.add_argument('--validate-yara-rules',
+                            action='store_true',
+                            help='ONLY validate yara rules in a specified directory')
         parser.add_argument('--debug', action='store_true')
 
         args = parser.parse_args()
@@ -352,14 +357,31 @@ if __name__ == "__main__":
             logger.addHandler(handler)
 
         if verify_config(args.config_file, args.output_file):
-            try:
-                g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-                generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase('binary.db')
-                db.initialize(database)
-                db.connect()
-                db.create_tables([BinaryDetonationResult])
-                generate_feed_from_db()
-                main('yara_rules')
-            except:
-                logger.error(traceback.format_exc())
+
+            if args.validate_yara_rules:
+                logger.info("Validating yara rules in directory: {0}".format(globals.g_yara_rules_dir))
+                yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+                try:
+                    yara.compile(filepaths=yara_rule_map)
+                except:
+                    logger.error("There were errors compiling yara rules")
+                    logger.error(traceback.format_exc())
+                else:
+                    logger.info("All yara rules compiled successfully")
+            else:
+                try:
+                    globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+                    generate_yara_rule_map_hash(globals.g_yara_rules_dir)
+                    database = SqliteDatabase('binary.db')
+                    db.initialize(database)
+                    db.connect()
+                    db.create_tables([BinaryDetonationResult])
+                    generate_feed_from_db()
+                    perform(args.yara_rules_dir)
+                except:
+                    logger.error(traceback.format_exc())
+
+
+if __name__ == "__main__":
+    main()
+
