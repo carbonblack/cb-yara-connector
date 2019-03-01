@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 g_config = dict()
-g_yara_rules_dir = ""
 
 
 def verify_config(config_file):
@@ -110,7 +109,7 @@ def generate_yara_rule_map_hash(yara_rule_path):
 def update_yara_rules_remote(yara_rules):
     try:
         for key in yara_rules:
-            open(os.path.join(g_yara_rules_dir, key), 'wb').write(yara_rules[key])
+            open(os.path.join(globals.g_yara_rules_dir, key), 'wb').write(yara_rules[key])
     except:
         logger.error(traceback.format_exc())
 
