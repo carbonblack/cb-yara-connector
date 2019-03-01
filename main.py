@@ -135,8 +135,10 @@ def save_results(analysis_results):
         if analysis_result.binary_not_available:
             globals.g_num_binaries_not_available += 1
             continue
+
+        bdr, created = BinaryDetonationResult.get_or_create(md5=analysis_result.md5)
+
         try:
-            bdr = BinaryDetonationResult()
             bdr.md5 = analysis_result.md5
             bdr.last_scan_date = datetime.now()
             bdr.score = analysis_result.score
@@ -194,20 +196,13 @@ def perform(yara_rule_dir):
             num_total_binaries += 1
             md5_hash = row[0].hex()
 
-            try:
-                #
-                # see if we have already seen this file before.
-                # we need to check to see what yara rules we have scanned with
-                #
-                bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
-            except:
-
-                #
-                # Not found so we have to scan
-                #
-                pass
-            else:
+            #
+            # Check if query returns any rows
+            #
+            query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
+            if query.exists():
                 try:
+                    bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
                     scanned_hash_list = json.loads(bdr.misc)
                     if scanned_hash_list == globals.g_yara_rule_map_hash_list:
                         num_binaries_skipped += 1
@@ -222,7 +217,6 @@ def perform(yara_rule_dir):
                         pass
                 except:
                     logger.error("Unable to decode yara rule map hash from database")
-                    pass
 
             num_binaries_queued += 1
             md5_hashes.append(md5_hash)
@@ -377,7 +371,7 @@ def main():
                     db.connect()
                     db.create_tables([BinaryDetonationResult])
                     generate_feed_from_db()
-                    perform(args.yara_rules_dir)
+                    perform(globals.g_yara_rules_dir)
                 except:
                     logger.error(traceback.format_exc())
 
