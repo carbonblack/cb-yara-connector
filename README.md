@@ -11,13 +11,13 @@ The Yara agent must be installed on the same system as Cb Response.
 * Download Yara Agent
 
 	```
-	wget -O /usr/share/cb/integrations/yara/yara_agent https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.0/yara_agent
+	wget -O /usr/share/cb/integrations/yara/yara_agent https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.1/yara_agent
 	```
 	
 * Download Yara Logo
 
 	```
-	wget -O /usr/share/cb/integrations/yara/yara-logo.png https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.0/yara-logo.png
+	wget -O /usr/share/cb/integrations/yara/yara-logo.png https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.1/yara-logo.png
 	```
 	
 * Create Yara Agent Config File
@@ -77,6 +77,12 @@ The Yara agent must be installed on the same system as Cb Response.
 #### Example Cron Entry
 
 # Remote Worker Installation (Centos/RHEL 7)
+
+* Make sure openssl-devel is installed
+
+	```
+	sudo yum install openssl-devel
+    ```
 
 * Install Git and GCC
 
