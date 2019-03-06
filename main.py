@@ -40,7 +40,7 @@ def generate_feed_from_db():
                   'timestamp': int(time.mktime(time.gmtime())),
                   'link': '',
                   'id': 'binary_{0}'.format(binary.md5),
-                  'title': '',
+                  'title': binary.last_success_msg,
                   'description': binary.last_success_msg
                   }
 
@@ -83,7 +83,7 @@ def generate_yara_rule_map_hash(yara_rule_path):
 def generate_rule_map_remote(yara_rule_path):
     ret_dict = dict()
     for fn in os.listdir(yara_rule_path):
-        if fn.lower().endswith(".yar"):
+        if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
             ret_dict[fn] = open(os.path.join(yara_rule_path, fn), 'rb').read()
 
     result = update_yara_rules_remote.delay(ret_dict)

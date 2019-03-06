@@ -73,7 +73,7 @@ def generate_rule_map(yara_rule_path):
 
     rule_map = {}
     for fn in os.listdir(yara_rule_path):
-        if fn.lower().endswith(".yar"):
+        if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
             fullpath = os.path.join(yara_rule_path, fn)
             if not os.path.isfile(fullpath):
                 continue
