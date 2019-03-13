@@ -66,6 +66,11 @@ The Yara agent must be installed on the same system as Cb Response.
 	; nice value used for this script
 	;
 	niceness=1
+	;
+	; Number of hashes to send to the workers concurrently.  Defaults to 8.
+	; Recommend setting to the number of workers on the remote system.
+	;
+	concurrent_hashes=8
 
 	
 * copy and modify the above config to `/etc/cb/integrations/yara/yara_agent.conf`
