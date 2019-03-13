@@ -215,8 +215,9 @@ def perform(yara_rule_dir):
                         # Yara rules were updated, so lets scan
                         #
                         pass
-                except:
+                except Exception as e:
                     logger.error("Unable to decode yara rule map hash from database")
+                    logger.error(str(e))
 
             num_binaries_queued += 1
             md5_hashes.append(md5_hash)
@@ -311,6 +312,9 @@ def verify_config(config_file, output_file):
 
     if 'niceness' in config['general']:
         os.nice(int(config['general']['niceness']))
+
+    if 'concurrent_hashes' in config['general']:
+        globals.MAX_HASHES = int(config['general']['concurrent_hashes'])
 
     return True
 
