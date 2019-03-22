@@ -22,3 +22,5 @@ MAX_HASHES = 8
 
 g_num_binaries_not_available = 0
 g_num_binaries_analyzed = 0
+
+g_disable_rescan = False

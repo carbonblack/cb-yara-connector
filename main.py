@@ -179,7 +179,7 @@ def perform(yara_rule_dir):
                                 password=globals.g_postgres_password,
                                 port=globals.g_postgres_port)
         cur = conn.cursor()
-        cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE")
+        cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE ORDER BY timestamp DESC")
     except:
         logger.error("Failed to connect to Postgres database")
         logger.error(traceback.format_exc())
@@ -204,17 +204,15 @@ def perform(yara_rule_dir):
                 try:
                     bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
                     scanned_hash_list = json.loads(bdr.misc)
+                    if globals.g_disable_rescan and bdr.misc:
+                        continue
+
                     if scanned_hash_list == globals.g_yara_rule_map_hash_list:
                         num_binaries_skipped += 1
                         #
                         # If it is the same then we don't need to scan again
                         #
                         continue
-                    else:
-                        #
-                        # Yara rules were updated, so lets scan
-                        #
-                        pass
                 except Exception as e:
                     logger.error("Unable to decode yara rule map hash from database")
                     logger.error(str(e))
@@ -315,6 +313,9 @@ def verify_config(config_file, output_file):
 
     if 'concurrent_hashes' in config['general']:
         globals.MAX_HASHES = int(config['general']['concurrent_hashes'])
+
+    if 'disable_rescan' in config['general']:
+        globals.g_disable_rescan = bool(config['general']['disable_rescan'])
 
     return True
 
