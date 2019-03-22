@@ -6,7 +6,7 @@ import threading
 import humanfriendly
 import psycopg2
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from peewee import SqliteDatabase
 from tasks import analyze_binary, update_yara_rules_remote, generate_rule_map, app
 import globals
@@ -57,10 +57,10 @@ def generate_feed_from_db():
 
     feedinfo = CbFeedInfo(**feedinfo)
     feed = CbFeed(feedinfo, reports)
-    logger.debug("dumping feed...")
+    #logger.debug("dumping feed...")
     created_feed = feed.dump()
 
-    logger.debug("Writing out feed to disk")
+    #logger.debug("Writing out feed to disk")
     with open(globals.output_file, 'w') as fp:
         fp.write(created_feed)
 
@@ -179,7 +179,11 @@ def perform(yara_rule_dir):
                                 password=globals.g_postgres_password,
                                 port=globals.g_postgres_port)
         cur = conn.cursor()
-        cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE ORDER BY timestamp DESC")
+
+        start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
+        cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
+                    "ORDER BY timestamp DESC".format(start_date_binaries))
+
     except:
         logger.error("Failed to connect to Postgres database")
         logger.error(traceback.format_exc())
@@ -317,7 +321,11 @@ def verify_config(config_file, output_file):
     if 'disable_rescan' in config['general']:
         globals.g_disable_rescan = bool(config['general']['disable_rescan'])
 
+    if 'num_days_binaries' in config['general']:
+        globals.g_num_days_binaries = int(config['general']['num_days_binaries'])
+
     return True
+
 
 def main():
     global logger
@@ -383,4 +391,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
