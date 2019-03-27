@@ -101,7 +101,7 @@ def analyze_binaries(md5_hashes, local):
         except:
             logger.error(traceback.format_exc())
             time.sleep(5)
-            return
+            return None
         else:
             return results
     else:
@@ -115,11 +115,11 @@ def analyze_binaries(md5_hashes, local):
 
             time_waited = 0
             while not result.ready():
-                if time_waited == 100:
+                if time_waited >= 100:
                     break
                 else:
                     time.sleep(.1)
-                    time_waited += 1
+                    time_waited += .1
 
         except:
             logger.error(traceback.format_exc())
@@ -128,6 +128,8 @@ def analyze_binaries(md5_hashes, local):
         else:
             if result.successful():
                 return result.get(timeout=30)
+            else:
+                return None
 
 
 def save_results(analysis_results):
@@ -178,7 +180,7 @@ def perform(yara_rule_dir):
                                 user=globals.g_postgres_username,
                                 password=globals.g_postgres_password,
                                 port=globals.g_postgres_port)
-        cur = conn.cursor()
+        cur = conn.cursor(name="yara_agent")
 
         start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
         cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
@@ -250,7 +252,11 @@ def perform(yara_rule_dir):
     conn.close()
 
     analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
-    save_results(analysis_results)
+    if analysis_results:
+        for analysis_result in analysis_results:
+            if analysis_result.last_error_msg:
+                logger.error(analysis_result.last_error_msg)
+        save_results(analysis_results)
     md5_hashes = list()
 
     elapsed_time = time.time() - start_time
@@ -320,9 +326,11 @@ def verify_config(config_file, output_file):
 
     if 'disable_rescan' in config['general']:
         globals.g_disable_rescan = bool(config['general']['disable_rescan'])
+        logger.debug("Disable Rescan: {}".format(globals.g_disable_rescan))
 
     if 'num_days_binaries' in config['general']:
         globals.g_num_days_binaries = int(config['general']['num_days_binaries'])
+        logger.debug("Number of days for binaries: {}".format(globals.g_num_days_binaries))
 
     return True
 

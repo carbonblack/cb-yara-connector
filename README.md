@@ -66,11 +66,25 @@ The Yara agent must be installed on the same system as Cb Response.
 	; nice value used for this script
 	;
 	niceness=1
+	
 	;
 	; Number of hashes to send to the workers concurrently.  Defaults to 8.
 	; Recommend setting to the number of workers on the remote system.
 	;
 	concurrent_hashes=8
+	
+	;
+	; If you don't want binaries to be rescanned more than once, regardless of the rules used, set this to True
+	; Default: False
+	;
+	disable_rescan=False
+	
+	;
+	; The agent will pull binaries up to the configured number of days.  For exmaple, 365 will pull all binaries with
+	; a timestamp within the last year
+	; Default: 365
+	;
+	num_days_binaries=365
 
 	
 * copy and modify the above config to `/etc/cb/integrations/yara/yara_agent.conf`
