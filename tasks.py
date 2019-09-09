@@ -12,6 +12,7 @@ import traceback
 import datetime
 import configparser
 import os
+import shutil
 import hashlib
 from analysis_result import AnalysisResult
 from cbapi.response.models import Binary
@@ -108,6 +109,7 @@ def generate_yara_rule_map_hash(yara_rule_path):
 @app.task
 def update_yara_rules_remote(yara_rules):
     try:
+        shutil.rmtree(globals.g_yara_rules_dir)
         for key in yara_rules:
             open(os.path.join(globals.g_yara_rules_dir, key), 'wb').write(yara_rules[key])
     except:
