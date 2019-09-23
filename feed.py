@@ -140,6 +140,7 @@ class CbFeedInfo(object):
                 try:
                     self.data[icon_field] = base64.b64encode(open(icon_path, "rb").read()).decode('utf-8')
                 except Exception as err:
+                    del self.data[icon_field]
                     pass
                     #raise CbIconError(f"Unknown error reading/encoding icon data: {err}")
 
@@ -170,6 +171,7 @@ class CbFeedInfo(object):
             except TypeError as err:
                 #raise CbIconError(f"Icon must either be path or base64 data.  \
                    #                     Path does not exist and base64 decode failed with: {err}")
+                pass   
             except KeyError as err:
                 # we don't want to cause a ruckus if the icon is missing
                 pass
