@@ -140,7 +140,7 @@ class CbFeedInfo(object):
                 try:
                     self.data[icon_field] = base64.b64encode(open(icon_path, "rb").read()).decode('utf-8')
                 except Exception as err:
-                    del self.data[icon_field]
+                    #del self.data[icon_field]
                     pass
                     #raise CbIconError(f"Unknown error reading/encoding icon data: {err}")
 

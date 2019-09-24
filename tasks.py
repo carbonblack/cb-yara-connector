@@ -130,7 +130,7 @@ def analyze_binary(md5sum):
                            ssl_verify=False,
                            timeout=5)
 
-        binary_query = cb.select(Binary).where(f"md5:{md5sum}")
+        binary_query = cb.select(Binary).where("md5:{0}".format(md5sum))
 
         if binary_query:
             try:

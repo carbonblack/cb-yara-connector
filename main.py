@@ -93,6 +93,7 @@ def generate_rule_map_remote(yara_rule_path):
 
 
 def analyze_binaries(md5_hashes, local):
+    #logger.debug(f"md5hashes = {len(md5_hashes)}")
     if local:
         try:
             results = list()
@@ -201,6 +202,7 @@ def perform(yara_rule_dir):
         for row in rows:
             num_total_binaries += 1
             md5_hash = row[0].hex()
+            #logger.debug(md5_hash)
 
             #
             # Check if query returns any rows
@@ -230,6 +232,7 @@ def perform(yara_rule_dir):
                 analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
                 if analysis_results:
                     for analysis_result in analysis_results:
+                        #logger.debug(f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available} {analysis_result.long_result} {analysis_result.last_error_msg}")
                         if analysis_result.last_error_msg:
                             logger.error(analysis_result.last_error_msg)
                     save_results(analysis_results)
@@ -254,6 +257,7 @@ def perform(yara_rule_dir):
     analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
     if analysis_results:
         for analysis_result in analysis_results:
+            #logger.debug(f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available} {analysis_result.long_result} {analysis_result.last_error_msg}")
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
@@ -265,7 +269,7 @@ def perform(yara_rule_dir):
     logger.debug("number binaries already scanned: {0}".format(num_binaries_skipped))
     logger.debug("number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
     logger.info("total binaries from db: {0}".format(num_total_binaries))
-    logger.info(f"number of binaries queued to be scanned: {num_binaries_queued}")
+    #logger.info(f"number of binaries queued to be scanned: {num_binaries_queued}")
     logger.debug("binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
     logger.info("num binaries score greater than zero: {0}".format(
         len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))))
