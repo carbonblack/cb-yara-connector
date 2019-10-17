@@ -1,7 +1,6 @@
 import logging
 
 from peewee import *
-from playhouse.sqliteq import SqliteQueueDatabase
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -12,6 +11,7 @@ logger.setLevel(logging.DEBUG)
 db = Proxy()
 
 
+# noinspection PyUnusedName
 class BinaryDetonationResult(Model):
     md5 = CharField(index=True, unique=True)
     last_scan_date = DateTimeField(null=True)
@@ -50,5 +50,6 @@ class BinaryDetonationResult(Model):
     #
     misc = CharField(default='')
 
+    # noinspection PyUnusedClass,PyUnusedName
     class Meta:
         database = db
