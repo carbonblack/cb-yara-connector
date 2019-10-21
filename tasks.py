@@ -113,6 +113,9 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
     temp_list = []
     for fn in os.listdir(yara_rule_path):
         if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
+            fullpath = os.path.join(yara_rule_path, fn)
+            if not os.path.isfile(fullpath):
+                continue
             with open(os.path.join(yara_rule_path, fn), 'rb') as fp:
                 data = fp.read()
                 # TODO: Original logic did not have this, resulting in a cumulative hash for each file (linking them)
