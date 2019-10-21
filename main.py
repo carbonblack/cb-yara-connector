@@ -8,7 +8,7 @@ import os
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 import humanfriendly
 import psycopg2
@@ -118,7 +118,7 @@ def generate_rule_map_remote(yara_rule_path) -> None:
         time.sleep(.1)
 
 
-def analyze_binaries(md5_hashes: List[str], local: bool):
+def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
     """
     Analyze binaries.
 
@@ -141,7 +141,7 @@ def analyze_binaries(md5_hashes: List[str], local: bool):
             return results
     else:
         try:
-            scan_group = list()
+            scan_group = []
             for md5_hash in md5_hashes:
                 scan_group.append(analyze_binary.s(md5_hash))
             job = group(scan_group)
