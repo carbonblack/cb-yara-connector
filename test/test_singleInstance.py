@@ -12,11 +12,14 @@ logger = logging.getLogger(__name__)
 def f(flavor: str = None):
     tmp = logger.level
     logger.setLevel(logging.CRITICAL)  # we do not want to see the warning
+    si = None
     try:
-        SingleInstance(flavor_id=flavor)  # noqa
+        si = SingleInstance(flavor_id=flavor)  # noqa
     except SingleInstanceException:
         sys.exit(1)
     finally:
+        if si is not None:
+            del si
         logger.setLevel(tmp)
 
 
