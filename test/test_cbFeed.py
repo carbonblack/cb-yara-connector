@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from feed import CbFeed
+from feed import CbFeed, CbInvalidFeed
 
 
 class TestCbFeed(TestCase):
@@ -66,6 +66,18 @@ class TestCbFeed(TestCase):
 
         check = feed.dump()
         self.assertEqual(self.SOURCE, check)
+
+    def test_duplicate_report_ids(self):
+        """
+        Ensure that report ids cannot be the same..
+        """
+        feed = CbFeed.load(self.SOURCE)
+        reps = feed.data['reports']
+        reps[1].data['id'] = reps[0].data['id']
+
+        with self.assertRaises(CbInvalidFeed) as err:
+            feed.validate_report_list(reps)
+        assert "duplicate report id" in "{0}".format(err.exception.args[0])
 
     def test_dumpjson(self):
         feed = CbFeed.load(self.SOURCE)
