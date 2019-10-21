@@ -68,6 +68,7 @@ def generate_feed_from_db() -> None:
         fp.write(feed.dump())
 
 
+# noinspection DuplicatedCode
 def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
     """
     Create a list of hashes for each yara rule.
