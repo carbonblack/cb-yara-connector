@@ -1,14 +1,18 @@
+################################################################################
+# This module contains global variables used by a single instance.
+################################################################################
+
+# noinspection PyUnusedName
 g_config = {}
 
 g_cb_server_url = 'https://127.0.0.1'
 g_cb_server_token = ''
 
+# noinspection PyUnusedName
 broker_url = ''
 
 g_yara_rules_dir = 'yara_rules'
 output_file = 'yara_feed.json'
-
-g_database_path = "./"
 
 g_remote = False
 g_yara_rule_map = {}

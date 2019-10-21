@@ -1,10 +1,21 @@
 import base64
+import binascii
 import json
+import logging
 import os
 import re
+import socket
+import string
 import time
-import logging
+from typing import List
 
+# noinspection PyUnusedName
+logger = logging.getLogger(__name__)
+
+
+################################################################################
+# Exception Classes
+################################################################################
 
 class CbException(Exception):
     pass
@@ -22,116 +33,98 @@ class CbInvalidReport(CbException):
     pass
 
 
-logger = logging.getLogger(__name__)
-
+################################################################################
+# Working Code Classes
+################################################################################
 
 class CbJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        return o.dump()
-
-
-class CbFeed(object):
-    def __init__(self, feedinfo, reports):
-        self.data = {'feedinfo': feedinfo,
-                     'reports': reports}
-
-    def dump(self, validate=True):
-        '''
-        dumps the feed data
-        :param validate: is set, validates feed before dumping
-        :return: json string of feed data
-        '''
-        if validate:
-            self.validate()
-
-        return json.dumps(self.data, cls=CbJSONEncoder, indent=2)
-
-    def dumpjson(self, validate=True):
-        '''
-        dumps the feed data
-        :param validate: is set, validates feed before dumping
-        :return: json string of feed data
-        '''
-        if validate:
-            self.validate()
-
-        return json.loads(self.dump(validate))
-
-    def __repr__(self):
-        return repr(self.data)
-
-    def __str__(self):
-        return "CbFeed(%s)" % (self.data.get('feedinfo', "unknown"))
-
-    def iter_iocs(self):
-        '''
-        yields all iocs in the feed
-        '''
-
-        data = json.loads(self.dump(validate=False))
-        for report in data["reports"]:
-            for md5 in report.get("iocs", {}).get("md5", []):
-                yield {"type": "md5", "ioc": md5, "report_id": report.get("id", "")}
-            for ip in report.get("iocs", {}).get("ipv4", []):
-                yield {"type": "ipv4", "ioc": ip, "report_id": report.get("id", "")}
-            for domain in report.get("iocs", {}).get("dns", []):
-                yield {"type": "dns", "ioc": domain, "report_id": report.get("id", "")}
-
-    def validate_report_list(self, reports):
-        '''
-        validates reports as a set, as compared to each report as a standalone entity
-        :param reports: list of reports
-        '''
-
-        reportids = set()
-
-        # verify that no two reports have the same feed id
-        # see CBAPI-17
-        for report in reports:
-            if report['id'] in reportids:
-                raise CbInvalidFeed("duplicate report id '%s'" % report['id'])
-            reportids.add(report['id'])
-
-    def validate(self, pedantic=False, serialized_data=None):
-        '''
-        validates the feed
-        :param pedantic: when set, perform strict validation
-        :param serialized_data: serialized data for the feed
-        '''
-        if not serialized_data:
-            # this should be identity, but just to be safe.
-            serialized_data = self.dump(validate=False)
-
-        data = json.loads(serialized_data)
-
-        if not "feedinfo" in data:
-            raise CbInvalidFeed("Feed missing 'feedinfo' data")
-
-        if not 'reports' in data:
-            raise CbInvalidFeed("Feed missing 'reports' structure")
-
-        # validate the feed info
-        fi = CbFeedInfo(**data["feedinfo"])
-        fi.validate(pedantic=pedantic)
-
-        # validate each report individually
-        for rep in data["reports"]:
-            report = CbReport(**rep)
-            report.validate(pedantic=pedantic)
-
-        # validate the reports as a whole
-        self.validate_report_list(data["reports"])
+    def default(self, obj):
+        return obj.data
 
 
 class CbFeedInfo(object):
-    def __init__(self, **kwargs):
-        # these fields are required in every feed descriptor
-        self.required = ["name", "display_name",
-                         "summary", "tech_data", "provider_url"]
-        self.optional = ["category", "icon", "version", "icon_small"]
-        self.noemptystrings = ["name", "display_name", "summary", "tech_data", "category"]
-        self.data = kwargs
+    """
+    Contains data relating feed information.
+    """
 
+    def __init__(self, strict_validation: bool = False, **kwargs):
+        """
+        Initizlize the feed info object.
+        :param strict_validation: If True, validate data on every reference (default False)
+        :param kwargs:
+        """
+        self._strict = strict_validation
+
+        # these fields are required in every feed descriptor
+        self.required = {
+            "display_name": str,
+            "provider_url": str,
+            "name": str,
+            "summary": str,
+            "tech_data": str
+        }
+
+        # these fields are optional
+        self.optional = {
+            "category": str,
+            "icon": str,
+            "icon_small": str,
+            "version": int
+        }
+
+        # these string fields cannot be empty string
+        self.noemptystrings = ["name", "display_name", "summary", "tech_data", "category"]
+
+        self._data = kwargs
+
+        # if they are present, the icon and icon_small parameters represent either actual base64 encoded data
+        # or a path to a local file containing the icon data, which must be read and encoded
+        for icon_field in ["icon", "icon_small"]:
+            if icon_field in self._data:
+                try:
+                    base64.b64decode(self._data[icon_field])
+                    continue  # yes, is actual base64 encoded data
+                except (binascii.Error, TypeError):
+                    pass  # No, must be a path; try processing as such
+
+                if os.path.exists(self._data[icon_field]):
+                    icon_path = self._data.pop(icon_field)
+                    try:
+                        with open(icon_path, "rb") as fp:
+                            self._data[icon_field] = base64.b64encode(fp.read()).decode('utf-8')
+                    except Exception as err:
+                        raise CbIconError(f"Unknown error reading/encoding icon data: {err}")
+                else:
+                    raise CbIconError("No such icon file at '{0}'".format(self._data[icon_field]))
+
+        if self._strict:
+            self.validate()
+
+    def __str__(self):
+        return "CbFeed(%s)" % (self._data.get("name", "unnamed"))
+
+    def __repr__(self):
+        return repr(self._data)
+
+    # --------------------------------------------------------------------------------
+
+    @property
+    def data(self) -> dict:
+        if self._strict:
+            self.validate()
+        return self._data
+
+<<<<<<< HEAD
+    def validate(self) -> None:
+        """
+        A set of checks to validate the internal data.
+        :raises CbInvalidFeed:
+        :raises CbIconError:
+        """
+        if not all([x in self._data.keys() for x in self.required.keys()]):
+            missing_fields = ", ".join(set(self.required).difference(set(self._data.keys())))
+            raise CbInvalidFeed(f"FeedInfo missing required field(s): {missing_fields}")
+=======
         # if they are present, set the icon fields of the data to hold
         # the base64 encoded file data from their path
         for icon_field in ["icon", "icon_small"]:
@@ -158,72 +151,83 @@ class CbFeedInfo(object):
         if not all([x in self.data.keys() for x in self.required]):
             missing_fields = ", ".join(set(self.required).difference(set(self.data.keys())))
             raise CbInvalidFeed("FeedInfo missing required field(s): %s" % missing_fields)
+>>>>>>> origin/yara_v2_development
 
         # verify no non-supported keys are present
-        for key in self.data.keys():
+        for key in self._data.keys():
             if key not in self.required and key not in self.optional:
-                raise CbInvalidFeed("FeedInfo includes extraneous key '%s'" % key)
+                raise CbInvalidFeed(f"FeedInfo includes extraneous key '{key}'")
 
         # check to see if icon_field can be base64 decoded
         for icon_field in ["icon", "icon_small"]:
             try:
-                base64.b64decode(self.data[icon_field])
+                base64.b64decode(self._data[icon_field])
+            except binascii.Error as err:
+                raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
             except TypeError as err:
+<<<<<<< HEAD
+                raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
+            except KeyError:
+=======
                 #raise CbIconError(f"Icon must either be path or base64 data.  \
                    #                     Path does not exist and base64 decode failed with: {err}")
                 pass   
             except KeyError as err:
+>>>>>>> origin/yara_v2_development
                 # we don't want to cause a ruckus if the icon is missing
                 pass
-            except: #supress all icon related errors, cbr will accept no/bad icon inormation
-                pass
 
-        # all fields in feedinfo must be strings
-        for key in self.data.keys():
-            if not isinstance(self.data[key], str):
-                raise CbInvalidFeed("FeedInfo field %s must be of type %s, the field \
-                                    %s is of type %s " % (key, "unicode", key, type(self.data[key])))
+        # all fields in feedinfo must be the correct type
+        for key in self._data.keys():
+            needed = self.required.get(key, self.optional.get(key, None))
+            if not isinstance(self._data[key], needed):
+                raise CbInvalidFeed(
+                    "FeedInfo field '{0}' must be of type '{1}'; we see type '{2}'".format(key, self.required[key],
+                                                                                           type(self._data[key])))
 
         # certain fields, when present, must not be empty strings
-        for key in self.data.keys():
-            if key in self.noemptystrings and self.data[key] == "":
-                raise CbInvalidFeed("The '%s' field must not be an empty string" % key)
+        for key in self._data.keys():
+            if key in self.noemptystrings and self._data[key] == "":
+                raise CbInvalidFeed(f"The '{key}' field must not be an empty string")
 
         # validate shortname of this field is just a-z and 0-9, with at least one character
-        if not self.data["name"].isalnum():
+        if not self._data["name"].isalnum():
             raise CbInvalidFeed(
-                "Feed name %s may only contain a-z, A-Z, 0-9 and must have one character" % self.data["name"])
-
-        return True
-
-    def __str__(self):
-        return "CbFeed(%s)" % (self.data.get("name", "unnamed"))
-
-    def __repr__(self):
-        return repr(self.data)
+                "Feed name '{0}' may only contain a-z, A-Z, 0-9 and must have one character".format(self._data["name"]))
 
 
 class CbReport(object):
-    def __init__(self, allow_negative_scores=False, **kwargs):
+    def __init__(self, strict_validation: bool = False, allow_negative_scores: bool = False, **kwargs):
+        """
+        Contains data relating information for a single report.
 
-        # negative scores introduced in CB 4.2
-        # negative scores indicate a measure of "goodness" versus "badness"
+        :param strict_validation: If True, validate data on every reference (default False)
+        :param allow_negative_scores: If True, allow negative score values (default False)
+        :param kwargs:
+        """
+        self._strict = strict_validation
+
+        # negative scores introduced in CB 4.2;  a measure of "goodness" versus "badness"
         self.allow_negative_scores = allow_negative_scores
 
         # these fields are required in every report
-        self.required = ["iocs", "timestamp", "link", "title", "id", "score"]
-
-        # these fields must be of type string
-        self.typestring = ["link", "title", "id", "description"]
-
-        # these fields must be of type int
-        self.typeint = ["timestamp", "score"]
+        self.required = {
+            "id": str,
+            "iocs": dict,
+            "link": str,
+            "score": int,
+            "timestamp": int,
+            "title": str
+        }
 
         # these fields are optional
-        self.optional = ["tags", "description"]
+        self.optional = {
+            "description": str,
+            "tags": list
+        }
 
-        # valid IOC types are "md5", "ipv4", "dns", "query"
-        self.valid_ioc_types = ["md5", "ipv4", "dns", "query"]
+        # valid IOC types are "sha256", "md5", "ipv4", "dns", "query"
+        self.valid_ioc_types = ["sha256", "md5", "ipv4", "dns", "query"]
 
         # valid index_type options for "query" IOC
         self.valid_query_ioc_types = ["events", "modules"]
@@ -231,185 +235,315 @@ class CbReport(object):
         if "timestamp" not in kwargs:
             kwargs["timestamp"] = int(time.mktime(time.gmtime()))
 
-        self.data = kwargs
+        self._data = kwargs
 
-    def dump(self):
-        self.validate()
-        return self.data
+        if self._strict:
+            self.validate()
 
-    def is_valid_query(self, q, reportid):
+    def __str__(self):
+        return "CbReport(%s)" % (self._data.get("title", self._data.get("id", '')))
+
+    def __repr__(self):
+        return repr(self._data)
+
+    # --------------------------------------------------------------------------------
+
+    @property
+    def data(self) -> dict:
+        if self._strict:
+            self.validate()
+        return self._data
+
+    @staticmethod
+    def is_valid_query(query: str, reportid: str):
         """
-        make a determination as to if this is a valid query
+        Make a determination as to if this is a valid query.
+        :param query: An ioc query
+        :param reportid: the report id
+        :raises CbInvalidReport:
         """
-        # the query itself must be percent-encoded
-        # verify there are only non-reserved characters present
-        # no logic to detect unescaped '%' characters
-        for c in q:
+        # the query itself must be percent-encoded; verify there are only non-reserved characters present
+        #   -- no logic to detect unescaped '%' characters
+        for c in query:
             if c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~%*()":
-                raise CbInvalidReport(
-                    "Unescaped non-reserved character '%s' found in query for report %s; use percent-encoding" % (
-                        c, reportid))
+                raise CbInvalidReport((f"Unescaped non-reserved character '{c}' ",
+                                       f"found in query for report {reportid}; use percent-encoding"))
 
-    def validate(self, pedantic=False):
-        """ a set of checks to validate the report"""
+    def validate(self, pedantic: bool = False) -> None:
+        """
+        A set of checks to validate the report.
 
+        :param pedantic: If True, limit to required fields (default False)
+        :raises CbInvalidReport:
+        """
         # validate we have all required keys
-        global ip
-        if not all([x in self.data.keys() for x in self.required]):
-            missing_fields = ", ".join(set(self.required).difference(set(self.data.keys())))
-            raise CbInvalidReport("Report missing required field(s): %s" % missing_fields)
+        if not all([x in self._data.keys() for x in self.required.keys()]):
+            missing_fields = ", ".join(set(self.required).difference(set(self._data.keys())))
+            raise CbInvalidReport(f"Report missing required field(s): {missing_fields}")
+
+        # if we get here, create convenience variable for later use
+        rid = self._data['id']
 
         # validate that no extra keys are present
-        for key in self.data.keys():
+        for key in self._data.keys():
             if key not in self.required and key not in self.optional:
-                raise CbInvalidReport("Report contains extra key '%s'" % key)
-
-        # (pedantically) validate only required keys are present
-        if pedantic and len(self.data.keys()) > len(self.required):
-            raise CbInvalidReport("Report contains extra keys: %s" %
-                                  (set(self.data.keys()) - set(self.required)))
+                raise CbInvalidReport(f"Report contains extra key '{key}'")
+            if pedantic and key not in self.required:
+                raise CbInvalidReport(f"Report contains non-required key '{key}'")
 
         # CBAPI-36
-        # verify that all fields that should be strings are strings
-        for key in self.typestring:
-            if key in self.data.keys():
-                if not isinstance(self.data[key], str):
-                    raise CbInvalidReport("Report field '%s' must be a string" % key)
-
-        # verify that all fields that should be ints are ints
-        for key in self.typeint:
-            if key in self.data.keys():
-                if not isinstance(self.data[key], int):
-                    raise CbInvalidReport("Report field '%s' must be an int" % key)
+        # all fields in feedinfo must be the correct type
+        for key in self._data.keys():
+            needed = self.required.get(key, self.optional.get(key, None))
+            if not isinstance(self._data[key], needed):
+                raise CbInvalidFeed(
+                    "report field '{0}' must be of type '{1}'; we see type '{2}'".format(key, self.required[key],
+                                                                                         type(self._data[key])))
 
         # validate that tags is a list of alphanumeric strings
-        if "tags" in self.data.keys():
-            if type(self.data["tags"]) != type([]):
+        if "tags" in self._data.keys():
+            if not isinstance(self._data["tags"], list):
                 raise CbInvalidReport("Tags must be a list")
-            for tag in self.data["tags"]:
+            for tag in self._data["tags"]:
                 if not str(tag).isalnum():
-                    raise CbInvalidReport("Tag '%s' is not alphanumeric" % tag)
+                    raise CbInvalidReport(f"Tag '{tag}' is not alphanumeric")
                 if len(tag) > 32:
                     raise CbInvalidReport("Tags must be 32 characters or fewer")
 
-                    # validate score is integer between -100 (if so specified) or 0 and 100
+        # validate score is integer between -100 (if so specified) or 0 and 100
         try:
-            int(self.data["score"])
+            int(self._data["score"])
         except ValueError:
             raise CbInvalidReport(
-                "Report has non-integer score %s in report %s" % (self.data["score"], self.data["id"]))
+                "Report has non-integer score {0} in report '{1}'".format(self._data["score"], rid))
 
-        if self.data["score"] < -100 or self.data["score"] > 100:
+        if self._data["score"] < -100 or self._data["score"] > 100:
             raise CbInvalidReport(
-                "Report score %s out of range -100 to 100 in report %s" % (self.data["score"], self.data["id"]))
+                "Report score {0} out of range -100 to 100 in report '{1}'".format(self._data["score"], rid))
 
-        if not self.allow_negative_scores and self.data["score"] < 0:
+        if not self.allow_negative_scores and self._data["score"] < 0:
             raise CbInvalidReport(
-                "Report score %s out of range 0 to 100 in report %s" % (self.data["score"], self.data["id"]))
+                "Report score {0} out of range 0 to 100 in report '{1}'".format(self._data["score"], rid))
 
         # validate id of this report is just a-z and 0-9 and - and ., with at least one character
-        if not re.match("^[a-zA-Z0-9-_.]+$", self.data["id"]):
-            raise CbInvalidReport(
-                "Report ID  %s may only contain a-z, A-Z, 0-9, - and must have one character" % self.data["id"])
+        if not re.match("^[a-zA-Z0-9-_.]+$", rid):
+            raise CbInvalidReport(f"Report ID '{rid}' may only contain a-z, A-Z, 0-9, - and must have one character")
 
         # validate there is at least one IOC for each report and each IOC entry has at least one entry
-        if not all([len(self.data["iocs"][ioc]) >= 1 for ioc in self.data['iocs']]):
-            raise CbInvalidReport("Report IOC list with zero length in report %s" % (self.data["id"]))
+        if not all([len(self._data["iocs"][ioc]) >= 1 for ioc in self._data['iocs']]):
+            raise CbInvalidReport(f"Report IOC list with zero length in report '{rid}'")
 
         # convenience variable
-        iocs = self.data['iocs']
+        iocs = self._data['iocs']
 
         # validate that there are at least one type of ioc present
         if len(iocs.keys()) == 0:
-            raise CbInvalidReport("Report with no IOCs in report %s" % (self.data["id"]))
+            raise CbInvalidReport(f"Report with no IOCs in report '{rid}'")
 
-        # (pedantically) validate that no extra keys are present
+        # (pedantically) validate that no extra iocs are present
         if pedantic and len(set(iocs.keys()) - set(self.valid_ioc_types)) > 0:
             raise CbInvalidReport(
-                "Report IOCs section contains extra keys: %s" % (set(iocs.keys()) - set(self.valid_ioc_types)))
+                "Report IOCs section contains extra keys: {0}".format(set(iocs.keys()) - set(self.valid_ioc_types)))
 
         # Let us check and make sure that for "query" ioc type does not contain other types of ioc
         query_ioc = "query" in iocs.keys()
         if query_ioc and len(iocs.keys()) > 1:
             raise CbInvalidReport(
-                "Report IOCs section for \"query\" contains extra keys: %s for report %s" %
-                (set(iocs.keys()), self.data["id"]))
+                "Report IOCs section for \"query\" contains extra keys: {0} for report '{1}'".format(set(iocs.keys()),
+                                                                                                     rid))
 
         if query_ioc:
             iocs_query = iocs["query"][0]
 
+            if not isinstance(iocs_query, dict):
+                raise CbInvalidReport(f"Query IOC section not a dict structure")
+
             # validate that the index_type field exists
             if "index_type" not in iocs_query.keys():
-                raise CbInvalidReport("Query IOC section for report %s missing index_type" % self.data["id"])
+                raise CbInvalidReport(f"Query IOC section for report '{rid}' missing index_type")
 
             # validate that the index_type is a valid value
             if not iocs_query.get("index_type", None) in self.valid_query_ioc_types:
                 raise CbInvalidReport(
-                    "Report IOCs section for \"query\" contains invalid index_type: %s for report %s" %
-                    (iocs_query.get("index_type", None), self.data["id"]))
+                    "Report IOCs section for 'query' contains invalid index_type: {0} for report '{1}".format(
+                        iocs_query.get("index_type", None), rid))
 
             # validate that the search_query field exists
             if "search_query" not in iocs_query.keys():
-                raise CbInvalidReport("Query IOC for report %s missing 'search_query'" % self.data["id"])
+                raise CbInvalidReport(f"Query IOC for report {rid} missing 'search_query'")
 
             # validate that the search_query field is at least minimally valid
             # in particular, we are looking for a "q=" or "cb.q."
             # this is by no means a complete validation, but it does provide a protection
             # against leaving the actual query unqualified
             if "q=" not in iocs_query["search_query"] and "cb.q." not in iocs_query["search_query"]:
-                raise CbInvalidReport("Query IOC for report %s missing q= on query" % self.data["id"])
+                raise CbInvalidReport(f"Query IOC for report {rid} missing q= on query")
 
             for kvpair in iocs_query["search_query"].split('&'):
                 if 2 != len(kvpair.split('=')):
                     continue
                 if kvpair.split('=')[0] == 'q':
-                    self.is_valid_query(kvpair.split('=')[1], self.data["id"])
+                    self.is_valid_query(kvpair.split('=')[1], rid)
 
-        # validate all md5 fields are 32 characters, just alphanumeric, and
-        # do not include [g-z] and [G-Z] meet the alphanumeric criteria but are not valid in a md5
+        hex_digits = "0123456789ABCDEF"
+
+        # validate all md5 fields are 32 hex (0-F) characters
         for md5 in iocs.get("md5", []):
             if 32 != len(md5):
-                raise CbInvalidReport("Invalid md5 length for md5 (%s) for report %s" % (md5, self.data["id"]))
-            if not md5.isalnum():
-                raise CbInvalidReport("Malformed md5 (%s) in IOC list for report %s" % (md5, self.data["id"]))
-            for c in "ghijklmnopqrstuvwxyz":
-                if c in md5 or c.upper() in md5:
-                    raise CbInvalidReport("Malformed md5 (%s) in IOC list for report %s" % (md5, self.data["id"]))
+                raise CbInvalidReport(f"Invalid md5 length for md5 ({md5}) for report '{rid}'")
+            for c in md5.upper():
+                if c not in hex_digits:
+                    raise CbInvalidReport(f"Malformed md5 ({md5}) in IOC list for report '{rid}'")
 
-                    # validate all IPv4 fields pass socket.inet_ntoa()
-        import socket
+        # validate all sha256 fields are 64 hex (0-F) characters
+        for sha256 in iocs.get("sha256", []):
+            if 64 != len(sha256):
+                raise CbInvalidReport("Invalid sha256 length for md5 ({sha256) for report '{rid}'")
+            for c in sha256.upper():
+                if c not in hex_digits:
+                    raise CbInvalidReport(f"Malformed sha256 ({sha256}) in IOC list for report '{rid}'")
 
+        # validate all IPv4 fields pass socket.inet_ntoa()
         try:
             [socket.inet_aton(ip) for ip in iocs.get("ipv4", [])]
-        except socket.error:
-            raise CbInvalidReport("Malformed IPv4 (%s) addr in IOC list for report %s" % (ip, self.data["id"]))
+        except socket.error as err:
+            raise CbInvalidReport(f"Malformed IPv4 addr in IOC list for report '{rid}': {err}")
 
         # validate all lowercased domains have just printable ascii
-        import string
         # 255 chars allowed in dns; all must be printables, sans control characters
         # hostnames can only be A-Z, 0-9 and - but labels can be any printable.  See
         # O'Reilly's DNS and Bind Chapter 4 Section 5:
         # "Names that are not host names can consist of any printable ASCII character."
-        allowed_chars = string.printable[:-6]
+        allowed_chars = string.printable[:-6]  # all but whitespace
         for domain in iocs.get("dns", []):
             if len(domain) > 255:
                 raise CbInvalidReport(
-                    "Excessively long domain name (%s) in IOC list for report %s" % (domain, self.data["id"]))
+                    f"Excessively long domain name ({domain}) in IOC list for report '{rid}'")
             if not all([c in allowed_chars for c in domain]):
                 raise CbInvalidReport(
-                    "Malformed domain name (%s) in IOC list for report %s" % (domain, self.data["id"]))
+                    f"Malformed domain name ({domain}) in IOC list for report '{rid}'")
             labels = domain.split('.')
             if 0 == len(labels):
-                raise CbInvalidReport("Empty domain name in IOC list for report %s" % (self.data["id"]))
+                raise CbInvalidReport(f"Empty domain name in IOC list for report '{rid}'")
             for label in labels:
                 if len(label) < 1 or len(label) > 63:
-                    raise CbInvalidReport("Invalid label length (%s) in domain name (%s) for report %s" % (
-                        label, domain, self.data["id"]))
+                    raise CbInvalidReport(
+                        f"Invalid label length ({label}) in domain name ({domain}) for report '{rid}'")
 
-        return True
 
-    def __str__(self):
-        return "CbReport(%s)" % (self.data.get("title", self.data.get("id", '')))
+class CbFeed(object):
+    def __init__(self, feedinfo: CbFeedInfo, reports: List[CbReport], strict_validation: bool = False):
+        """
+        Contains data relating information for a single report.
+
+        :param feedinfo: dict represnation of the feed information
+        :param reports: list of dict represenations for east report
+        :param strict_validation: If True, validate data on every reference (default False)
+        """
+        self._strict = strict_validation
+
+        self._data = {'feedinfo': feedinfo, 'reports': reports}
+
+        if self._strict:
+            self.validate()
 
     def __repr__(self):
-        return repr(self.data)
+        return repr(self._data)
+
+    def __str__(self):
+        return "CbFeed(%s)" % (self._data.get('feedinfo', "unknown"))
+
+    # --------------------------------------------------------------------------------
+
+    @property
+    def data(self) -> dict:
+        if self._strict:
+            self.validate()
+        return self._data
+
+    @staticmethod
+    def load(serialized_data: str, strict_validation: bool = False) -> 'CbFeed':
+        """
+        Take in a feed descripotion as a JSON string and convert to a CbFeed object.
+
+        :param serialized_data: source JSON string
+        :param strict_validation: If True, validate data on every reference (default False)
+        :return:
+        """
+        raw_data = json.loads(serialized_data)
+
+        if "feedinfo" not in raw_data:
+            raise CbInvalidFeed("Feed missing 'feedinfo' data")
+
+        if 'reports' not in raw_data:
+            raise CbInvalidFeed("Feed missing 'reports' structure")
+
+        fi = CbFeedInfo(**raw_data["feedinfo"])
+        rpt = [CbReport(**rp) for rp in raw_data["reports"]]
+
+        new_feed = CbFeed(fi, rpt, strict_validation=strict_validation)
+        new_feed.validate()
+        return new_feed
+
+    def dump(self) -> str:
+        """
+        Dumps the feed data as a JSON object.
+
+        :return: json data object
+        """
+        return json.dumps(self.data, cls=CbJSONEncoder, sort_keys=True, indent=2)
+
+    def dumpjson(self) -> json:
+        """
+        Dumps the feed data as a JSON object.
+
+        :return: json data object
+        """
+        return json.loads(self.dump())
+
+    def iter_iocs(self):
+        """
+        Yields all iocs in the feed.
+        """
+
+        for report in self._data["reports"]:
+            for sha256 in report.data.get("iocs", {}).get("sha256", []):
+                yield {"type": "sha256", "ioc": sha256, "report_id": report.data.get("id", "")}
+            for md5 in report.data.get("iocs", {}).get("md5", []):
+                yield {"type": "md5", "ioc": md5, "report_id": report.data.get("id", "")}
+            for ip in report.data.get("iocs", {}).get("ipv4", []):
+                yield {"type": "ipv4", "ioc": ip, "report_id": report.data.get("id", "")}
+            for domain in report.data.get("iocs", {}).get("dns", []):
+                yield {"type": "dns", "ioc": domain, "report_id": report.data.get("id", "")}
+
+    @staticmethod
+    def validate_report_list(reports: List[CbReport]) -> None:
+        """
+        Validates reports as a set, as compared to each report as a standalone entity.
+
+        :param reports: list of reports
+        :raises CbInvalidFeed:
+        """
+        reportids = set()
+
+        # verify that no two reports have the same report id
+        # see CBAPI-17
+        for report in reports:
+            if report.data['id'] in reportids:
+                raise CbInvalidFeed("duplicate report id '{0}'".format(report.data['id']))
+            reportids.add(report.data['id'])
+
+    def validate(self, pedantic: bool = False) -> None:
+        """
+        Validates the feed.
+
+        :param pedantic: when set, perform strict validation on reports
+        """
+        self._data['feedinfo'].validate()
+
+        # validate each report individually
+        for rep in self._data['reports']:
+            rep.validate(pedantic=pedantic)
+
+        # validate the reports as a whole
+        self.validate_report_list(self._data['reports'])
