@@ -114,7 +114,6 @@ class CbFeedInfo(object):
             self.validate()
         return self._data
 
-<<<<<<< HEAD
     def validate(self) -> None:
         """
         A set of checks to validate the internal data.
@@ -124,34 +123,6 @@ class CbFeedInfo(object):
         if not all([x in self._data.keys() for x in self.required.keys()]):
             missing_fields = ", ".join(set(self.required).difference(set(self._data.keys())))
             raise CbInvalidFeed(f"FeedInfo missing required field(s): {missing_fields}")
-=======
-        # if they are present, set the icon fields of the data to hold
-        # the base64 encoded file data from their path
-        for icon_field in ["icon", "icon_small"]:
-            if icon_field in self.data and os.path.exists(self.data[icon_field]):
-                icon_path = self.data.pop(icon_field)
-                try:
-                    self.data[icon_field] = base64.b64encode(open(icon_path, "rb").read()).decode('utf-8')
-                except Exception as err:
-                    #del self.data[icon_field]
-                    pass
-                    #raise CbIconError(f"Unknown error reading/encoding icon data: {err}")
-
-    def dump(self):
-        '''
-        validates, then dumps the feed info data
-        :return: the feed info data
-        '''
-        self.validate()
-        return self.data
-
-    def validate(self, pedantic=False):
-        """ a set of checks to validate data before we export the feed"""
-
-        if not all([x in self.data.keys() for x in self.required]):
-            missing_fields = ", ".join(set(self.required).difference(set(self.data.keys())))
-            raise CbInvalidFeed("FeedInfo missing required field(s): %s" % missing_fields)
->>>>>>> origin/yara_v2_development
 
         # verify no non-supported keys are present
         for key in self._data.keys():
@@ -163,17 +134,12 @@ class CbFeedInfo(object):
             try:
                 base64.b64decode(self._data[icon_field])
             except binascii.Error as err:
-                raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
+                #raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
+                pass
             except TypeError as err:
-<<<<<<< HEAD
-                raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
+                #raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
+                pass
             except KeyError:
-=======
-                #raise CbIconError(f"Icon must either be path or base64 data.  \
-                   #                     Path does not exist and base64 decode failed with: {err}")
-                pass   
-            except KeyError as err:
->>>>>>> origin/yara_v2_development
                 # we don't want to cause a ruckus if the icon is missing
                 pass
 

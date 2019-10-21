@@ -118,7 +118,6 @@ def generate_rule_map_remote(yara_rule_path) -> None:
         time.sleep(.1)
 
 
-<<<<<<< HEAD
 def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
     """
     Analyze binaries.
@@ -129,10 +128,6 @@ def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
     :param local: True if local
     :return: None if there is a problem; results otherwise
     """
-=======
-def analyze_binaries(md5_hashes, local):
-    #logger.debug(f"md5hashes = {len(md5_hashes)}")
->>>>>>> origin/yara_v2_development
     if local:
         try:
             results = []
@@ -312,12 +307,7 @@ def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binari
     logger.debug("   number binaries already scanned: {0}".format(num_binaries_skipped))
     logger.debug("   number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
     logger.info("total binaries from db: {0}".format(num_total_binaries))
-<<<<<<< HEAD
     logger.debug("   binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
-=======
-    #logger.info(f"number of binaries queued to be scanned: {num_binaries_queued}")
-    logger.debug("binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
->>>>>>> origin/yara_v2_development
     logger.info("num binaries score greater than zero: {0}".format(
         len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))))
     logger.info("")
