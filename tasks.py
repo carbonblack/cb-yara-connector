@@ -108,8 +108,6 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
     :param yara_rule_path: location of the yara rules
     :return:
     """
-    md5 = hashlib.md5()
-
     temp_list = []
     for fn in os.listdir(yara_rule_path):
         if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
@@ -118,8 +116,8 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
                 continue
             with open(os.path.join(yara_rule_path, fn), 'rb') as fp:
                 data = fp.read()
-                # TODO: Original logic did not have this, resulting in a cumulative hash for each file (linking them)
-                md5.new()
+                # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
+                md5 = hashlib.md5()
                 md5.update(data)
                 temp_list.append(str(md5.hexdigest()))
 
@@ -161,7 +159,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                            ssl_verify=False,
                            timeout=5)
 
-        binary_query = cb.select(Binary).where("md5:{0}".format(md5sum))
+        binary_query = cb.select(Binary).where(f"md5:{md5sum}")
 
         if binary_query:
             try:

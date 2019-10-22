@@ -76,8 +76,6 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
     :param yara_rule_path: the path to where the yara rules are stored.
     :return:
     """
-    md5 = hashlib.md5()
-
     temp_list = []
     for fn in os.listdir(yara_rule_path):
         if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
@@ -86,8 +84,8 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
                 continue
             with open(os.path.join(yara_rule_path, fn), 'rb') as fp:
                 data = fp.read()
-                # TODO: Original logic did not have this, resulting in a cumulative hash for each file (linking them)
-                md5.new()
+                # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
+                md5 = hashlib.md5()
                 md5.update(data)
                 temp_list.append(str(md5.hexdigest()))
 
@@ -238,7 +236,6 @@ def perform(yara_rule_dir):
         for row in rows:
             num_total_binaries += 1
             md5_hash = row[0].hex()
-            #logger.debug(md5_hash)
 
             #
             # Check if query returns any rows
@@ -267,7 +264,8 @@ def perform(yara_rule_dir):
                 analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
                 if analysis_results:
                     for analysis_result in analysis_results:
-                        #logger.debug(f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available} {analysis_result.long_result} {analysis_result.last_error_msg}")
+                        logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                                      f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
                         if analysis_result.last_error_msg:
                             logger.error(analysis_result.last_error_msg)
                     save_results(analysis_results)
@@ -284,7 +282,8 @@ def perform(yara_rule_dir):
     analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
     if analysis_results:
         for analysis_result in analysis_results:
-            #logger.debug(f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available} {analysis_result.long_result} {analysis_result.last_error_msg}")
+            logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                          f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
@@ -316,7 +315,7 @@ def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binari
 def verify_config(config_file: str, output_file: str) -> bool:
     """
     Validate the config file.
-    :param config_file:
+    :param config_file: The config file to validate
     :param output_file:
     :return: True if configuration file is good
     """
@@ -326,7 +325,7 @@ def verify_config(config_file: str, output_file: str) -> bool:
     globals.output_file = output_file
 
     if not config.has_section('general'):
-        logger.error("Config file does not have a \'general\' section")
+        logger.error("Config file does not have a 'general' section")
         return False
 
     if 'worker_type' in config['general']:
@@ -342,7 +341,8 @@ def verify_config(config_file: str, output_file: str) -> bool:
             logger.error("invalid worker_type specified.  Must be \'local\' or \'remote\'")
             return False
     else:
-        logger.warning("Config file does not specify worker_type, assuming local")
+        globals.g_remote = False
+        logger.warning("Config file does not specify 'worker_type', assuming local")
 
     if 'yara_rules_dir' in config['general']:
         globals.g_yara_rules_dir = config['general']['yara_rules_dir']

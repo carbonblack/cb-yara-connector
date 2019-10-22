@@ -96,15 +96,19 @@ class TestCbFeedInfo(TestCase):
 
     def test_bad_icon(self):
         """
-        Ensure we trap bad icon data.
+        Ensure we trap bad icon data (only raises logger message)
         """
         data = self.core()
 
-        with self.assertRaises(CbIconError) as err:
-            fi = CbFeedInfo(**data)
-            fi._data['icon'] = "BOGUS"
-            fi.validate()
-        assert "Icon must be base64 data; decode failed with: Incorrect padding" in "{0}".format(err.exception.args[0])
+        fi = CbFeedInfo(**data)
+        fi._data['icon'] = "BOGUS"
+        fi.validate()
+
+        data = self.core()
+
+        fi = CbFeedInfo(**data)
+        fi._data['icon_small'] = "BOGUS"
+        fi.validate()
 
     def test_bad_icon_missing_path(self):
         """

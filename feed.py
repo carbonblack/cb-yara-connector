@@ -134,11 +134,9 @@ class CbFeedInfo(object):
             try:
                 base64.b64decode(self._data[icon_field])
             except binascii.Error as err:
-                #raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
-                pass
+                logger.debug("Feed '{0}' has incorrect {1} data: {2}".format(self._data['name'], icon_field, err))
             except TypeError as err:
-                #raise CbIconError(f"Icon must be base64 data; decode failed with: {err}")
-                pass
+                logger.debug("Feed '{0}' has incorrect {1} data: {2}".format(self._data['name'], icon_field, err))
             except KeyError:
                 # we don't want to cause a ruckus if the icon is missing
                 pass
