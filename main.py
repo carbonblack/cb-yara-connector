@@ -172,6 +172,7 @@ def perform(yara_rule_dir):
     md5_hashes = list()
 
     start_time = time.time()
+    start_datetime = datetime.now()
 
     logger.info("Connecting to Postgres database...")
     try:
@@ -194,11 +195,19 @@ def perform(yara_rule_dir):
     logger.info("Enumerating modulestore...")
 
     while True:
+        if cur.closed:
+            cur = conn.cursor(name="yara_agent")
         rows = cur.fetchmany()
         if len(rows) == 0:
             break
 
         for row in rows:
+            seconds_since_start = (datetime.now() - start_datetime).seconds
+            if seconds_since_start >= globals.g_vacuum_seconds:
+                cur.close()
+                os.system(globals.g_vacuum_script)
+                break
+
             num_total_binaries += 1
             md5_hash = row[0].hex()
 

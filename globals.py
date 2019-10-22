@@ -26,3 +26,5 @@ g_num_binaries_analyzed = 0
 g_disable_rescan = False
 
 g_num_days_binaries = 365
+g_vacuum_seconds = 3600
+g_vacuum_script = './vacuumtables.sh'
