@@ -5,6 +5,7 @@ import json
 import logging
 import logging.handlers
 import os
+import sys
 import time
 import traceback
 from datetime import datetime, timedelta
@@ -32,6 +33,18 @@ logger.setLevel(logging.INFO)
 celery_logger = logging.getLogger('celery.app.trace')
 celery_logger.setLevel(logging.ERROR)
 
+
+################################################################################
+# Exception Classes
+################################################################################
+
+class CbInvalidConfig(Exception):
+    pass
+
+
+################################################################################
+# Exception Classes
+################################################################################
 
 def generate_feed_from_db() -> None:
     """
@@ -312,79 +325,121 @@ def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binari
     logger.info("")
 
 
-def verify_config(config_file: str, output_file: str) -> bool:
+def verify_config(config_file: str, output_file: str = None) -> None:
     """
     Validate the config file.
     :param config_file: The config file to validate
-    :param output_file:
-    :return: True if configuration file is good
+    :param output_file: the output file; if not specified equals config file plus ".json"
     """
+    abs_config = os.path.abspath(config_file)
+
     config = configparser.ConfigParser()
-    config.read(config_file)
+    if not os.path.exists(config_file):
+        raise CbInvalidConfig(f"Config file '{abs_config}' does not exist!")
 
-    globals.output_file = output_file
+    try:
+        config.read(config_file)
+    except Exception as err:
+        raise CbInvalidConfig(err)
 
+    logger.debug(f"NOTE: using config file '{abs_config}'")
     if not config.has_section('general'):
-        logger.error("Config file does not have a 'general' section")
-        return False
+        raise CbInvalidConfig(f"Config file does not have a 'general' section")
 
-    if 'worker_type' in config['general']:
-        if config['general']['worker_type'] == 'local':
-            globals.g_remote = False
-        elif config['general']['worker_type'] == 'remote':
-            globals.g_remote = True
-            if 'broker_url' in config['general']:
-                app.conf.update(
-                    broker_url=config['general']['broker_url'],
-                    result_backend=config['general']['broker_url'])
-        else:
-            logger.error("invalid worker_type specified.  Must be \'local\' or \'remote\'")
-            return False
+    globals.output_file = output_file if output_file is not None else config_file.strip() + ".json"
+    logger.debug(f"NOTE: output file will be '{globals.output_file}'")
+
+    the_config = config['general']
+    if 'worker_type' in the_config:
+        if the_config['worker_type'] == 'local' or the_config['worker_type'].strip() == "":
+            globals.g_remote = False  # 'local' or empty definition
+        elif the_config['worker_type'] == 'remote':
+            globals.g_remote = True  # 'remote'
+        else:  # anything else
+            raise CbInvalidConfig(
+                f"Invalid worker_type '{the_config['worker_type']}' specified; must be 'local' or 'remote'")
     else:
         globals.g_remote = False
         logger.warning("Config file does not specify 'worker_type', assuming local")
 
-    if 'yara_rules_dir' in config['general']:
-        globals.g_yara_rules_dir = config['general']['yara_rules_dir']
+    # local/remote configuration data
+    if not globals.g_remote:
+        if 'cb_server_url' in the_config and the_config['cb_server_url'].strip() != "":
+            globals.g_cb_server_url = the_config['cb_server_url']
+        else:
+            raise CbInvalidConfig(f"Local worker configuration missing 'cb_server_url'")
+        if 'cb_server_token' in the_config and the_config['cb_server_token'].strip() != "":
+            globals.g_cb_server_token = the_config['cb_server_token']
+        else:
+            raise CbInvalidConfig(f"Local worker configuration missing 'cb_server_token'")
+        # TODO: validate url & token with test call?
+    else:
+        if 'broker_url' in the_config and the_config['broker_url'].strip() != "":
+            app.conf.update(broker_url=the_config['broker_url'], result_backend=the_config['broker_url'])
+        else:
+            raise CbInvalidConfig(f"Remote worker configuration missing 'broker_url'")
+        # TODO: validate broker with test call?
 
-    if 'postgres_host' in config['general']:
-        globals.g_postgres_host = config['general']['postgres_host']
+    if 'yara_rules_dir' in the_config and the_config['yara_rules_dir'].strip() != "":
+        check = os.path.abspath(the_config['yara_rules_dir'])
+        if os.path.exists(check):
+            if os.path.isdir(check):
+                globals.g_yara_rules_dir = check
+            else:
+                raise CbInvalidConfig("Rules dir '{0}' is not actualy a directory".format(check))
+        else:
+            raise CbInvalidConfig("Rules dir '{0}' does not exist".format(check))
+    else:
+        raise CbInvalidConfig("You must specify a yara rules directory in your configuration")
 
-    if 'postgres_username' in config['general']:
-        globals.g_postgres_username = config['general']['postgres_username']
+    # NOTE: postgres_host has a default value in globals; use and warn if not defined
+    if 'postgres_host' in the_config and the_config['postgres_host'].strip() != "":
+        globals.g_postgres_host = the_config['postgres_host']
+    else:
+        logger.warning(f"No defined 'postgres_host'; using default of {globals.g_postgres_host}")
 
-    if 'postgres_password' in config['general']:
-        globals.g_postgres_password = config['general']['postgres_password']
+    # NOTE: postgres_username has a default value in globals; use and warn if not defined
+    if 'postgres_username' in the_config and the_config['postgres_username'].strip() != "":
+        globals.g_postgres_username = the_config['postgres_username']
+    else:
+        logger.warning(f"No defined 'postgres_username'; using default of {globals.g_postgres_username}")
 
-    if 'postgres_db' in config['general']:
-        globals.g_postgres_db = config['general']['postgres_db']
+    if 'postgres_password' in the_config and the_config['postgres_password'].strip() != "":
+        globals.g_postgres_password = the_config['postgres_password']
+    else:
+        raise CbInvalidConfig("No 'postgres_password' defined in the configuration")
 
-    if 'cb_server_url' in config['general']:
-        globals.g_cb_server_url = config['general']['cb_server_url']
+    # NOTE: postgres_db has a default value in globals; use and warn if not defined
+    if 'postgres_db' in the_config and the_config['postgres_db'].strip() != "":
+        globals.g_postgres_db = the_config['postgres_db']
+    else:
+        logger.warning(f"No defined 'postgres_db'; using default of {globals.g_postgres_db}")
 
-    if 'cb_server_token' in config['general']:
-        globals.g_cb_server_token = config['general']['cb_server_token']
+    # NOTE: postgres_port has a default value in globals; use and warn if not defined
+    if 'postgres_port' in the_config:
+        globals.g_postgres_port = int(the_config['postgres_port'])
+    else:
+        logger.warning(f"No defined 'postgres_port'; using default of {globals.g_postgres_port}")
 
-    if 'niceness' in config['general']:
-        os.nice(int(config['general']['niceness']))
+    # TODO: validate postgres connection with supplied information?
 
-    if 'concurrent_hashes' in config['general']:
-        globals.MAX_HASHES = int(config['general']['concurrent_hashes'])
+    if 'niceness' in the_config:
+        os.nice(int(the_config['niceness']))
 
-    if 'disable_rescan' in config['general']:
-        globals.g_disable_rescan = bool(config['general']['disable_rescan'])
-        logger.debug("Disable Rescan: {}".format(globals.g_disable_rescan))
+    if 'concurrent_hashes' in the_config:
+        globals.MAX_HASHES = int(the_config['concurrent_hashes'])
+        logger.debug("Consurrent Hashes: {0}".format(globals.MAX_HASHES))
 
-    if 'num_days_binaries' in config['general']:
-        globals.g_num_days_binaries = int(config['general']['num_days_binaries'])
-        logger.debug("Number of days for binaries: {}".format(globals.g_num_days_binaries))
+    if 'disable_rescan' in the_config:
+        globals.g_disable_rescan = bool(the_config['disable_rescan'])
+        logger.debug("Disable Rescan: {0}".format(globals.g_disable_rescan))
 
-    return True
+    if 'num_days_binaries' in the_config:
+        globals.g_num_days_binaries = int(the_config['num_days_binaries'])
+        logger.debug("Number of days for binaries: {0}".format(globals.g_num_days_binaries))
 
 
 def main():
-    global logger
-
     try:
         # check for single operation
         singleton.SingleInstance()
@@ -418,30 +473,35 @@ def main():
             handler.setFormatter(formatter)
             logger.addHandler(handler)
 
-        if verify_config(args.config_file, args.output_file):
-            if args.validate_yara_rules:
-                logger.info("Validating yara rules in directory: {0}".format(globals.g_yara_rules_dir))
-                yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-                try:
-                    yara.compile(filepaths=yara_rule_map)
-                except Exception as err:
-                    logger.error(f"There were errors compiling yara rules: {err}")
-                    logger.error(traceback.format_exc())
-                else:
-                    logger.info("All yara rules compiled successfully")
-            else:
-                try:
-                    globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-                    generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                    database = SqliteDatabase('binary.db')
-                    db.initialize(database)
-                    db.connect()
-                    db.create_tables([BinaryDetonationResult])
-                    generate_feed_from_db()
-                    perform(globals.g_yara_rules_dir)
-                except Exception as err:
-                    logger.error(f"There were errors executing yara rules: {err}")
-                    logger.error(traceback.format_exc())
+        # Verify the configuration file and load up important global variables
+        try:
+            verify_config(args.config_file, args.output_file)
+        except Exception as err:
+            logger.error(f"Unable to continue due to a configuration problem: {err}")
+            sys.exit(1)
+
+        if args.validate_yara_rules:
+            logger.info("Validating yara rules in directory: {0}".format(globals.g_yara_rules_dir))
+            yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+            try:
+                yara.compile(filepaths=yara_rule_map)
+                logger.info("All yara rules compiled successfully")
+            except Exception as err:
+                logger.error(f"There were errors compiling yara rules: {err}")
+                logger.error(traceback.format_exc())
+        else:
+            try:
+                globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+                generate_yara_rule_map_hash(globals.g_yara_rules_dir)
+                database = SqliteDatabase('binary.db')
+                db.initialize(database)
+                db.connect()
+                db.create_tables([BinaryDetonationResult])
+                generate_feed_from_db()
+                perform(globals.g_yara_rules_dir)
+            except Exception as err:
+                logger.error(f"There were errors executing yara rules: {err}")
+                logger.error(traceback.format_exc())
 
 
 if __name__ == "__main__":
