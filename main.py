@@ -197,7 +197,15 @@ def perform(yara_rule_dir):
     while True:
         if cur.closed:
             cur = conn.cursor(name="yara_agent")
-        rows = cur.fetchmany()
+            cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
+                    "ORDER BY timestamp DESC".format(start_date_binaries))
+        try:    
+            rows = cur.fetchmany()
+        except psycopg2.OperationalError:
+            cur = conn.cursor(name="yara_agent")
+            cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
+                    "ORDER BY timestamp DESC".format(start_date_binaries))
+            rows = cur.fetchmany()
         if len(rows) == 0:
             break
 
@@ -205,7 +213,8 @@ def perform(yara_rule_dir):
             seconds_since_start = (datetime.now() - start_datetime).seconds
             if seconds_since_start >= globals.g_vacuum_seconds:
                 cur.close()
-                os.system(globals.g_vacuum_script)
+                os.system(os.path.join(os.getcwd(),globals.g_vacuum_script))
+                start_datetime = datetime.now()
                 break
 
             num_total_binaries += 1
@@ -312,6 +321,9 @@ def verify_config(config_file, output_file):
     if 'postgres_host' in config['general']:
         globals.g_postgres_host = config['general']['postgres_host']
 
+    if 'postgres_port' in config['general']:
+        globals.g_postgres_port = config['general']['postgres_port']
+
     if 'postgres_username' in config['general']:
         globals.g_postgres_username = config['general']['postgres_username']
 
@@ -340,6 +352,13 @@ def verify_config(config_file, output_file):
     if 'num_days_binaries' in config['general']:
         globals.g_num_days_binaries = int(config['general']['num_days_binaries'])
         logger.debug("Number of days for binaries: {}".format(globals.g_num_days_binaries))
+
+    if 'vacuum_seconds' in config['general']:
+        globals.g_vacuum_seconds = int(config['general']['vacuum_seconds'])
+
+    if 'vacuum_script' in config['general']:
+        globals.g_vacuum_script = config['general']['vacuum_script']
+
 
     return True
 
