@@ -14,6 +14,7 @@ from celery import bootsteps, Celery
 
 import globals
 from analysis_result import AnalysisResult
+from exceptions import CbInvalidConfig
 
 app = Celery()
 # noinspection PyUnusedName
@@ -27,34 +28,69 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def verify_config(config_file: str) -> bool:
+# noinspection DuplicatedCode
+def verify_config(config_file: str) -> None:
     """
     Read and validate the current config file.
+
+    NOTE: Replicates, to a smaller degree, the function in main.py; it is presumed that more detailed checks are there
     :param config_file: path to the config file
-    :return: True if valid
     """
+    abs_config = os.path.abspath(config_file)
+    header = f"Config file '{abs_config}'"
+
     config = configparser.ConfigParser()
-    config.read(config_file)
+    if not os.path.exists(config_file):
+        raise CbInvalidConfig(f"{header} does not exist!")
 
+    try:
+        config.read(config_file)
+    except Exception as err:
+        raise CbInvalidConfig(err)
+
+    logger.debug(f"NOTE: using config file '{abs_config}'")
     if not config.has_section('general'):
-        logger.error("Config file does not have a \'general\' section")
-        return False
+        raise CbInvalidConfig(f"{header} does not have a 'general' section")
 
-    if 'yara_rules_dir' in config['general']:
-        globals.g_yara_rules_dir = config['general']['yara_rules_dir']
+    the_config = config['general']
 
-    if 'cb_server_url' in config['general']:
-        globals.g_cb_server_url = config['general']['cb_server_url']
+    if 'yara_rules_dir' in the_config and the_config['yara_rules_dir'].strip() != "":
+        check = os.path.abspath(the_config['yara_rules_dir'])
+        if os.path.exists(check):
+            if os.path.isdir(check):
+                globals.g_yara_rules_dir = check
+            else:
+                raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) is not a directory")
+        else:
+            raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) does not exist")
+    else:
+        raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
 
-    if 'cb_server_token' in config['general']:
-        globals.g_cb_server_token = config['general']['cb_server_token']
+    if 'worker_type' in the_config:
+        if the_config['worker_type'] == 'local' or the_config['worker_type'].strip() == "":
+            remote = False
+        elif the_config['worker_type'] == 'remote':
+            remote = True
+        else:  # anything else
+            raise CbInvalidConfig(f"{header} has an invalid 'worker_type' ({the_config['worker_type']})")
+    else:
+        remote = False
 
-    if 'broker_url' in config['general']:
-        app.conf.update(
-            broker_url=config['general']['broker_url'],
-            result_backend=config['general']['broker_url'])
-
-    return True
+    # local/remote configuration data
+    if not remote:
+        if 'cb_server_url' in the_config and the_config['cb_server_url'].strip() != "":
+            globals.g_cb_server_url = the_config['cb_server_url']
+        else:
+            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
+        if 'cb_server_token' in the_config and the_config['cb_server_token'].strip() != "":
+            globals.g_cb_server_token = the_config['cb_server_token']
+        else:
+            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
+    else:
+        if 'broker_url' in the_config and the_config['broker_url'].strip() != "":
+            app.conf.update(broker_url=the_config['broker_url'], result_backend=the_config['broker_url'])
+        else:
+            raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
 
 
 def add_worker_arguments(parser):

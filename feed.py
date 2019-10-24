@@ -9,28 +9,10 @@ import string
 import time
 from typing import List
 
+from exceptions import CbIconError, CbInvalidFeed, CbInvalidReport
+
 # noinspection PyUnusedName
 logger = logging.getLogger(__name__)
-
-
-################################################################################
-# Exception Classes
-################################################################################
-
-class CbException(Exception):
-    pass
-
-
-class CbIconError(CbException):
-    pass
-
-
-class CbInvalidFeed(CbException):
-    pass
-
-
-class CbInvalidReport(CbException):
-    pass
 
 
 ################################################################################
