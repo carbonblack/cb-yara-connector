@@ -214,7 +214,7 @@ def perform(yara_rule_dir):
             if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
                 cur.close()
                 logger.warning("!!!Executing vacuum script!!!")
-                os.system(os.path.join(os.getcwd(),globals.g_vacuum_script))
+                os.system(f".{os.path.join(os.getcwd(), globals.g_vacuum_script)}")
                 start_datetime = datetime.now()
                 logger.warning("!!!Done Executing vacuum script!!!")
                 break
