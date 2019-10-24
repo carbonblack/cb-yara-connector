@@ -211,7 +211,7 @@ def perform(yara_rule_dir):
 
         for row in rows:
             seconds_since_start = (datetime.now() - start_datetime).seconds
-            if seconds_since_start >= globals.g_vacuum_seconds:
+            if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
                 cur.close()
                 os.system(os.path.join(os.getcwd(),globals.g_vacuum_script))
                 start_datetime = datetime.now()
@@ -355,10 +355,9 @@ def verify_config(config_file, output_file):
 
     if 'vacuum_seconds' in config['general']:
         globals.g_vacuum_seconds = int(config['general']['vacuum_seconds'])
-
-    if 'vacuum_script' in config['general']:
-        globals.g_vacuum_script = config['general']['vacuum_script']
-
+        if 'vacuum_script' in config['general'] and globals.g_vacuum_seconds > 0:
+            globals.g_vacuum_script = config['general']['vacuum_script']
+            logger.warn("WARNING: Vacuum Script is enabled --- use this advanced feature at your own digression ---")
 
     return True
 
