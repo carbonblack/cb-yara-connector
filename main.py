@@ -216,6 +216,7 @@ def perform(yara_rule_dir):
                 logger.warning("!!!Executing vacuum script!!!")
                 os.system(os.path.join(os.getcwd(),globals.g_vacuum_script))
                 start_datetime = datetime.now()
+                logger.warning("!!!Done Executing vacuum script!!!")
                 break
 
             num_total_binaries += 1
