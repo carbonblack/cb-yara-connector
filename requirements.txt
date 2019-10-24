@@ -25,6 +25,7 @@ PyInstaller==3.4
 python-dateutil==2.7.5
 pytz==2018.9
 PyYAML==3.13
+redis==3.0.1
 requests==2.21.0
 six==1.12.0
 solrq==1.1.1
@@ -33,5 +34,4 @@ urllib3==1.24.1
 vine==1.2.0
 wcwidth==0.1.7
 yara-python==3.8.1
-redis==3.0.1
 humanfriendly
