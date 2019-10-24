@@ -14,6 +14,7 @@ import argparse
 import configparser
 import hashlib
 import yara
+import subprocess
 
 from feed import CbFeed, CbFeedInfo, CbReport
 from celery import group
@@ -214,7 +215,13 @@ def perform(yara_rule_dir):
             if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
                 cur.close()
                 logger.warning("!!!Executing vacuum script!!!")
-                os.system(f".{os.path.join(os.getcwd(), globals.g_vacuum_script)}")
+                target = os.path.join(os.getcwd(), globals.g_vacuum_script)
+                prog = subprocess.Popen(target, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                stdout, stderr = prog.communicate()  # Returns (stdoutdata, stderrdata): stdout and stderr are ignored, here
+                logger.info(stdout)
+                logger.error(stderr)
+                if prog.returncode:
+                    logger.warning('program returned error code {0}'.format(prog.returncode))
                 start_datetime = datetime.now()
                 logger.warning("!!!Done Executing vacuum script!!!")
                 break
