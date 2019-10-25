@@ -268,14 +268,15 @@ def perform(yara_rule_dir):
             if seconds_since_start >= globals.g_vacuum_seconds > 0:
                 cur.close()
                 logger.warning("!!!Executing vacuum script!!!")
+                target = ["/bin/sh", globals.g_vacuum_script]
+
                 envdict = dict(os.environ)
                 envdict["PGPASSWORD"] = globals.g_postgres_password
                 envdict["PGUSERNAME"] = globals.g_postgres_username
                 envdict['PGHOST'] = globals.g_postgres_host
                 envdict["PGDATABASE"] = globals.g_postgres_db
                 envdict["PGPORT"] = str(globals.g_postgres_port)
-                prog = subprocess.Popen(globals.g_vacuum_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        shell=True, env=envdict)
+                prog = subprocess.Popen(target, shell=False, env=envdict, universal_newlines=True)
                 stdout, stderr = (prog.communicate())  # Returns (stdoutdata, stderrdata)
                 logger.info(stdout)
                 logger.error(stderr)
