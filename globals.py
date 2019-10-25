@@ -33,4 +33,6 @@ g_disable_rescan = False
 
 g_num_days_binaries = 365
 g_vacuum_seconds = -1
-g_vacuum_script = 'vacuumscript.sh'
+g_vacuum_script = 'scripts/vacuumscript.sh'
+
+g_feed_database_path = "."

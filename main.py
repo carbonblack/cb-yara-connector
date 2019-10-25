@@ -529,6 +529,12 @@ def verify_config(config_file: str, output_file: str = None) -> None:
             else:
                 logger.debug(f"{header} has 'vacuum_script' defined, but it is disabled")
 
+    if 'feed_database_path' in the_config:
+        globals.feed_database_path = the_config['feed_database_path']
+        check = os.path.abspath(placehold(the_config["feed_database_path"]))
+        if not(os.path.exists(check) and os.path.isdir(check)):
+            raise CbInvalidConfig("Invalid database path specified")
+
 
 def main():
     try:
@@ -594,7 +600,7 @@ def main():
             try:
                 globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
                 generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase("binary.db")
+                database = SqliteDatabase(os.path.join(globals.g_feed_database_path,"binary.db"))
                 db.initialize(database)
                 db.connect()
                 db.create_tables([BinaryDetonationResult])
