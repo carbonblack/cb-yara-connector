@@ -38,3 +38,6 @@ nosetests.xml
 .idea
 
 config.ini
+
+# created local DB
+#binary.db
