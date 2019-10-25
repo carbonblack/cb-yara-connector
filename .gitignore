@@ -40,4 +40,4 @@ nosetests.xml
 config.ini
 
 # created local DB
-#binary.db
+binary.db
