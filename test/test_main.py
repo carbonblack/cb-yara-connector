@@ -347,7 +347,7 @@ class TestMain(TestCase):
         globals.g_vacuum_script = None
         verify_config(os.path.join(TESTS, "config", "vacuum_script_enabled.conf"))
         self.assertEqual(3600, globals.g_vacuum_seconds)
-        self.assertTrue(globals.g_vacuum_script.endswith("/config/valid.conf"))
+        self.assertTrue(globals.g_vacuum_script.endswith("/scripts/vacuumscript.sh"))
 
     def test_19a_config_vacuum_script_and_no_vacuum_seconds(self):
         """
