@@ -13,6 +13,7 @@ from typing import List, Optional
 
 import humanfriendly
 import psycopg2
+
 # noinspection PyPackageRequirements
 import yara
 import subprocess
@@ -27,19 +28,20 @@ from binary_database import BinaryDetonationResult, db
 from feed import CbFeed, CbFeedInfo, CbReport
 from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
 
-logging_format = '%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s'
+logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-celery_logger = logging.getLogger('celery.app.trace')
+celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
 
 
 ################################################################################
 # Exception Classes
 ################################################################################
+
 
 class CbInvalidConfig(Exception):
     pass
@@ -48,6 +50,7 @@ class CbInvalidConfig(Exception):
 ################################################################################
 # Exception Classes
 ################################################################################
+
 
 def generate_feed_from_db() -> None:
     """
@@ -58,29 +61,31 @@ def generate_feed_from_db() -> None:
 
     reports = []
     for binary in query:
-        fields = {'iocs': {'md5': [binary.md5]},
-                  'score': binary.score,
-                  'timestamp': int(time.mktime(time.gmtime())),
-                  'link': '',
-                  'id': 'binary_{0}'.format(binary.md5),
-                  'title': binary.last_success_msg,
-                  'description': binary.last_success_msg
-                  }
+        fields = {
+            "iocs": {"md5": [binary.md5]},
+            "score": binary.score,
+            "timestamp": int(time.mktime(time.gmtime())),
+            "link": "",
+            "id": "binary_{0}".format(binary.md5),
+            "title": binary.last_success_msg,
+            "description": binary.last_success_msg,
+        }
         reports.append(CbReport(**fields))
 
-    feedinfo = {'name': 'yara',
-                'display_name': "Yara",
-                'provider_url': "http://plusvic.github.io/yara/",
-                'summary': "Scan binaries collected by Carbon Black with Yara.",
-                'tech_data': "There are no requirements to share any data with Carbon Black to use this feed.",
-                'icon': 'yara-logo.png',
-                'category': "Connectors",
-                }
+    feedinfo = {
+        "name": "yara",
+        "display_name": "Yara",
+        "provider_url": "http://plusvic.github.io/yara/",
+        "summary": "Scan binaries collected by Carbon Black with Yara.",
+        "tech_data": "There are no requirements to share any data with Carbon Black to use this feed.",
+        "icon": "yara-logo.png",
+        "category": "Connectors",
+    }
     feedinfo = CbFeedInfo(**feedinfo)
     feed = CbFeed(feedinfo, reports)
 
-    logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data['name']))
-    with open(globals.output_file, 'w') as fp:
+    logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data["name"]))
+    with open(globals.output_file, "w") as fp:
         fp.write(feed.dump())
 
 
@@ -98,7 +103,7 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
             fullpath = os.path.join(yara_rule_path, fn)
             if not os.path.isfile(fullpath):
                 continue
-            with open(os.path.join(yara_rule_path, fn), 'rb') as fp:
+            with open(os.path.join(yara_rule_path, fn), "rb") as fp:
                 data = fp.read()
                 # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
                 md5 = hashlib.md5()
@@ -123,13 +128,13 @@ def generate_rule_map_remote(yara_rule_path) -> None:
             fullpath = os.path.join(yara_rule_path, fn)
             if not os.path.isfile(fullpath):
                 continue
-            with open(os.path.join(yara_rule_path, fn), 'rb') as fp:
+            with open(os.path.join(yara_rule_path, fn), "rb") as fp:
                 ret_dict[fn] = fp.read()
 
     result = update_yara_rules_remote.delay(ret_dict)
     globals.g_yara_rule_map = ret_dict
     while not result.ready():
-        time.sleep(.1)
+        time.sleep(0.1)
 
 
 def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
@@ -167,7 +172,7 @@ def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
                 if time.time() - start >= 120:  # 2 minute timeout
                     break
                 else:
-                    time.sleep(.1)
+                    time.sleep(0.1)
         except Exception as err:
             logger.error("Error when analyzing: {0}".format(err))
             logger.error(traceback.format_exc())
@@ -228,17 +233,23 @@ def perform(yara_rule_dir):
 
     logger.info("Connecting to Postgres database...")
     try:
-        conn = psycopg2.connect(host=globals.g_postgres_host,
-                                database=globals.g_postgres_db,
-                                user=globals.g_postgres_username,
-                                password=globals.g_postgres_password,
-                                port=globals.g_postgres_port)
+        conn = psycopg2.connect(
+            host=globals.g_postgres_host,
+            database=globals.g_postgres_db,
+            user=globals.g_postgres_username,
+            password=globals.g_postgres_password,
+            port=globals.g_postgres_port,
+        )
         cur = conn.cursor(name="yara_agent")
 
-        start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
+        start_date_binaries = datetime.now() - timedelta(
+            days=globals.g_num_days_binaries
+        )
         # noinspection SqlDialectInspection,SqlNoDataSourceInspection
-        cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
-                    "ORDER BY timestamp DESC".format(start_date_binaries))
+        cur.execute(
+            "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
+            "ORDER BY timestamp DESC".format(start_date_binaries)
+        )
     except Exception as err:
         logger.error("Failed to connect to Postgres database: {0}".format(err))
         logger.error(traceback.format_exc())
@@ -248,30 +259,43 @@ def perform(yara_rule_dir):
     while True:
         if cur.closed:
             cur = conn.cursor(name="yara_agent")
-            cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
-                    "ORDER BY timestamp DESC".format(start_date_binaries))
-        try:    
+            cur.execute(
+                "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
+                "ORDER BY timestamp DESC".format(start_date_binaries)
+            )
+        try:
             rows = cur.fetchmany()
         except psycopg2.OperationalError:
             cur = conn.cursor(name="yara_agent")
-            cur.execute("SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
-                    "ORDER BY timestamp DESC".format(start_date_binaries))
+            cur.execute(
+                "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
+                "ORDER BY timestamp DESC".format(start_date_binaries)
+            )
             rows = cur.fetchmany()
         if len(rows) == 0:
             break
 
         for row in rows:
             seconds_since_start = (datetime.now() - start_datetime).seconds
-            if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
+            if (
+                seconds_since_start >= globals.g_vacuum_seconds
+                and globals.g_vacuum_seconds > 0
+            ):
                 cur.close()
                 logger.warning("!!!Executing vacuum script!!!")
                 target = os.path.join(os.getcwd(), globals.g_vacuum_script)
-                prog = subprocess.Popen(target, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                stdout, stderr = prog.communicate()  # Returns (stdoutdata, stderrdata): stdout and stderr are ignored, here
+                prog = subprocess.Popen(
+                    target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+                )
+                stdout, stderr = (
+                    prog.communicate()
+                )  # Returns (stdoutdata, stderrdata): stdout and stderr are ignored, here
                 logger.info(stdout)
                 logger.error(stderr)
                 if prog.returncode:
-                    logger.warning('program returned error code {0}'.format(prog.returncode))
+                    logger.warning(
+                        "program returned error code {0}".format(prog.returncode)
+                    )
                 start_datetime = datetime.now()
                 logger.warning("!!!Done Executing vacuum script!!!")
                 break
@@ -282,10 +306,14 @@ def perform(yara_rule_dir):
             #
             # Check if query returns any rows
             #
-            query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
+            query = BinaryDetonationResult.select().where(
+                BinaryDetonationResult.md5 == md5_hash
+            )
             if query.exists():
                 try:
-                    bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
+                    bdr = BinaryDetonationResult.get(
+                        BinaryDetonationResult.md5 == md5_hash
+                    )
                     scanned_hash_list = json.loads(bdr.misc)
                     if globals.g_disable_rescan and bdr.misc:
                         continue
@@ -297,17 +325,27 @@ def perform(yara_rule_dir):
                         #
                         continue
                 except Exception as e:
-                    logger.error("Unable to decode yara rule map hash from database: {0}".format(e))
+                    logger.error(
+                        "Unable to decode yara rule map hash from database: {0}".format(
+                            e
+                        )
+                    )
 
             num_binaries_queued += 1
             md5_hashes.append(md5_hash)
 
             if len(md5_hashes) >= globals.MAX_HASHES:
-                analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
+                analysis_results = analyze_binaries(
+                    md5_hashes, local=(not globals.g_remote)
+                )
                 if analysis_results:
                     for analysis_result in analysis_results:
-                        logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                                      f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
+                        logger.debug(
+                            (
+                                f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                                f" {analysis_result.long_result} {analysis_result.last_error_msg}"
+                            )
+                        )
                         if analysis_result.last_error_msg:
                             logger.error(analysis_result.last_error_msg)
                     save_results(analysis_results)
@@ -324,8 +362,12 @@ def perform(yara_rule_dir):
     analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
     if analysis_results:
         for analysis_result in analysis_results:
-            logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                          f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
+            logger.debug(
+                (
+                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
+                )
+            )
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
@@ -334,7 +376,9 @@ def perform(yara_rule_dir):
     generate_feed_from_db()
 
 
-def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
+def _rule_logging(
+    start_time: float, num_binaries_skipped: int, num_total_binaries: int
+) -> None:
     """
     Simple method to log yara work.
     :param start_time: start time for the work
@@ -344,13 +388,26 @@ def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binari
     """
     elapsed_time = time.time() - start_time
     logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
-    logger.debug("   number binaries scanned: {0}".format(globals.g_num_binaries_analyzed))
+    logger.debug(
+        "   number binaries scanned: {0}".format(globals.g_num_binaries_analyzed)
+    )
     logger.debug("   number binaries already scanned: {0}".format(num_binaries_skipped))
-    logger.debug("   number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
+    logger.debug(
+        "   number binaries unavailable: {0}".format(
+            globals.g_num_binaries_not_available
+        )
+    )
     logger.info("total binaries from db: {0}".format(num_total_binaries))
-    logger.debug("   binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
-    logger.info("num binaries score greater than zero: {0}".format(
-        len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))))
+    logger.debug(
+        "   binaries per second: {0}:".format(
+            round(num_total_binaries / elapsed_time, 2)
+        )
+    )
+    logger.info(
+        "num binaries score greater than zero: {0}".format(
+            len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))
+        )
+    )
     logger.info("")
 
 
@@ -372,131 +429,174 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         raise CbInvalidConfig(err)
 
     logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section('general'):
+    if not config.has_section("general"):
         raise CbInvalidConfig(f"Config file does not have a 'general' section")
 
-    globals.output_file = output_file if output_file is not None else config_file.strip() + ".json"
+    globals.output_file = (
+        output_file if output_file is not None else config_file.strip() + ".json"
+    )
     logger.debug(f"NOTE: output file will be '{globals.output_file}'")
 
-    the_config = config['general']
-    if 'worker_type' in the_config:
-        if the_config['worker_type'] == 'local' or the_config['worker_type'].strip() == "":
+    the_config = config["general"]
+    if "worker_type" in the_config:
+        if (
+            the_config["worker_type"] == "local"
+            or the_config["worker_type"].strip() == ""
+        ):
             globals.g_remote = False  # 'local' or empty definition
-        elif the_config['worker_type'] == 'remote':
+        elif the_config["worker_type"] == "remote":
             globals.g_remote = True  # 'remote'
         else:  # anything else
             raise CbInvalidConfig(
-                f"Invalid worker_type '{the_config['worker_type']}' specified; must be 'local' or 'remote'")
+                f"Invalid worker_type '{the_config['worker_type']}' specified; must be 'local' or 'remote'"
+            )
     else:
         globals.g_remote = False
         logger.warning("Config file does not specify 'worker_type', assuming local")
 
     # local/remote configuration data
     if not globals.g_remote:
-        if 'cb_server_url' in the_config and the_config['cb_server_url'].strip() != "":
-            globals.g_cb_server_url = the_config['cb_server_url']
+        if "cb_server_url" in the_config and the_config["cb_server_url"].strip() != "":
+            globals.g_cb_server_url = the_config["cb_server_url"]
         else:
             raise CbInvalidConfig(f"Local worker configuration missing 'cb_server_url'")
-        if 'cb_server_token' in the_config and the_config['cb_server_token'].strip() != "":
-            globals.g_cb_server_token = the_config['cb_server_token']
+        if (
+            "cb_server_token" in the_config
+            and the_config["cb_server_token"].strip() != ""
+        ):
+            globals.g_cb_server_token = the_config["cb_server_token"]
         else:
-            raise CbInvalidConfig(f"Local worker configuration missing 'cb_server_token'")
+            raise CbInvalidConfig(
+                f"Local worker configuration missing 'cb_server_token'"
+            )
         # TODO: validate url & token with test call?
     else:
-        if 'broker_url' in the_config and the_config['broker_url'].strip() != "":
-            app.conf.update(broker_url=the_config['broker_url'], result_backend=the_config['broker_url'])
+        if "broker_url" in the_config and the_config["broker_url"].strip() != "":
+            app.conf.update(
+                broker_url=the_config["broker_url"],
+                result_backend=the_config["broker_url"],
+            )
         else:
             raise CbInvalidConfig(f"Remote worker configuration missing 'broker_url'")
         # TODO: validate broker with test call?
 
-    if 'yara_rules_dir' in the_config and the_config['yara_rules_dir'].strip() != "":
-        check = os.path.abspath(the_config['yara_rules_dir'])
+    if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
+        check = os.path.abspath(the_config["yara_rules_dir"])
         if os.path.exists(check):
             if os.path.isdir(check):
                 globals.g_yara_rules_dir = check
             else:
-                raise CbInvalidConfig("Rules dir '{0}' is not actualy a directory".format(check))
+                raise CbInvalidConfig(
+                    "Rules dir '{0}' is not actualy a directory".format(check)
+                )
         else:
             raise CbInvalidConfig("Rules dir '{0}' does not exist".format(check))
     else:
-        raise CbInvalidConfig("You must specify a yara rules directory in your configuration")
+        raise CbInvalidConfig(
+            "You must specify a yara rules directory in your configuration"
+        )
 
     # NOTE: postgres_host has a default value in globals; use and warn if not defined
-    if 'postgres_host' in the_config and the_config['postgres_host'].strip() != "":
-        globals.g_postgres_host = the_config['postgres_host']
+    if "postgres_host" in the_config and the_config["postgres_host"].strip() != "":
+        globals.g_postgres_host = the_config["postgres_host"]
     else:
-        logger.warning(f"No defined 'postgres_host'; using default of {globals.g_postgres_host}")
+        logger.warning(
+            f"No defined 'postgres_host'; using default of {globals.g_postgres_host}"
+        )
 
     # NOTE: postgres_username has a default value in globals; use and warn if not defined
-    if 'postgres_username' in the_config and the_config['postgres_username'].strip() != "":
-        globals.g_postgres_username = the_config['postgres_username']
+    if (
+        "postgres_username" in the_config
+        and the_config["postgres_username"].strip() != ""
+    ):
+        globals.g_postgres_username = the_config["postgres_username"]
     else:
-        logger.warning(f"No defined 'postgres_username'; using default of {globals.g_postgres_username}")
+        logger.warning(
+            f"No defined 'postgres_username'; using default of {globals.g_postgres_username}"
+        )
 
-    if 'postgres_password' in the_config and the_config['postgres_password'].strip() != "":
-        globals.g_postgres_password = the_config['postgres_password']
+    if (
+        "postgres_password" in the_config
+        and the_config["postgres_password"].strip() != ""
+    ):
+        globals.g_postgres_password = the_config["postgres_password"]
     else:
         raise CbInvalidConfig("No 'postgres_password' defined in the configuration")
 
     # NOTE: postgres_db has a default value in globals; use and warn if not defined
-    if 'postgres_db' in the_config and the_config['postgres_db'].strip() != "":
-        globals.g_postgres_db = the_config['postgres_db']
+    if "postgres_db" in the_config and the_config["postgres_db"].strip() != "":
+        globals.g_postgres_db = the_config["postgres_db"]
     else:
-        logger.warning(f"No defined 'postgres_db'; using default of {globals.g_postgres_db}")
+        logger.warning(
+            f"No defined 'postgres_db'; using default of {globals.g_postgres_db}"
+        )
 
     # NOTE: postgres_port has a default value in globals; use and warn if not defined
-    if 'postgres_port' in the_config:
-        globals.g_postgres_port = int(the_config['postgres_port'])
+    if "postgres_port" in the_config:
+        globals.g_postgres_port = int(the_config["postgres_port"])
     else:
-        logger.warning(f"No defined 'postgres_port'; using default of {globals.g_postgres_port}")
+        logger.warning(
+            f"No defined 'postgres_port'; using default of {globals.g_postgres_port}"
+        )
 
     # TODO: validate postgres connection with supplied information?
 
-    if 'niceness' in the_config:
-        os.nice(int(the_config['niceness']))
+    if "niceness" in the_config:
+        os.nice(int(the_config["niceness"]))
 
-    if 'concurrent_hashes' in the_config:
-        globals.MAX_HASHES = int(the_config['concurrent_hashes'])
+    if "concurrent_hashes" in the_config:
+        globals.MAX_HASHES = int(the_config["concurrent_hashes"])
         logger.debug("Consurrent Hashes: {0}".format(globals.MAX_HASHES))
 
-    if 'disable_rescan' in the_config:
-        globals.g_disable_rescan = bool(the_config['disable_rescan'])
+    if "disable_rescan" in the_config:
+        globals.g_disable_rescan = bool(the_config["disable_rescan"])
         logger.debug("Disable Rescan: {0}".format(globals.g_disable_rescan))
 
-    if 'num_days_binaries' in the_config:
-        globals.g_num_days_binaries = int(the_config['num_days_binaries'])
-        logger.debug("Number of days for binaries: {0}".format(globals.g_num_days_binaries))
+    if "num_days_binaries" in the_config:
+        globals.g_num_days_binaries = int(the_config["num_days_binaries"])
+        logger.debug(
+            "Number of days for binaries: {0}".format(globals.g_num_days_binaries)
+        )
 
-    if 'vacuum_seconds' in config['general']:
-        globals.g_vacuum_seconds = int(config['general']['vacuum_seconds'])
-        if 'vacuum_script' in config['general'] and globals.g_vacuum_seconds > 0:
-            globals.g_vacuum_script = config['general']['vacuum_script']
-            logger.warn("!!! Vacuum Script is enabled --- use this advanced feature at your own discretion --- !!!")
+    if "vacuum_seconds" in config["general"]:
+        globals.g_vacuum_seconds = int(config["general"]["vacuum_seconds"])
+        if "vacuum_script" in config["general"] and globals.g_vacuum_seconds > 0:
+            globals.g_vacuum_script = config["general"]["vacuum_script"]
+            logger.warn(
+                "!!! Vacuum Script is enabled --- use this advanced feature at your own discretion --- !!!"
+            )
 
     return True
+
 
 def main():
     try:
         # check for single operation
         singleton.SingleInstance()
     except Exception as err:
-        logger.error(f"Only one instance of this script is allowed to run at a time: {err}")
+        logger.error(
+            f"Only one instance of this script is allowed to run at a time: {err}"
+        )
     else:
-        parser = argparse.ArgumentParser(description='Yara Agent for Yara Connector')
-        parser.add_argument('--config-file',
-                            required=True,
-                            default='yara_agent.conf',
-                            help='Location of the config file')
-        parser.add_argument('--log-file',
-                            default='yara_agent.log',
-                            help='Log file output')
-        parser.add_argument('--output-file',
-                            default='yara_feed.json',
-                            help='output feed file')
-        parser.add_argument('--validate-yara-rules',
-                            action='store_true',
-                            help='ONLY validate yara rules in a specified directory')
-        parser.add_argument('--debug', action='store_true')
+        parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
+        parser.add_argument(
+            "--config-file",
+            required=True,
+            default="yara_agent.conf",
+            help="Location of the config file",
+        )
+        parser.add_argument(
+            "--log-file", default="yara_agent.log", help="Log file output"
+        )
+        parser.add_argument(
+            "--output-file", default="yara_feed.json", help="output feed file"
+        )
+        parser.add_argument(
+            "--validate-yara-rules",
+            action="store_true",
+            help="ONLY validate yara rules in a specified directory",
+        )
+        parser.add_argument("--debug", action="store_true")
 
         args = parser.parse_args()
 
@@ -505,7 +605,9 @@ def main():
 
         if args.log_file:
             formatter = logging.Formatter(logging_format)
-            handler = logging.handlers.RotatingFileHandler(args.log_file, maxBytes=10 * 1000000, backupCount=10)
+            handler = logging.handlers.RotatingFileHandler(
+                args.log_file, maxBytes=10 * 1000000, backupCount=10
+            )
             handler.setFormatter(formatter)
             logger.addHandler(handler)
 
@@ -517,7 +619,11 @@ def main():
             sys.exit(1)
 
         if args.validate_yara_rules:
-            logger.info("Validating yara rules in directory: {0}".format(globals.g_yara_rules_dir))
+            logger.info(
+                "Validating yara rules in directory: {0}".format(
+                    globals.g_yara_rules_dir
+                )
+            )
             yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
             try:
                 yara.compile(filepaths=yara_rule_map)
@@ -529,7 +635,7 @@ def main():
             try:
                 globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
                 generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase('binary.db')
+                database = SqliteDatabase("binary.db")
                 db.initialize(database)
                 db.connect()
                 db.create_tables([BinaryDetonationResult])
