@@ -268,25 +268,19 @@ def perform(yara_rule_dir):
             if seconds_since_start >= globals.g_vacuum_seconds > 0:
                 cur.close()
                 logger.warning("!!!Executing vacuum script!!!")
-                target = os.path.join(os.getcwd(), globals.g_vacuum_script)
                 envdict = dict(os.environ)
                 envdict["PGPASSWORD"] = globals.g_postgres_password
                 envdict["PGUSERNAME"] = globals.g_postgres_username
                 envdict['PGHOST'] = globals.g_postgres_host
                 envdict["PGDATABASE"] = globals.g_postgres_db
-                envdict["PGPORT"] = globals.g_postgres_port
-                prog = subprocess.Popen(
-                    target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env = envdict
-                )
-                stdout, stderr = (
-                    prog.communicate()
-                )  # Returns (stdoutdata, stderrdata): stdout and stderr are ignored, here
+                envdict["PGPORT"] = str(globals.g_postgres_port)
+                prog = subprocess.Popen(globals.g_vacuum_script, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        shell=True, env=envdict)
+                stdout, stderr = (prog.communicate())  # Returns (stdoutdata, stderrdata)
                 logger.info(stdout)
                 logger.error(stderr)
                 if prog.returncode:
-                    logger.warning(
-                        "program returned error code {0}".format(prog.returncode)
-                    )
+                    logger.warning("program returned error code {0}".format(prog.returncode))
                 start_datetime = datetime.now()
                 logger.warning("!!!Done Executing vacuum script!!!")
                 break
@@ -538,7 +532,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     if 'feed_database_path' in the_config:
         globals.feed_database_path = the_config['feed_database_path']
         check = os.path.abspath(placehold(the_config["feed_database_path"]))
-        if not(os.path.exists(check) and os.path.isdir(check)):
+        if not (os.path.exists(check) and os.path.isdir(check)):
             raise CbInvalidConfig("Invalid database path specified")
 
 
@@ -606,7 +600,7 @@ def main():
             try:
                 globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
                 generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase(os.path.join(globals.g_feed_database_path,"binary.db"))
+                database = SqliteDatabase(os.path.join(globals.g_feed_database_path, "binary.db"))
                 db.initialize(database)
                 db.connect()
                 db.create_tables([BinaryDetonationResult])
