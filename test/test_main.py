@@ -306,3 +306,55 @@ class TestMain(TestCase):
         with self.assertRaises(ValueError) as err:
             verify_config(os.path.join(TESTS, "config", "bogus_num_days_binaries.conf"))
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+
+    def test_17a_config_bogus_vacuum_seconds(self):
+        """
+        Ensure that config with bogus (non-int) vacuum_seconds is detected.
+        """
+        with self.assertRaises(ValueError) as err:
+            verify_config(os.path.join(TESTS, "config", "bogus_vacuum_seconds.conf"))
+        assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+
+    def test_17b_config_negative_vacuum_seconds(self):
+        """
+        Ensure that config with bogus (non-int) vacuum_seconds is detected.
+        """
+        globals.g_vacuum_seconds = None
+        verify_config(os.path.join(TESTS, "config", "negative_vacuum_seconds.conf"))
+        self.assertEqual(0, globals.g_vacuum_seconds)
+
+    def test_18a_config_missing_vacuum_script(self):
+        """
+        Ensure that config with missing vacuum_script is detected.
+        """
+        with self.assertRaises(CbInvalidConfig) as err:
+            verify_config(os.path.join(TESTS, "config", "no_such_vacuum_script.conf"))
+        assert "does not exist" in "{0}".format(err.exception.args[0])
+
+    def test_18b_config_bogus_vacuum_script_is_dir(self):
+        """
+        Ensure that config with vacuum_script as directory is detected.
+        """
+        with self.assertRaises(CbInvalidConfig) as err:
+            verify_config(os.path.join(TESTS, "config", "vacuum_script_dir.conf"))
+        assert "is a directory" in "{0}".format(err.exception.args[0])
+
+    def test_19a_config_vacuum_script_enabled(self):
+        """
+        Ensure that config with vacuum_script and vacuum_seconds is ready to go.
+        """
+        globals.g_vacuum_seconds = None
+        globals.g_vacuum_script = None
+        verify_config(os.path.join(TESTS, "config", "vacuum_script_enabled.conf"))
+        self.assertEqual(3600, globals.g_vacuum_seconds)
+        self.assertTrue(globals.g_vacuum_script.endswith("/config/valid.conf"))
+
+    def test_19a_config_vacuum_script_and_no_vacuum_seconds(self):
+        """
+        Ensure that config with vacuum_script but vacuum_seconds == 0 has it disabled.
+        """
+        globals.g_vacuum_seconds = None
+        globals.g_vacuum_script = None
+        verify_config(os.path.join(TESTS, "config", "vacuum_script_no_seconds.conf"))
+        self.assertEqual(0, globals.g_vacuum_seconds)
+        self.assertIsNone(globals.g_vacuum_script)

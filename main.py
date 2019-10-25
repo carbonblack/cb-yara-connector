@@ -5,6 +5,7 @@ import json
 import logging
 import logging.handlers
 import os
+import subprocess
 import sys
 import time
 import traceback
@@ -15,8 +16,6 @@ import humanfriendly
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
-import subprocess
-
 from celery import group
 from peewee import SqliteDatabase
 
@@ -245,6 +244,7 @@ def perform(yara_rule_dir):
     while True:
         if cur.closed:
             cur = conn.cursor(name="yara_agent")
+            # noinspection SqlDialectInspection
             cur.execute(
                 "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
                 "ORDER BY timestamp DESC".format(start_date_binaries)
@@ -253,6 +253,7 @@ def perform(yara_rule_dir):
             rows = cur.fetchmany()
         except psycopg2.OperationalError:
             cur = conn.cursor(name="yara_agent")
+            # noinspection SqlDialectInspection
             cur.execute(
                 "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
                 "ORDER BY timestamp DESC".format(start_date_binaries)
@@ -263,17 +264,15 @@ def perform(yara_rule_dir):
 
         for row in rows:
             seconds_since_start = (datetime.now() - start_datetime).seconds
-            if (
-                seconds_since_start >= globals.g_vacuum_seconds
-                and globals.g_vacuum_seconds > 0
-            ):
+            if seconds_since_start >= globals.g_vacuum_seconds > 0:
                 cur.close()
                 logger.warning("!!!Executing vacuum script!!!")
                 target = os.path.join(os.getcwd(), globals.g_vacuum_script)
                 try:
                     ret = subprocess.check_call(target, shell=True)
-                except subprocess.CalledProcessError:
-                    logger.error(f"Failed to call {target} return code {ret}")
+                    logger.debug(f"Subprocess return code: {ret}")
+                except subprocess.CalledProcessError as err:
+                    logger.error(f"Failed to call {target}: {err}")
                 finally:
                     start_datetime = datetime.now()
                     logger.warning("!!!Done Executing vacuum script!!!")
@@ -356,7 +355,7 @@ def perform(yara_rule_dir):
 
 
 def _rule_logging(
-    start_time: float, num_binaries_skipped: int, num_total_binaries: int
+        start_time: float, num_binaries_skipped: int, num_total_binaries: int
 ) -> None:
     """
     Simple method to log yara work.
@@ -397,7 +396,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     :param config_file: The config file to validate
     :param output_file: the output file; if not specified equals config file plus ".json"
     """
-    abs_config = os.path.abspath(config_file)
+    abs_config = os.path.abspath(os.path.expanduser(config_file))
     header = f"Config file '{abs_config}'"
 
     config = configparser.ConfigParser()
@@ -413,16 +412,15 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     if not config.has_section('general'):
         raise CbInvalidConfig(f"{header} does not have a 'general' section")
 
-    globals.output_file = (
-        output_file if output_file is not None else config_file.strip() + ".json"
-    )
+    globals.output_file = output_file if output_file is not None else config_file.strip() + ".json"
+    globals.output_file = os.path.abspath(os.path.expanduser(globals.output_file))
     logger.debug(f"NOTE: output file will be '{globals.output_file}'")
 
     the_config = config["general"]
     if "worker_type" in the_config:
         if (
-            the_config["worker_type"] == "local"
-            or the_config["worker_type"].strip() == ""
+                the_config["worker_type"] == "local"
+                or the_config["worker_type"].strip() == ""
         ):
             globals.g_remote = False  # 'local' or empty definition
         elif the_config["worker_type"] == "remote":
@@ -474,8 +472,8 @@ def verify_config(config_file: str, output_file: str = None) -> None:
 
     # NOTE: postgres_username has a default value in globals; use and warn if not defined
     if (
-        "postgres_username" in the_config
-        and the_config["postgres_username"].strip() != ""
+            "postgres_username" in the_config
+            and the_config["postgres_username"].strip() != ""
     ):
         globals.g_postgres_username = the_config["postgres_username"]
     else:
@@ -512,20 +510,23 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         logger.debug("Disable Rescan: {0}".format(globals.g_disable_rescan))
 
     if "num_days_binaries" in the_config:
-        globals.g_num_days_binaries = int(the_config["num_days_binaries"])
-        logger.debug(
-            "Number of days for binaries: {0}".format(globals.g_num_days_binaries)
-        )
+        globals.g_num_days_binaries = max(int(the_config["num_days_binaries"]), 1)
+        logger.debug("Number of days for binaries: {0}".format(globals.g_num_days_binaries))
 
-    if "vacuum_seconds" in config["general"]:
-        globals.g_vacuum_seconds = int(config["general"]["vacuum_seconds"])
-        if "vacuum_script" in config["general"] and globals.g_vacuum_seconds > 0:
-            globals.g_vacuum_script = config["general"]["vacuum_script"]
-            logger.warn(
-                "!!! Vacuum Script is enabled --- use this advanced feature at your own discretion --- !!!"
-            )
-
-    return True
+    if "vacuum_seconds" in the_config:
+        globals.g_vacuum_seconds = max(int(the_config["vacuum_seconds"]), 0)
+        if "vacuum_script" in the_config and the_config["vacuum_seconds"].strip() != "":
+            if globals.g_vacuum_seconds > 0:
+                check = os.path.abspath(the_config["vacuum_script"])
+                if os.path.exists(check):
+                    if os.path.isdir(check):
+                        raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) is a directory")
+                else:
+                    raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) does not exist")
+                globals.g_vacuum_script = check
+                logger.warning(f"Vacuum Script '{check}' is enabled; use this advanced feature at your own discretion!")
+            else:
+                logger.debug(f"{header} has 'vacuum_script' defined, but it is disabled")
 
 
 def main():
@@ -533,9 +534,7 @@ def main():
         # check for single operation
         singleton.SingleInstance()
     except Exception as err:
-        logger.error(
-            f"Only one instance of this script is allowed to run at a time: {err}"
-        )
+        logger.error(f"Only one instance of this script is allowed to run at a time: {err}")
     else:
         parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
         parser.add_argument(
