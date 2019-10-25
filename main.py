@@ -26,6 +26,7 @@ from binary_database import BinaryDetonationResult, db
 from exceptions import CbInvalidConfig
 from feed import CbFeed, CbFeedInfo, CbReport
 from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
+from utilities import placehold
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)
@@ -396,7 +397,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     :param config_file: The config file to validate
     :param output_file: the output file; if not specified equals config file plus ".json"
     """
-    abs_config = os.path.abspath(os.path.expanduser(config_file))
+    abs_config = os.path.abspath(os.path.expanduser(placehold(config_file)))
     header = f"Config file '{abs_config}'"
 
     config = configparser.ConfigParser()
@@ -413,15 +414,12 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         raise CbInvalidConfig(f"{header} does not have a 'general' section")
 
     globals.output_file = output_file if output_file is not None else config_file.strip() + ".json"
-    globals.output_file = os.path.abspath(os.path.expanduser(globals.output_file))
+    globals.output_file = os.path.abspath(os.path.expanduser(placehold(globals.output_file)))
     logger.debug(f"NOTE: output file will be '{globals.output_file}'")
 
     the_config = config["general"]
     if "worker_type" in the_config:
-        if (
-                the_config["worker_type"] == "local"
-                or the_config["worker_type"].strip() == ""
-        ):
+        if the_config["worker_type"] == "local" or the_config["worker_type"].strip() == "":
             globals.g_remote = False  # 'local' or empty definition
         elif the_config["worker_type"] == "remote":
             globals.g_remote = True  # 'remote'
@@ -453,7 +451,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         # TODO: validate broker with test call?
 
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
-        check = os.path.abspath(the_config["yara_rules_dir"])
+        check = os.path.abspath(placehold(the_config["yara_rules_dir"]))
         if os.path.exists(check):
             if os.path.isdir(check):
                 globals.g_yara_rules_dir = check
@@ -517,7 +515,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         globals.g_vacuum_seconds = max(int(the_config["vacuum_seconds"]), 0)
         if "vacuum_script" in the_config and the_config["vacuum_seconds"].strip() != "":
             if globals.g_vacuum_seconds > 0:
-                check = os.path.abspath(the_config["vacuum_script"])
+                check = os.path.abspath(placehold(the_config["vacuum_script"]))
                 if os.path.exists(check):
                     if os.path.isdir(check):
                         raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) is a directory")
