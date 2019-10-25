@@ -271,6 +271,10 @@ def perform(yara_rule_dir):
                 target = os.path.join(os.getcwd(), globals.g_vacuum_script)
                 envdict = dict(os.environ)
                 envdict["PGPASSWORD"] = globals.g_postgres_password
+                envdict["PGUSERNAME"] = globals.g_postgres_username
+                envdict['PGHOST'] = globals.g_postgres_host
+                envdict["PGDATABASE"] = globals.g_postgres_db
+                envdict["PGPORT"] = globals.g_postgres_port
                 prog = subprocess.Popen(
                     target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env = envdict
                 )
