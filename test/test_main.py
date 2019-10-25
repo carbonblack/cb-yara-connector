@@ -2,7 +2,8 @@ import os
 from unittest import TestCase
 
 import globals
-from main import CbInvalidConfig, generate_yara_rule_map_hash, verify_config
+from exceptions import CbInvalidConfig
+from main import generate_yara_rule_map_hash, verify_config
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 
@@ -51,7 +52,7 @@ class TestMain(TestCase):
         """
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "invalid_header.conf"))
-        assert "Config file does not have a 'general' section" in "{0}".format(err.exception.args[0])
+        assert "does not have a 'general' section" in "{0}".format(err.exception.args[0])
 
     def test_04a_config_missing_worker(self):
         """
@@ -73,7 +74,7 @@ class TestMain(TestCase):
         """
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "bogus_worker.conf"))
-        assert "Invalid worker_type" in "{0}".format(err.exception.args[0])
+        assert "invalid 'worker_type'" in "{0}".format(err.exception.args[0])
 
     def test_05a_config_local_worker_missing_server_url(self):
         """
@@ -82,12 +83,12 @@ class TestMain(TestCase):
         # not defined in file
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "local_worker_no_server_url.conf"))
-        assert "Local worker configuration missing 'cb_server_url'" in "{0}".format(err.exception.args[0])
+        assert "is 'local' and missing 'cb_server_url'" in "{0}".format(err.exception.args[0])
 
         # defined as "cb_server_url="
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "local_worker_no_server_url2.conf"))
-        assert "Local worker configuration missing 'cb_server_url'" in "{0}".format(err.exception.args[0])
+        assert "is 'local' and missing 'cb_server_url'" in "{0}".format(err.exception.args[0])
 
     def test_05b_config_local_worker_missing_server_token(self):
         """
@@ -96,26 +97,26 @@ class TestMain(TestCase):
         # not defined in file
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "local_worker_no_server_token.conf"))
-        assert "Local worker configuration missing 'cb_server_token'" in "{0}".format(err.exception.args[0])
+        assert "is 'local' and missing 'cb_server_token'" in "{0}".format(err.exception.args[0])
 
         # defined as "cb_server_token="
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "local_worker_no_server_token2.conf"))
-        assert "Local worker configuration missing 'cb_server_token'" in "{0}".format(err.exception.args[0])
+        assert "is 'local' and missing 'cb_server_token'" in "{0}".format(err.exception.args[0])
 
-    def test_06_config_remote_worker_missing_server_token(self):
+    def test_06_config_remote_worker_missing_broker_url(self):
         """
         Ensure that remote worker config with missing broker url is detected.
         """
         # not defined in file
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "remote_worker_no_broker_url.conf"))
-        assert "Remote worker configuration missing 'broker_url'" in "{0}".format(err.exception.args[0])
+        assert "is 'remote' and missing 'broker_url'" in "{0}".format(err.exception.args[0])
 
         # defined as "broker_url="
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "remote_worker_no_broker_url2.conf"))
-        assert "Remote worker configuration missing 'broker_url'" in "{0}".format(err.exception.args[0])
+        assert "is 'remote' and missing 'broker_url'" in "{0}".format(err.exception.args[0])
 
     def test_07a_config_missing_yara_rules_dir(self):
         """
@@ -124,12 +125,12 @@ class TestMain(TestCase):
         # not defined in file
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "no_rules_dir.conf"))
-        assert "You must specify a yara rules directory in your configuration" in "{0}".format(err.exception.args[0])
+        assert "has no 'yara_rules_dir' definition" in "{0}".format(err.exception.args[0])
 
         # defined as "yara_rules_dir="
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "no_rules_dir2.conf"))
-        assert "You must specify a yara rules directory in your configuration" in "{0}".format(err.exception.args[0])
+        assert "has no 'yara_rules_dir' definition" in "{0}".format(err.exception.args[0])
 
     def test_07b_config_yara_rules_dir_not_exists(self):
         """
@@ -145,7 +146,7 @@ class TestMain(TestCase):
         """
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "bogus_rules_dir.conf"))
-        assert "is not actualy a directory" in "{0}".format(err.exception.args[0])
+        assert "is not a directory" in "{0}".format(err.exception.args[0])
 
     def test_08a_config_missing_postgres_host(self):
         """
@@ -186,12 +187,12 @@ class TestMain(TestCase):
         # undefined
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "missing_postgres_password.conf"))
-        assert "No 'postgres_password' defined in the configuration" in "{0}".format(err.exception.args[0])
+        assert "has no 'postgres_password' defined" in "{0}".format(err.exception.args[0])
 
         # defined as "postgres_password="
         with self.assertRaises(CbInvalidConfig) as err:
             verify_config(os.path.join(TESTS, "config", "missing_postgres_password2.conf"))
-        assert "No 'postgres_password' defined in the configuration" in "{0}".format(err.exception.args[0])
+        assert "has no 'postgres_password' defined" in "{0}".format(err.exception.args[0])
 
     # TODO: test_10a_config_invalid_postgres_password
 

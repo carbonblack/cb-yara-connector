@@ -13,18 +13,18 @@ from typing import List, Optional
 
 import humanfriendly
 import psycopg2
-
 # noinspection PyPackageRequirements
 import yara
 import subprocess
 
-from feed import CbFeed, CbFeedInfo, CbReport
 from celery import group
 from peewee import SqliteDatabase
 
 import globals
 import singleton
+from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
+from exceptions import CbInvalidConfig
 from feed import CbFeed, CbFeedInfo, CbReport
 from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
 
@@ -36,20 +36,6 @@ logger.setLevel(logging.INFO)
 
 celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
-
-
-################################################################################
-# Exception Classes
-################################################################################
-
-
-class CbInvalidConfig(Exception):
-    pass
-
-
-################################################################################
-# Exception Classes
-################################################################################
 
 
 def generate_feed_from_db() -> None:
@@ -185,7 +171,7 @@ def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
                 return None
 
 
-def save_results(analysis_results: List) -> None:
+def save_results(analysis_results: List[AnalysisResult]) -> None:
     """
     Save the current analysis results.
 
@@ -404,6 +390,7 @@ def _rule_logging(
     logger.info("")
 
 
+# noinspection DuplicatedCode
 def verify_config(config_file: str, output_file: str = None) -> None:
     """
     Validate the config file.
@@ -411,10 +398,11 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     :param output_file: the output file; if not specified equals config file plus ".json"
     """
     abs_config = os.path.abspath(config_file)
+    header = f"Config file '{abs_config}'"
 
     config = configparser.ConfigParser()
     if not os.path.exists(config_file):
-        raise CbInvalidConfig(f"Config file '{abs_config}' does not exist!")
+        raise CbInvalidConfig(f"{header} does not exist!")
 
     try:
         config.read(config_file)
@@ -422,8 +410,8 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         raise CbInvalidConfig(err)
 
     logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section("general"):
-        raise CbInvalidConfig(f"Config file does not have a 'general' section")
+    if not config.has_section('general'):
+        raise CbInvalidConfig(f"{header} does not have a 'general' section")
 
     globals.output_file = (
         output_file if output_file is not None else config_file.strip() + ".json"
@@ -440,28 +428,21 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         elif the_config["worker_type"] == "remote":
             globals.g_remote = True  # 'remote'
         else:  # anything else
-            raise CbInvalidConfig(
-                f"Invalid worker_type '{the_config['worker_type']}' specified; must be 'local' or 'remote'"
-            )
+            raise CbInvalidConfig(f"{header} has an invalid 'worker_type' ({the_config['worker_type']})")
     else:
         globals.g_remote = False
-        logger.warning("Config file does not specify 'worker_type', assuming local")
+        logger.warning(f"{header} does not specify 'worker_type', assuming local")
 
     # local/remote configuration data
     if not globals.g_remote:
         if "cb_server_url" in the_config and the_config["cb_server_url"].strip() != "":
             globals.g_cb_server_url = the_config["cb_server_url"]
         else:
-            raise CbInvalidConfig(f"Local worker configuration missing 'cb_server_url'")
-        if (
-            "cb_server_token" in the_config
-            and the_config["cb_server_token"].strip() != ""
-        ):
-            globals.g_cb_server_token = the_config["cb_server_token"]
+            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
+        if 'cb_server_token' in the_config and the_config['cb_server_token'].strip() != "":
+            globals.g_cb_server_token = the_config['cb_server_token']
         else:
-            raise CbInvalidConfig(
-                f"Local worker configuration missing 'cb_server_token'"
-            )
+            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
         # TODO: validate url & token with test call?
     else:
         if "broker_url" in the_config and the_config["broker_url"].strip() != "":
@@ -470,7 +451,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
                 result_backend=the_config["broker_url"],
             )
         else:
-            raise CbInvalidConfig(f"Remote worker configuration missing 'broker_url'")
+            raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
         # TODO: validate broker with test call?
 
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
@@ -479,23 +460,17 @@ def verify_config(config_file: str, output_file: str = None) -> None:
             if os.path.isdir(check):
                 globals.g_yara_rules_dir = check
             else:
-                raise CbInvalidConfig(
-                    "Rules dir '{0}' is not actualy a directory".format(check)
-                )
+                raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) is not a directory")
         else:
-            raise CbInvalidConfig("Rules dir '{0}' does not exist".format(check))
+            raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) does not exist")
     else:
-        raise CbInvalidConfig(
-            "You must specify a yara rules directory in your configuration"
-        )
+        raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
 
     # NOTE: postgres_host has a default value in globals; use and warn if not defined
     if "postgres_host" in the_config and the_config["postgres_host"].strip() != "":
         globals.g_postgres_host = the_config["postgres_host"]
     else:
-        logger.warning(
-            f"No defined 'postgres_host'; using default of {globals.g_postgres_host}"
-        )
+        logger.warning(f"{header} has no defined 'postgres_host'; using default of '{globals.g_postgres_host}'")
 
     # NOTE: postgres_username has a default value in globals; use and warn if not defined
     if (
@@ -504,33 +479,24 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     ):
         globals.g_postgres_username = the_config["postgres_username"]
     else:
-        logger.warning(
-            f"No defined 'postgres_username'; using default of {globals.g_postgres_username}"
-        )
+        logger.warning(f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'")
 
-    if (
-        "postgres_password" in the_config
-        and the_config["postgres_password"].strip() != ""
-    ):
-        globals.g_postgres_password = the_config["postgres_password"]
+    if 'postgres_password' in the_config and the_config['postgres_password'].strip() != "":
+        globals.g_postgres_password = the_config['postgres_password']
     else:
-        raise CbInvalidConfig("No 'postgres_password' defined in the configuration")
+        raise CbInvalidConfig(f"{header} has no 'postgres_password' defined")
 
     # NOTE: postgres_db has a default value in globals; use and warn if not defined
-    if "postgres_db" in the_config and the_config["postgres_db"].strip() != "":
-        globals.g_postgres_db = the_config["postgres_db"]
+    if 'postgres_db' in the_config and the_config['postgres_db'].strip() != "":
+        globals.g_postgres_db = the_config['postgres_db']
     else:
-        logger.warning(
-            f"No defined 'postgres_db'; using default of {globals.g_postgres_db}"
-        )
+        logger.warning(f"{header} has no defined 'postgres_db'; using default of '{globals.g_postgres_db}'")
 
     # NOTE: postgres_port has a default value in globals; use and warn if not defined
-    if "postgres_port" in the_config:
-        globals.g_postgres_port = int(the_config["postgres_port"])
+    if 'postgres_port' in the_config:
+        globals.g_postgres_port = int(the_config['postgres_port'])
     else:
-        logger.warning(
-            f"No defined 'postgres_port'; using default of {globals.g_postgres_port}"
-        )
+        logger.warning(f"{header} has no defined 'postgres_port'; using default of '{globals.g_postgres_port}'")
 
     # TODO: validate postgres connection with supplied information?
 
