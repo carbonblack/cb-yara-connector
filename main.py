@@ -284,20 +284,13 @@ def perform(yara_rule_dir):
                 cur.close()
                 logger.warning("!!!Executing vacuum script!!!")
                 target = os.path.join(os.getcwd(), globals.g_vacuum_script)
-                prog = subprocess.Popen(
-                    target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-                )
-                stdout, stderr = (
-                    prog.communicate()
-                )  # Returns (stdoutdata, stderrdata): stdout and stderr are ignored, here
-                logger.info(stdout)
-                logger.error(stderr)
-                if prog.returncode:
-                    logger.warning(
-                        "program returned error code {0}".format(prog.returncode)
-                    )
-                start_datetime = datetime.now()
-                logger.warning("!!!Done Executing vacuum script!!!")
+                try:
+                    ret = subprocess.check_call(target, shell=True)
+                except subprocess.CalledProcessError:
+                    logger.error(f"Failed to call {target} return code {ret}")
+                finally:
+                    start_datetime = datetime.now()
+                    logger.warning("!!!Done Executing vacuum script!!!")
                 break
 
             num_total_binaries += 1
