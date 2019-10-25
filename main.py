@@ -270,7 +270,7 @@ def perform(yara_rule_dir):
                 logger.warning("!!!Executing vacuum script!!!")
                 target = os.path.join(os.getcwd(), globals.g_vacuum_script)
                 prog = subprocess.Popen(
-                    target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+                    target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env = os.environ.copy()
                 )
                 stdout, stderr = (
                     prog.communicate()
