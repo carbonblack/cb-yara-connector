@@ -15,6 +15,7 @@ from celery import bootsteps, Celery
 import globals
 from analysis_result import AnalysisResult
 from exceptions import CbInvalidConfig
+from utilities import placehold
 
 app = Celery()
 # noinspection PyUnusedName
@@ -36,7 +37,7 @@ def verify_config(config_file: str) -> None:
     NOTE: Replicates, to a smaller degree, the function in main.py; it is presumed that more detailed checks are there
     :param config_file: path to the config file
     """
-    abs_config = os.path.abspath(config_file)
+    abs_config = os.path.abspath(os.path.expanduser(placehold(config_file)))
     header = f"Config file '{abs_config}'"
 
     config = configparser.ConfigParser()
@@ -55,7 +56,7 @@ def verify_config(config_file: str) -> None:
     the_config = config['general']
 
     if 'yara_rules_dir' in the_config and the_config['yara_rules_dir'].strip() != "":
-        check = os.path.abspath(the_config['yara_rules_dir'])
+        check = os.path.abspath(os.path.expanduser(placehold(the_config["yara_rules_dir"])))
         if os.path.exists(check):
             if os.path.isdir(check):
                 globals.g_yara_rules_dir = check

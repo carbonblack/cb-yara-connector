@@ -77,6 +77,7 @@ vacuum_script={HERE}/scripts/vacuumscript.sh
 > NOTES:
 > 1) The use of `{HERE}` is a placeholder representing the location of this package's `main.py` file,
 > allowing for the use of relative paths to the package itself.
+> 2) Paths can use `~` to access your home directory, so you locate files there as well.
 
 #### Running Yara Agent Manually
 

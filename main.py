@@ -457,7 +457,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         # TODO: validate broker with test call?
 
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
-        check = os.path.abspath(placehold(the_config["yara_rules_dir"]))
+        check = os.path.abspath(os.path.expanduser(placehold(the_config["yara_rules_dir"])))
         if os.path.exists(check):
             if os.path.isdir(check):
                 globals.g_yara_rules_dir = check
@@ -475,10 +475,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         logger.warning(f"{header} has no defined 'postgres_host'; using default of '{globals.g_postgres_host}'")
 
     # NOTE: postgres_username has a default value in globals; use and warn if not defined
-    if (
-            "postgres_username" in the_config
-            and the_config["postgres_username"].strip() != ""
-    ):
+    if "postgres_username" in the_config and the_config["postgres_username"].strip() != "":
         globals.g_postgres_username = the_config["postgres_username"]
     else:
         logger.warning(f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'")
@@ -521,7 +518,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         globals.g_vacuum_seconds = max(int(the_config["vacuum_seconds"]), 0)
         if "vacuum_script" in the_config and the_config["vacuum_seconds"].strip() != "":
             if globals.g_vacuum_seconds > 0:
-                check = os.path.abspath(placehold(the_config["vacuum_script"]))
+                check = os.path.abspath(os.path.expanduser(placehold(the_config["vacuum_script"])))
                 if os.path.exists(check):
                     if os.path.isdir(check):
                         raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) is a directory")
