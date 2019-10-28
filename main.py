@@ -664,7 +664,7 @@ def main():
                 generate_feed_from_db()
                 perform(globals.g_yara_rules_dir)
             except KeyboardInterrupt:
-                logger.info("\n\n##### Intterupted by User!\n")
+                logger.info("\n\n##### Interupted by User!\n")
                 sys.exit(2)
             except Exception as err:
                 logger.error(f"There were errors executing yara rules: {err}")
