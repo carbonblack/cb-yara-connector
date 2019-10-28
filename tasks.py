@@ -11,6 +11,7 @@ import yara
 from cbapi.response.models import Binary
 from cbapi.response.rest_api import CbResponseAPI
 from celery import bootsteps, Celery
+from celery.result import ResultSet
 
 import globals
 from analysis_result import AnalysisResult
@@ -239,6 +240,10 @@ def update_yara_rules():
         compiled_rules_lock.acquire_read()
         return
 
+
+@app.task
+def analyze_bins(hashes):
+    return ResultSet(analyze_binary.delay(h) for h in hashes)
 
 @app.task
 def analyze_binary(md5sum: str) -> AnalysisResult:

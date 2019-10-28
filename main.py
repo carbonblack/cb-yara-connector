@@ -26,7 +26,13 @@ from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
 from exceptions import CbInvalidConfig
 from feed import CbFeed, CbFeedInfo, CbReport
-from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
+from tasks import (
+    analyze_binary,
+    app,
+    generate_rule_map,
+    update_yara_rules_remote,
+    analyze_bins,
+)
 from utilities import placehold
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
@@ -182,27 +188,31 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
     :return:
     """
     for analysis_result in analysis_results:
-        if analysis_result.binary_not_available:
-            globals.g_num_binaries_not_available += 1
-            continue
+        save_result(analysis_result)
 
-        bdr, created = BinaryDetonationResult.get_or_create(md5=analysis_result.md5)
 
-        try:
-            bdr.md5 = analysis_result.md5
-            bdr.last_scan_date = datetime.now()
-            bdr.score = analysis_result.score
-            bdr.last_error_msg = analysis_result.last_error_msg
-            bdr.last_success_msg = analysis_result.short_result
-            bdr.misc = json.dumps(globals.g_yara_rule_map_hash_list)
-            bdr.save()
-            globals.g_num_binaries_analyzed += 1
-        except Exception as err:
-            logger.error("Error saving to database: {0}".format(err))
-            logger.error(traceback.format_exc())
-        else:
-            if analysis_result.score > 0:
-                generate_feed_from_db()
+def save_result(analysis_result):
+    if analysis_result.binary_not_available:
+        globals.g_num_binaries_not_available += 1
+        return
+
+    bdr, created = BinaryDetonationResult.get_or_create(md5=analysis_result.md5)
+
+    try:
+        bdr.md5 = analysis_result.md5
+        bdr.last_scan_date = datetime.now()
+        bdr.score = analysis_result.score
+        bdr.last_error_msg = analysis_result.last_error_msg
+        bdr.last_success_msg = analysis_result.short_result
+        bdr.misc = json.dumps(globals.g_yara_rule_map_hash_list)
+        bdr.save()
+        globals.g_num_binaries_analyzed += 1
+    except Exception as err:
+        logger.error("Error saving to database: {0}".format(err))
+        logger.error(traceback.format_exc())
+    else:
+        if analysis_result.score > 0:
+            generate_feed_from_db()
 
 
 def get_database_conn():
@@ -272,31 +282,8 @@ def perform(yara_rule_dir):
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
-    for row in rows:
-        seconds_since_start = (datetime.now() - start_datetime).seconds
-        if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
-            execute_script()
-            start_datetime = datetime.now()
-
-        num_total_binaries += 1
-        md5_hash = row[0].hex()
-
-        num_binaries_queued += 1
-
-        if _check_hash_against_feed(md5_hash):
-            md5_hashes.append(md5_hash)
-        else:
-            num_binaries_skipped += 1
-
-        if len(md5_hashes) >= globals.MAX_HASHES:
-            _analyze_save_and_log(
-                md5_hashes, start_time, num_binaries_skipped, num_total_binaries
-            )
-            md5_hashes = []
-
-    _analyze_save_and_log(
-        md5_hashes, start_time, num_binaries_skipped, num_total_binaries
-    )
+    for result in analyze_bins.delay((row[0].hex() for row in rows)).collect():
+        save_result(result)
 
     generate_feed_from_db()
 
