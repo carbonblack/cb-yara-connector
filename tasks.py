@@ -16,6 +16,7 @@ import globals
 from analysis_result import AnalysisResult
 from exceptions import CbInvalidConfig
 from utilities import placehold
+import multiprocessing
 
 app = Celery()
 # noinspection PyUnusedName
@@ -27,6 +28,50 @@ app.conf.accept_content = {"pickle"}
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+class ReadWriteLock:
+    """ A lock object that allows many simultaneous "read locks", but
+    only one "write lock." """
+
+    def __init__(self):
+        self._read_ready = multiprocessing.Condition(multiprocessing.Lock())
+        self._readers = 0
+
+    def acquire_read(self):
+        """ Acquire a read lock. Blocks only if a thread has
+        acquired the write lock. """
+        self._read_ready.acquire()
+        try:
+            self._readers += 1
+        finally:
+            self._read_ready.release()
+
+    def release_read(self):
+        """ Release a read lock. """
+        self._read_ready.acquire()
+        try:
+            self._readers -= 1
+            if not self._readers:
+                self._read_ready.notify_all()
+        finally:
+            self._read_ready.release()
+
+    def acquire_write(self):
+        """ Acquire a write lock. Blocks until there are no
+        acquired read or write locks. """
+        self._read_ready.acquire()
+        while self._readers > 0:
+            self._read_ready.wait()
+
+    def release_write(self):
+        """ Release a write lock. """
+        self._read_ready.release()
+
+
+compiled_yara_rules = None
+compiled_rules_lock = ReadWriteLock()
+
 
 
 # noinspection DuplicatedCode
@@ -161,7 +206,6 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
     temp_list.sort()
     return temp_list
 
-
 @app.task
 def update_yara_rules_remote(yara_rules: dict) -> None:
     """
@@ -178,6 +222,23 @@ def update_yara_rules_remote(yara_rules: dict) -> None:
         logger.error(traceback.format_exc())
 
 
+def update_yara_rules():
+    global compiled_yara_rules
+    global compiled_rules_lock
+    compiled_rules_lock.acquire_read()
+    if compiled_yara_rules:
+        #compiled_rules_lock.release_read()
+        return
+    else:
+        yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+        new_rules_object = yara.compile(filepaths=yara_rule_map)
+        compiled_rules_lock.acquire_write()
+        compiled_yara_rules = new_rules_object
+        compiled_rules_lock.release_write()
+        compiled_rules_lock.acquire_read()
+        return
+
+
 @app.task
 def analyze_binary(md5sum: str) -> AnalysisResult:
     """
@@ -185,6 +246,9 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     :param md5sum: md5 binary to check
     :return: AnalysisResult instance
     """
+    global compiled_yara_rules
+    global compiled_rules_lock    
+
     logger.debug(f"{md5sum}: in analyze_binary")
     analysis_result = AnalysisResult(md5sum)
 
@@ -206,23 +270,13 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 analysis_result.binary_not_available = True
                 return analysis_result
 
-            yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-            yara_rules = yara.compile(filepaths=yara_rule_map)
+            #yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+            #yara_rules = yara.compile(filepaths=yara_rule_map)
 
             try:
                 # matches = "debug"
-                matches = yara_rules.match(data=binary_data, timeout=30)
-            except yara.TimeoutError:
-                # yara timed out
-                analysis_result.last_error_msg = "Analysis timed out after 60 seconds"
-                analysis_result.stop_future_scans = True
-            except yara.Error as err:
-                # Yara errored while trying to scan binary
-                analysis_result.last_error_msg = f"Yara exception: {err}"
-            except Exception as err:
-                analysis_result.last_error_msg = f"Other exception while matching rules: {err}\n" + \
-                                                 traceback.format_exc()
-            else:
+                update_yara_rules()
+                matches = compiled_yara_rules.match(data=binary_data, timeout=30)
                 if matches:
                     score = get_high_score(matches)
                     analysis_result.score = score
@@ -234,7 +288,18 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 else:
                     analysis_result.score = 0
                     analysis_result.short_result = "No Matches"
-
+            except yara.TimeoutError:
+                # yara timed out
+                analysis_result.last_error_msg = "Analysis timed out after 60 seconds"
+                analysis_result.stop_future_scans = True
+            except yara.Error as err:
+                # Yara errored while trying to scan binary
+                analysis_result.last_error_msg = f"Yara exception: {err}"
+            except Exception as err:
+                analysis_result.last_error_msg = f"Other exception while matching rules: {err}\n" + \
+                                                 traceback.format_exc()
+            finally:
+                compiled_rules_lock.release_read()
         else:
             analysis_result.binary_not_available = True
         return analysis_result
