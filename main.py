@@ -256,9 +256,11 @@ def perform(yara_rule_dir):
 
     start_time = time.time()
 
+    start_datetime = datetime.now()
+
     conn = get_database_conn()
 
-    start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
+    start_date_binaries = start_datetime - timedelta(days=globals.g_num_days_binaries)
 
     cur = get_cursor(conn, start_date_binaries)
 
@@ -268,8 +270,13 @@ def perform(yara_rule_dir):
 
     conn.close()
 
-    logger.info("Enumerating modulestore...")
+    logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
+
     for row in rows:
+        seconds_since_start = (datetime.now() - start_datetime).seconds
+        if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
+            execute_script()
+            start_datetime = datetime.now()
 
         num_total_binaries += 1
         md5_hash = row[0].hex()
@@ -278,6 +285,8 @@ def perform(yara_rule_dir):
 
         if _check_hash_against_feed(md5_hash):
             md5_hashes.append(md5_hash)
+        else:
+            num_binaries_skipped += 1
 
         if len(md5_hashes) >= globals.MAX_HASHES:
             _analyze_save_and_log(
