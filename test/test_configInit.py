@@ -358,9 +358,6 @@ class TestConfigurationInit(TestCase):
         self.assertEqual(0, globals.g_vacuum_seconds)
         self.assertIsNone(globals.g_vacuum_script)
 
-    # TODO: 20a feed databasepath not exist
-    # TODO: 20b feed databasepath not dir
-
     def test_20a_config_feed_database_dir_not_exists(self):
         """
         Ensure that config with feed database directory that does not exist is detected.
