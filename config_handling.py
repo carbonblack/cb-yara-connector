@@ -60,8 +60,8 @@ class ConfigurationInit(object):
             raise CbInvalidConfig(f"{header} does not have a 'general' section")
 
         if output_file is not None:
-            globals.output_file = os.path.abspath(os.path.expanduser(placehold(output_file)))
-            logger.debug(f"NOTE: output file will be '{globals.output_file}'")
+            globals.g_output_file = os.path.abspath(os.path.expanduser(placehold(output_file)))
+            logger.debug(f"NOTE: output file will be '{globals.g_output_file}'")
 
         the_config = config["general"]
         if "worker_type" in the_config:
@@ -134,20 +134,13 @@ class ConfigurationInit(object):
             )
 
         # NOTE: postgres_username has a default value in globals; use and warn if not defined
-        if (
-                "postgres_username" in the_config
-                and the_config["postgres_username"].strip() != ""
-        ):
+        if "postgres_username" in the_config and the_config["postgres_username"].strip() != "":
             globals.g_postgres_username = the_config["postgres_username"]
         else:
             logger.warning(
-                f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'"
-            )
+                f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'")
 
-        if (
-                "postgres_password" in the_config
-                and the_config["postgres_password"].strip() != ""
-        ):
+        if "postgres_password" in the_config and the_config["postgres_password"].strip() != "":
             globals.g_postgres_password = the_config["postgres_password"]
         else:
             raise CbInvalidConfig(f"{header} has no 'postgres_password' defined")
@@ -156,17 +149,13 @@ class ConfigurationInit(object):
         if "postgres_db" in the_config and the_config["postgres_db"].strip() != "":
             globals.g_postgres_db = the_config["postgres_db"]
         else:
-            logger.warning(
-                f"{header} has no defined 'postgres_db'; using default of '{globals.g_postgres_db}'"
-            )
+            logger.warning(f"{header} has no defined 'postgres_db'; using default of '{globals.g_postgres_db}'")
 
         # NOTE: postgres_port has a default value in globals; use and warn if not defined
         if "postgres_port" in the_config:
             globals.g_postgres_port = int(the_config["postgres_port"])
         else:
-            logger.warning(
-                f"{header} has no defined 'postgres_port'; using default of '{globals.g_postgres_port}'"
-            )
+            logger.warning(f"{header} has no defined 'postgres_port'; using default of '{globals.g_postgres_port}'")
 
         # TODO: validate postgres connection with supplied information?
 
@@ -174,8 +163,8 @@ class ConfigurationInit(object):
             os.nice(int(the_config["niceness"]))
 
         if "concurrent_hashes" in the_config:
-            globals.MAX_HASHES = int(the_config["concurrent_hashes"])
-            logger.debug("Consurrent Hashes: {0}".format(globals.MAX_HASHES))
+            globals.g_max_hashes = int(the_config["concurrent_hashes"])
+            logger.debug("Consurrent Hashes: {0}".format(globals.g_max_hashes))
 
         if "disable_rescan" in the_config:
             globals.g_disable_rescan = bool(the_config["disable_rescan"])
@@ -189,28 +178,22 @@ class ConfigurationInit(object):
 
         if "vacuum_seconds" in the_config:
             globals.g_vacuum_seconds = max(int(the_config["vacuum_seconds"]), 0)
-            if "vacuum_script" in the_config and the_config["vacuum_seconds"].strip() != "":
-                if globals.g_vacuum_seconds > 0:
-                    check = os.path.abspath(
-                        os.path.expanduser(placehold(the_config["vacuum_script"]))
-                    )
-                    if os.path.exists(check):
-                        if os.path.isdir(check):
-                            raise CbInvalidConfig(
-                                f"{header} specified 'vacuum_script' ({check}) is a directory"
-                            )
-                    else:
-                        raise CbInvalidConfig(
-                            f"{header} specified 'vacuum_script' ({check}) does not exist"
-                        )
-                    globals.g_vacuum_script = check
-                    logger.warning(
-                        f"Vacuum Script '{check}' is enabled; use this advanced feature at your own discretion!"
-                    )
+
+            if "vacuum_script" in the_config and the_config["vacuum_script"].strip() != "":
+                check = os.path.abspath(os.path.expanduser(placehold(the_config["vacuum_script"])))
+            else:
+                check = os.path.abspath(os.path.expanduser(placehold(globals.g_vacuum_script)))
+
+            if globals.g_vacuum_seconds > 0:
+                if os.path.exists(check):
+                    if os.path.isdir(check):
+                        raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) is a directory")
                 else:
-                    logger.debug(
-                        f"{header} has 'vacuum_script' defined, but it is disabled"
-                    )
+                    raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) does not exist")
+                globals.g_vacuum_script = check
+                logger.warning(f"Vacuum Script '{check}' is enabled; use this advanced feature at your own discretion!")
+            else:
+                logger.debug(f"{header} has 'vacuum_script' defined, but it is disabled")
 
         if "feed_database_dir" in the_config and the_config["feed_database_dir"].strip() != "":
             check = os.path.abspath(os.path.expanduser(placehold(the_config["feed_database_dir"])))
@@ -218,6 +201,9 @@ class ConfigurationInit(object):
                 if not os.path.isdir(check):
                     raise CbInvalidConfig(f"{header} specified 'feed_database_dir' ({check}) is not a directory")
                 else:
-                    globals.feed_database_dir = the_config["feed_database_dir"]
+                    globals.g_feed_database_dir = check
             else:
                 raise CbInvalidConfig(f"{header} specified 'feed_database_dir' ({check}) does not exist")
+        else:
+            # we assume the default is correct, sanitize
+            globals.g_feed_database_dir = os.path.abspath(os.path.expanduser(placehold(globals.g_feed_database_dir)))

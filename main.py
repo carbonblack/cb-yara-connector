@@ -69,7 +69,7 @@ def generate_feed_from_db() -> None:
     feed = CbFeed(feedinfo, reports)
 
     logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data["name"]))
-    with open(globals.output_file, "w") as fp:
+    with open(globals.g_output_file, "w") as fp:
         fp.write(feed.dump())
 
 
@@ -285,7 +285,7 @@ def perform(yara_rule_dir):
         else:
             num_binaries_skipped += 1
 
-        if len(md5_hashes) >= globals.MAX_HASHES:
+        if len(md5_hashes) >= globals.g_max_hashes:
             _analyze_save_and_log(
                 md5_hashes, start_time, num_binaries_skipped, num_total_binaries
             )

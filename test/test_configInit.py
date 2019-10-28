@@ -25,16 +25,16 @@ class TestConfigurationInit(TestCase):
 
     def test_02_validate_config(self):
         # valid local
-        globals.output_file = None
+        globals.g_output_file = None
         globals.g_remote = None
         ConfigurationInit(os.path.join(TESTS, "config", "valid.conf"), "sample.json")
-        self.assertTrue(globals.output_file.endswith("sample.json"))
+        self.assertTrue(globals.g_output_file.endswith("sample.json"))
         self.assertFalse(globals.g_remote)
 
         # valid remote
         globals.g_remote = None
         ConfigurationInit(os.path.join(TESTS, "config", "valid2.conf"), "sample2.json")
-        self.assertTrue(globals.output_file.endswith("sample2.json"))
+        self.assertTrue(globals.g_output_file.endswith("sample2.json"))
         self.assertTrue(globals.g_remote)
 
     def test_03a_config_missing_header(self):
