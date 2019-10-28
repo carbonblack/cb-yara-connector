@@ -232,6 +232,7 @@ def update_yara_rules():
     else:
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         new_rules_object = yara.compile(filepaths=yara_rule_map)
+        compiled_rules_lock.release_read()
         compiled_rules_lock.acquire_write()
         compiled_yara_rules = new_rules_object
         compiled_rules_lock.release_write()
