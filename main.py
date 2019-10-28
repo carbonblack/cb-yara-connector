@@ -205,6 +205,45 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
                 generate_feed_from_db()
 
 
+def get_database_conn():
+    logger.info("Connecting to Postgres database...")
+    conn = psycopg2.connect(
+        host=globals.g_postgres_host,
+        database=globals.g_postgres_db,
+        user=globals.g_postgres_username,
+        password=globals.g_postgres_password,
+        port=globals.g_postgres_port,
+    )
+
+    return conn
+
+
+def get_cursor(conn, start_date_binaries):
+    cur = conn.cursor(name="yara_agent")
+
+    # noinspection SqlDialectInspection,SqlNoDataSourceInspection
+    cur.execute(
+        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
+        "ORDER BY timestamp DESC".format(start_date_binaries)
+    )
+
+    return cur
+
+
+def execute_script():
+    logger.warning("!!!Executing vacuum script!!!")
+
+    target = os.path.join(os.getcwd(), globals.g_vacuum_script)
+
+    prog = subprocess.Popen(target, shell=True, universal_newlines=True)
+    stdout, stderr = prog.communicate()
+    logger.info(stdout)
+    logger.error(stderr)
+    if prog.returncode:
+        logger.warning("program returned error code {0}".format(prog.returncode))
+    logger.warning("!!!Done Executing vacuum script!!!")
+
+
 def perform(yara_rule_dir):
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
@@ -216,144 +255,69 @@ def perform(yara_rule_dir):
     md5_hashes = []
 
     start_time = time.time()
-    start_datetime = datetime.now()
 
-    logger.info("Connecting to Postgres database...")
-    try:
-        conn = psycopg2.connect(
-            host=globals.g_postgres_host,
-            database=globals.g_postgres_db,
-            user=globals.g_postgres_username,
-            password=globals.g_postgres_password,
-            port=globals.g_postgres_port,
-        )
-        cur = conn.cursor(name="yara_agent")
+    conn = get_database_conn()
 
-        start_date_binaries = datetime.now() - timedelta(
-            days=globals.g_num_days_binaries
-        )
-        # noinspection SqlDialectInspection,SqlNoDataSourceInspection
-        cur.execute(
-            "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
-            "ORDER BY timestamp DESC".format(start_date_binaries)
-        )
-    except Exception as err:
-        logger.error("Failed to connect to Postgres database: {0}".format(err))
-        logger.error(traceback.format_exc())
-        return
+    start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
 
-    logger.info("Enumerating modulestore...")
-    while True:
-        if cur.closed:
-            cur = conn.cursor(name="yara_agent")
-            # noinspection SqlDialectInspection
-            cur.execute(
-                "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
-                "ORDER BY timestamp DESC".format(start_date_binaries)
-            )
-        try:
-            rows = cur.fetchmany()
-        except psycopg2.OperationalError:
-            cur = conn.cursor(name="yara_agent")
-            # noinspection SqlDialectInspection
-            cur.execute(
-                "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
-                "ORDER BY timestamp DESC".format(start_date_binaries)
-            )
-            rows = cur.fetchmany()
-        if len(rows) == 0:
-            break
+    cur = get_cursor(conn, start_date_binaries)
 
-        for row in rows:
-            seconds_since_start = (datetime.now() - start_datetime).seconds
-            if seconds_since_start >= globals.g_vacuum_seconds > 0:
-                cur.close()
-                conn.commit()
-                logger.warning("!!!Executing vacuum script!!!")
+    rows = cur.fetchmany()
 
-                target = os.path.join(os.getcwd(), globals.g_vacuum_script)
-
-                envdict = dict(os.environ)
-                envdict["PGPASSWORD"] = globals.g_postgres_password
-                envdict["PGUSER"] = globals.g_postgres_username
-                envdict["PGHOST"] = globals.g_postgres_host
-                envdict["PGDATABASE"] = globals.g_postgres_db
-                envdict["PGPORT"] = str(globals.g_postgres_port)
-
-                prog = subprocess.Popen(
-                    target, shell=True, env=envdict, universal_newlines=True
-                )
-                stdout, stderr = prog.communicate()  # Returns (stdoutdata, stderrdata)
-                logger.info(stdout)
-                logger.error(stderr)
-                if prog.returncode:
-                    logger.warning(
-                        "program returned error code {0}".format(prog.returncode)
-                    )
-                start_datetime = datetime.now()
-                logger.warning("!!!Done Executing vacuum script!!!")
-                break
-
-            num_total_binaries += 1
-            md5_hash = row[0].hex()
-
-            #
-            # Check if query returns any rows
-            #
-            query = BinaryDetonationResult.select().where(
-                BinaryDetonationResult.md5 == md5_hash
-            )
-            if query.exists():
-                try:
-                    bdr = BinaryDetonationResult.get(
-                        BinaryDetonationResult.md5 == md5_hash
-                    )
-                    scanned_hash_list = json.loads(bdr.misc)
-                    if globals.g_disable_rescan and bdr.misc:
-                        continue
-
-                    if scanned_hash_list == globals.g_yara_rule_map_hash_list:
-                        num_binaries_skipped += 1
-                        #
-                        # If it is the same then we don't need to scan again
-                        #
-                        continue
-                except Exception as e:
-                    logger.error(
-                        "Unable to decode yara rule map hash from database: {0}".format(
-                            e
-                        )
-                    )
-
-            num_binaries_queued += 1
-            md5_hashes.append(md5_hash)
-
-            if len(md5_hashes) >= globals.MAX_HASHES:
-                analysis_results = analyze_binaries(
-                    md5_hashes, local=(not globals.g_remote)
-                )
-                if analysis_results:
-                    for analysis_result in analysis_results:
-                        logger.debug(
-                            (
-                                f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                                f" {analysis_result.long_result} {analysis_result.last_error_msg}"
-                            )
-                        )
-                        if analysis_result.last_error_msg:
-                            logger.error(analysis_result.last_error_msg)
-                    save_results(analysis_results)
-                else:
-                    pass
-                md5_hashes = []
-
-        # throw us a bone every 1000 binaries processed
-        if num_total_binaries % 1000 == 0:
-            _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
+    conn.commit()
 
     conn.close()
 
-    analysis_results = analyze_binaries(md5_hashes, local=(not globals.g_remote))
+    logger.info("Enumerating modulestore...")
+    for row in rows:
+
+        num_total_binaries += 1
+        md5_hash = row[0].hex()
+
+        num_binaries_queued += 1
+
+        if _check_hash_against_feed(md5_hash):
+            md5_hashes.append(md5_hash)
+
+        if len(md5_hashes) >= globals.MAX_HASHES:
+            _analyze_save_and_log(
+                md5_hashes, start_time, num_binaries_skipped, num_total_binaries
+            )
+            md5_hashes = []
+
+    _analyze_save_and_log(
+        md5_hashes, start_time, num_binaries_skipped, num_total_binaries
+    )
+
+    generate_feed_from_db()
+
+
+def _check_hash_against_feed(md5_hash):
+    query = BinaryDetonationResult.select().where(
+        BinaryDetonationResult.md5 == md5_hash
+    )
+    if query.exists():
+        try:
+            bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
+            scanned_hash_list = json.loads(bdr.misc)
+            if globals.g_disable_rescan and bdr.misc:
+                return False
+
+            if scanned_hash_list == globals.g_yara_rule_map_hash_list:
+                #
+                # If it is the same then we don't need to scan again
+                #
+                return False
+        except Exception as e:
+            logger.error(
+                "Unable to decode yara rule map hash from database: {0}".format(e)
+            )
+            return False
+    return True
+
+
+def _analyze_save_and_log(hashes, start_time, num_binaries_skipped, num_total_binaries):
+    analysis_results = analyze_binaries(hashes, local=(not globals.g_remote))
     if analysis_results:
         for analysis_result in analysis_results:
             logger.debug(
@@ -367,7 +331,6 @@ def perform(yara_rule_dir):
         save_results(analysis_results)
 
     _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
-    generate_feed_from_db()
 
 
 def _rule_logging(
