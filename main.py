@@ -1,5 +1,4 @@
 import argparse
-import configparser
 import hashlib
 import json
 import logging
@@ -14,7 +13,6 @@ from typing import List, Optional
 
 import humanfriendly
 import psycopg2
-
 # noinspection PyPackageRequirements
 import yara
 from celery import group
@@ -24,10 +22,9 @@ import globals
 import singleton
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
-from exceptions import CbInvalidConfig
+from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
-from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
-from utilities import placehold
+from tasks import analyze_binary, generate_rule_map, update_yara_rules_remote
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)
@@ -334,7 +331,7 @@ def _analyze_save_and_log(hashes, start_time, num_binaries_skipped, num_total_bi
 
 
 def _rule_logging(
-    start_time: float, num_binaries_skipped: int, num_total_binaries: int
+        start_time: float, num_binaries_skipped: int, num_total_binaries: int
 ) -> None:
     """
     Simple method to log yara work.
@@ -368,189 +365,9 @@ def _rule_logging(
     logger.info("")
 
 
-# noinspection DuplicatedCode
-def verify_config(config_file: str, output_file: str = None) -> None:
-    """
-    Validate the config file.
-    :param config_file: The config file to validate
-    :param output_file: the output file; if not specified equals config file plus ".json"
-    """
-    abs_config = os.path.abspath(os.path.expanduser(placehold(config_file)))
-    header = f"Config file '{abs_config}'"
-
-    config = configparser.ConfigParser()
-    if not os.path.exists(config_file):
-        raise CbInvalidConfig(f"{header} does not exist!")
-
-    try:
-        config.read(config_file)
-    except Exception as err:
-        raise CbInvalidConfig(err)
-
-    logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section("general"):
-        raise CbInvalidConfig(f"{header} does not have a 'general' section")
-
-    globals.output_file = (
-        output_file if output_file is not None else config_file.strip() + ".json"
-    )
-    globals.output_file = os.path.abspath(
-        os.path.expanduser(placehold(globals.output_file))
-    )
-    logger.debug(f"NOTE: output file will be '{globals.output_file}'")
-
-    the_config = config["general"]
-    if "worker_type" in the_config:
-        if (
-            the_config["worker_type"] == "local"
-            or the_config["worker_type"].strip() == ""
-        ):
-            globals.g_remote = False  # 'local' or empty definition
-        elif the_config["worker_type"] == "remote":
-            globals.g_remote = True  # 'remote'
-        else:  # anything else
-            raise CbInvalidConfig(
-                f"{header} has an invalid 'worker_type' ({the_config['worker_type']})"
-            )
-    else:
-        globals.g_remote = False
-        logger.warning(f"{header} does not specify 'worker_type', assuming local")
-
-    # local/remote configuration data
-    if not globals.g_remote:
-        if "cb_server_url" in the_config and the_config["cb_server_url"].strip() != "":
-            globals.g_cb_server_url = the_config["cb_server_url"]
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
-        if (
-            "cb_server_token" in the_config
-            and the_config["cb_server_token"].strip() != ""
-        ):
-            globals.g_cb_server_token = the_config["cb_server_token"]
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
-        # TODO: validate url & token with test call?
-    else:
-        if "broker_url" in the_config and the_config["broker_url"].strip() != "":
-            app.conf.update(
-                broker_url=the_config["broker_url"],
-                result_backend=the_config["broker_url"],
-            )
-        else:
-            raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
-        # TODO: validate broker with test call?
-
-    if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
-        check = os.path.abspath(
-            os.path.expanduser(placehold(the_config["yara_rules_dir"]))
-        )
-        if os.path.exists(check):
-            if os.path.isdir(check):
-                globals.g_yara_rules_dir = check
-            else:
-                raise CbInvalidConfig(
-                    f"{header} specified 'yara_rules_dir' ({check}) is not a directory"
-                )
-        else:
-            raise CbInvalidConfig(
-                f"{header} specified 'yara_rules_dir' ({check}) does not exist"
-            )
-    else:
-        raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
-
-    # NOTE: postgres_host has a default value in globals; use and warn if not defined
-    if "postgres_host" in the_config and the_config["postgres_host"].strip() != "":
-        globals.g_postgres_host = the_config["postgres_host"]
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_host'; using default of '{globals.g_postgres_host}'"
-        )
-
-    # NOTE: postgres_username has a default value in globals; use and warn if not defined
-    if (
-        "postgres_username" in the_config
-        and the_config["postgres_username"].strip() != ""
-    ):
-        globals.g_postgres_username = the_config["postgres_username"]
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'"
-        )
-
-    if (
-        "postgres_password" in the_config
-        and the_config["postgres_password"].strip() != ""
-    ):
-        globals.g_postgres_password = the_config["postgres_password"]
-    else:
-        raise CbInvalidConfig(f"{header} has no 'postgres_password' defined")
-
-    # NOTE: postgres_db has a default value in globals; use and warn if not defined
-    if "postgres_db" in the_config and the_config["postgres_db"].strip() != "":
-        globals.g_postgres_db = the_config["postgres_db"]
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_db'; using default of '{globals.g_postgres_db}'"
-        )
-
-    # NOTE: postgres_port has a default value in globals; use and warn if not defined
-    if "postgres_port" in the_config:
-        globals.g_postgres_port = int(the_config["postgres_port"])
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_port'; using default of '{globals.g_postgres_port}'"
-        )
-
-    # TODO: validate postgres connection with supplied information?
-
-    if "niceness" in the_config:
-        os.nice(int(the_config["niceness"]))
-
-    if "concurrent_hashes" in the_config:
-        globals.MAX_HASHES = int(the_config["concurrent_hashes"])
-        logger.debug("Consurrent Hashes: {0}".format(globals.MAX_HASHES))
-
-    if "disable_rescan" in the_config:
-        globals.g_disable_rescan = bool(the_config["disable_rescan"])
-        logger.debug("Disable Rescan: {0}".format(globals.g_disable_rescan))
-
-    if "num_days_binaries" in the_config:
-        globals.g_num_days_binaries = max(int(the_config["num_days_binaries"]), 1)
-        logger.debug(
-            "Number of days for binaries: {0}".format(globals.g_num_days_binaries)
-        )
-
-    if "vacuum_seconds" in the_config:
-        globals.g_vacuum_seconds = max(int(the_config["vacuum_seconds"]), 0)
-        if "vacuum_script" in the_config and the_config["vacuum_seconds"].strip() != "":
-            if globals.g_vacuum_seconds > 0:
-                check = os.path.abspath(
-                    os.path.expanduser(placehold(the_config["vacuum_script"]))
-                )
-                if os.path.exists(check):
-                    if os.path.isdir(check):
-                        raise CbInvalidConfig(
-                            f"{header} specified 'vacuum_script' ({check}) is a directory"
-                        )
-                else:
-                    raise CbInvalidConfig(
-                        f"{header} specified 'vacuum_script' ({check}) does not exist"
-                    )
-                globals.g_vacuum_script = check
-                logger.warning(
-                    f"Vacuum Script '{check}' is enabled; use this advanced feature at your own discretion!"
-                )
-            else:
-                logger.debug(
-                    f"{header} has 'vacuum_script' defined, but it is disabled"
-                )
-
-    if "feed_database_path" in the_config:
-        globals.feed_database_path = the_config["feed_database_path"]
-        check = os.path.abspath(placehold(the_config["feed_database_path"]))
-        if not (os.path.exists(check) and os.path.isdir(check)):
-            raise CbInvalidConfig("Invalid database path specified")
-
+################################################################################
+# Main entrypoint
+################################################################################
 
 def main():
     try:
@@ -596,7 +413,7 @@ def main():
 
         # Verify the configuration file and load up important global variables
         try:
-            verify_config(args.config_file, args.output_file)
+            ConfigurationInit(args.config_file, args.output_file)
         except Exception as err:
             logger.error(f"Unable to continue due to a configuration problem: {err}")
             sys.exit(1)

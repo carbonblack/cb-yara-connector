@@ -1,4 +1,3 @@
-import configparser
 import datetime
 import hashlib
 import logging
@@ -10,88 +9,14 @@ from typing import List
 import yara
 from cbapi.response.models import Binary
 from cbapi.response.rest_api import CbResponseAPI
-from celery import bootsteps, Celery
+from celery import bootsteps
 
 import globals
 from analysis_result import AnalysisResult
-from exceptions import CbInvalidConfig
-from utilities import placehold
-
-app = Celery()
-# noinspection PyUnusedName
-app.conf.task_serializer = "pickle"
-# noinspection PyUnusedName
-app.conf.result_serializer = "pickle"
-# noinspection PyUnusedName
-app.conf.accept_content = {"pickle"}
+from config_handling import app, ConfigurationInit
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-# noinspection DuplicatedCode
-def verify_config(config_file: str) -> None:
-    """
-    Read and validate the current config file.
-
-    NOTE: Replicates, to a smaller degree, the function in main.py; it is presumed that more detailed checks are there
-    :param config_file: path to the config file
-    """
-    abs_config = os.path.abspath(os.path.expanduser(placehold(config_file)))
-    header = f"Config file '{abs_config}'"
-
-    config = configparser.ConfigParser()
-    if not os.path.exists(config_file):
-        raise CbInvalidConfig(f"{header} does not exist!")
-
-    try:
-        config.read(config_file)
-    except Exception as err:
-        raise CbInvalidConfig(err)
-
-    logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section('general'):
-        raise CbInvalidConfig(f"{header} does not have a 'general' section")
-
-    the_config = config['general']
-
-    if 'yara_rules_dir' in the_config and the_config['yara_rules_dir'].strip() != "":
-        check = os.path.abspath(os.path.expanduser(placehold(the_config["yara_rules_dir"])))
-        if os.path.exists(check):
-            if os.path.isdir(check):
-                globals.g_yara_rules_dir = check
-            else:
-                raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) is not a directory")
-        else:
-            raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) does not exist")
-    else:
-        raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
-
-    if 'worker_type' in the_config:
-        if the_config['worker_type'] == 'local' or the_config['worker_type'].strip() == "":
-            remote = False
-        elif the_config['worker_type'] == 'remote':
-            remote = True
-        else:  # anything else
-            raise CbInvalidConfig(f"{header} has an invalid 'worker_type' ({the_config['worker_type']})")
-    else:
-        remote = False
-
-    # local/remote configuration data
-    if not remote:
-        if 'cb_server_url' in the_config and the_config['cb_server_url'].strip() != "":
-            globals.g_cb_server_url = the_config['cb_server_url']
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
-        if 'cb_server_token' in the_config and the_config['cb_server_token'].strip() != "":
-            globals.g_cb_server_token = the_config['cb_server_token']
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
-    else:
-        if 'broker_url' in the_config and the_config['broker_url'].strip() != "":
-            app.conf.update(broker_url=the_config['broker_url'], result_backend=the_config['broker_url'])
-        else:
-            raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
 
 
 def add_worker_arguments(parser):
@@ -102,13 +27,12 @@ app.user_options['worker'].add(add_worker_arguments)
 
 
 class MyBootstep(bootsteps.Step):
-
-    # noinspection PyUnusedLocal
+    """
+    Define the bootstrap task.
+    """
     def __init__(self, worker, config_file='yara_worker.conf', **options):
         super().__init__(self)
-        verify_config(config_file)
-
-        # g_yara_rules_dir = yara_rules_dir
+        ConfigurationInit(config_file, None)
 
 
 app.steps['worker'].add(MyBootstep)
