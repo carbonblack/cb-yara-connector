@@ -36,3 +36,7 @@ g_vacuum_seconds = -1
 g_vacuum_script = 'scripts/vacuumscript.sh'
 
 g_feed_database_path = "./"
+
+g_scanning_interval = 360
+
+g_worker_network_timeout=5

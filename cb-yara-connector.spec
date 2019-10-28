@@ -1,16 +1,13 @@
-import distutils
-if distutils.distutils_path.endswith('__init__.py'):
-    distutils.distutils_path = os.path.dirname(distutils.distutils_path)
+#import distutils
+#if distutils.distutils_path.endswith('__init__.py'):
+#    distutils.distutils_path = os.path.dirname(distutils.distutils_path)
 
 block_cipher = None
 
 
-a = Analysis(['main.py'],
+a = Analysis(['src/main.py'],
              pathex=['.'],
              binaries=[],
-             datas=[ (HOMEPATH + '/cbapi/response/models/*', 'cbapi/response/models/'),
-                     (HOMEPATH + '/cbapi/protection/models/*', 'cbapi/protection/models/'),
-                     (HOMEPATH + '/cbapi/defense/models/*', 'cbapi/defense/models/') ],
              hiddenimports=['celery.fixups', 'celery.fixups.django', 'celery.loaders.app',
              				'celery.app.amqp', 'kombu.transport.redis', 'redis', 'celery.backends',
              				'celery.backends.redis', 'celery.app.events', 'celery.events',
@@ -30,7 +27,7 @@ exe = EXE(pyz,
           a.zipfiles,
           a.datas,
           [],
-          name='yara_agent',
+          name='yaraconnector',
           debug=False,
           bootloader_ignore_signals=False,
           strip=False,
