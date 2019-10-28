@@ -30,6 +30,8 @@ class MyBootstep(bootsteps.Step):
     """
     Define the bootstrap task.
     """
+
+    # noinspection PyUnusedLocal
     def __init__(self, worker, config_file='yara_worker.conf', **options):
         super().__init__(self)
         ConfigurationInit(config_file, None)

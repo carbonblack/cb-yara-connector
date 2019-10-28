@@ -16,7 +16,7 @@ output_file = 'yara_feed.json'
 
 g_remote = False
 g_yara_rule_map = {}
-g_yara_rule_map_hash_list = list()
+g_yara_rule_map_hash_list = []
 
 g_postgres_host = '127.0.0.1'
 g_postgres_username = 'cb'
@@ -29,7 +29,7 @@ MAX_HASHES = 8
 g_num_binaries_not_available = 0
 g_num_binaries_analyzed = 0
 
-g_disable_rescan = False
+g_disable_rescan = True
 
 g_num_days_binaries = 365
 g_vacuum_seconds = -1

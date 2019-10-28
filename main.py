@@ -271,7 +271,7 @@ def perform(yara_rule_dir):
 
     for row in rows:
         seconds_since_start = (datetime.now() - start_datetime).seconds
-        if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
+        if seconds_since_start >= globals.g_vacuum_seconds > 0:
             execute_script()
             start_datetime = datetime.now()
 

@@ -24,64 +24,20 @@ The Yara agent must be installed on the same system as Cb Response.
 
 
 #### Sample Yara Agent Config
-Copy and modify the following config to `/etc/cb/integrations/yara/yara_agent.conf`
+Copy and modify either `sample_local.conf` or `sample_remote.conf` from the `samples` folder
+to your desired location.
 
-```ini
-[general]
-; either run a single worker locally or remotely
-; valid types are 'local' or 'remote'
-worker_type=local
-
-; ONLY used for worker_type of local
-; Cb Response Server settings for scanning locally.
-; For remote scanning please set these parameters in the yara worker config file
-; Default: https://127.0.0.1
-cb_server_url=
-cb_server_token=
-
-; ONLY used for worker_type of remote
-; IP Address of workers if worker_type is remote
-;broker_url=redis://
-
-; path to directory containing yara rules
-yara_rules_dir=yara_rules
-
-; Cb Response postgres Database settings
-postgres_host=
-postgres_username=
-postgres_password=
-postgres_db=
-postgres_port=
-
-; os nice value used for this script
-niceness=1
-
-; Number of hashes to send to the workers concurrently.  Defaults to 8.
-; Recommend setting to the number of workers on the remote system.
-concurrent_hashes=8
-
-; If you don't want binaries to be rescanned more than once, regardless of the rules used, set this to True
-disable_rescan=True
-
-; The agent will pull binaries up to the configured number of days.  For exmaple, 365 will pull all binaries with
-; a timestamp within the last year
-; Default: 365
-num_days_binaries=365
-
-; ADVANCED: A vacuum script can be enabled to "clean" the database and prevent fragmentation
-; This can be disabled if the seconds value is 0 or less
-vacuum_seconds=0
-vacuum_script={HERE}/scripts/vacuumscript.sh
-```
 
 > NOTES:
-> 1) The use of `{HERE}` is a placeholder representing the location of this package's `main.py` file,
+> 1) The use of `{HERE}` is a placeholder representing the location of the yara package's `main.py` file,
 > allowing for the use of relative paths to the package itself.
-> 2) Paths can use `~` to access your home directory, so you locate files there as well.
+> 2) All paths can use `~` to access your home directory, so you can locate files there as well.
 
 #### Running Yara Agent Manually
 
-	./yara_agent --config-file=/etc/cb/integrations/yara/yara_agent.conf
+```shell script
+./yara_agent --config-file=<config file location>
+```
 
 #### Example Cron Entry
 
