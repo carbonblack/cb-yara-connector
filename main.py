@@ -256,10 +256,11 @@ def perform(yara_rule_dir):
 
     start_time = time.time()
 
+    start_datetime = datetime.now()
+
     conn = get_database_conn()
 
-    start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
-    start_datetime = datetime.now()
+    start_date_binaries = start_datetime - timedelta(days=globals.g_num_days_binaries)
 
     cur = get_cursor(conn, start_date_binaries)
 
@@ -273,7 +274,7 @@ def perform(yara_rule_dir):
 
     for row in rows:
         seconds_since_start = (datetime.now() - start_datetime).seconds
-        if seconds_since_start >= globals.g_vacuum_seconds > 0:
+        if seconds_since_start >= globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
             execute_script()
             start_datetime = datetime.now()
 
