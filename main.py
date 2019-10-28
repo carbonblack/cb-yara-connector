@@ -14,6 +14,7 @@ from typing import List, Optional
 
 import humanfriendly
 import psycopg2
+
 # noinspection PyPackageRequirements
 import yara
 from celery import group
@@ -267,21 +268,28 @@ def perform(yara_rule_dir):
             seconds_since_start = (datetime.now() - start_datetime).seconds
             if seconds_since_start >= globals.g_vacuum_seconds > 0:
                 cur.close()
+                conn.commit()
                 logger.warning("!!!Executing vacuum script!!!")
-                target = ["/bin/sh", globals.g_vacuum_script]
+
+                target = os.path.join(os.getcwd(), globals.g_vacuum_script)
 
                 envdict = dict(os.environ)
                 envdict["PGPASSWORD"] = globals.g_postgres_password
-                envdict["PGUSERNAME"] = globals.g_postgres_username
-                envdict['PGHOST'] = globals.g_postgres_host
+                envdict["PGUSER"] = globals.g_postgres_username
+                envdict["PGHOST"] = globals.g_postgres_host
                 envdict["PGDATABASE"] = globals.g_postgres_db
                 envdict["PGPORT"] = str(globals.g_postgres_port)
-                prog = subprocess.Popen(target, shell=False, env=envdict, universal_newlines=True)
-                stdout, stderr = (prog.communicate())  # Returns (stdoutdata, stderrdata)
+
+                prog = subprocess.Popen(
+                    target, shell=True, env=envdict, universal_newlines=True
+                )
+                stdout, stderr = prog.communicate()  # Returns (stdoutdata, stderrdata)
                 logger.info(stdout)
                 logger.error(stderr)
                 if prog.returncode:
-                    logger.warning("program returned error code {0}".format(prog.returncode))
+                    logger.warning(
+                        "program returned error code {0}".format(prog.returncode)
+                    )
                 start_datetime = datetime.now()
                 logger.warning("!!!Done Executing vacuum script!!!")
                 break
@@ -363,7 +371,7 @@ def perform(yara_rule_dir):
 
 
 def _rule_logging(
-        start_time: float, num_binaries_skipped: int, num_total_binaries: int
+    start_time: float, num_binaries_skipped: int, num_total_binaries: int
 ) -> None:
     """
     Simple method to log yara work.
@@ -417,21 +425,30 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         raise CbInvalidConfig(err)
 
     logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section('general'):
+    if not config.has_section("general"):
         raise CbInvalidConfig(f"{header} does not have a 'general' section")
 
-    globals.output_file = output_file if output_file is not None else config_file.strip() + ".json"
-    globals.output_file = os.path.abspath(os.path.expanduser(placehold(globals.output_file)))
+    globals.output_file = (
+        output_file if output_file is not None else config_file.strip() + ".json"
+    )
+    globals.output_file = os.path.abspath(
+        os.path.expanduser(placehold(globals.output_file))
+    )
     logger.debug(f"NOTE: output file will be '{globals.output_file}'")
 
     the_config = config["general"]
     if "worker_type" in the_config:
-        if the_config["worker_type"] == "local" or the_config["worker_type"].strip() == "":
+        if (
+            the_config["worker_type"] == "local"
+            or the_config["worker_type"].strip() == ""
+        ):
             globals.g_remote = False  # 'local' or empty definition
         elif the_config["worker_type"] == "remote":
             globals.g_remote = True  # 'remote'
         else:  # anything else
-            raise CbInvalidConfig(f"{header} has an invalid 'worker_type' ({the_config['worker_type']})")
+            raise CbInvalidConfig(
+                f"{header} has an invalid 'worker_type' ({the_config['worker_type']})"
+            )
     else:
         globals.g_remote = False
         logger.warning(f"{header} does not specify 'worker_type', assuming local")
@@ -442,8 +459,11 @@ def verify_config(config_file: str, output_file: str = None) -> None:
             globals.g_cb_server_url = the_config["cb_server_url"]
         else:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
-        if 'cb_server_token' in the_config and the_config['cb_server_token'].strip() != "":
-            globals.g_cb_server_token = the_config['cb_server_token']
+        if (
+            "cb_server_token" in the_config
+            and the_config["cb_server_token"].strip() != ""
+        ):
+            globals.g_cb_server_token = the_config["cb_server_token"]
         else:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
         # TODO: validate url & token with test call?
@@ -458,14 +478,20 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         # TODO: validate broker with test call?
 
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
-        check = os.path.abspath(os.path.expanduser(placehold(the_config["yara_rules_dir"])))
+        check = os.path.abspath(
+            os.path.expanduser(placehold(the_config["yara_rules_dir"]))
+        )
         if os.path.exists(check):
             if os.path.isdir(check):
                 globals.g_yara_rules_dir = check
             else:
-                raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) is not a directory")
+                raise CbInvalidConfig(
+                    f"{header} specified 'yara_rules_dir' ({check}) is not a directory"
+                )
         else:
-            raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) does not exist")
+            raise CbInvalidConfig(
+                f"{header} specified 'yara_rules_dir' ({check}) does not exist"
+            )
     else:
         raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
 
@@ -473,30 +499,44 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     if "postgres_host" in the_config and the_config["postgres_host"].strip() != "":
         globals.g_postgres_host = the_config["postgres_host"]
     else:
-        logger.warning(f"{header} has no defined 'postgres_host'; using default of '{globals.g_postgres_host}'")
+        logger.warning(
+            f"{header} has no defined 'postgres_host'; using default of '{globals.g_postgres_host}'"
+        )
 
     # NOTE: postgres_username has a default value in globals; use and warn if not defined
-    if "postgres_username" in the_config and the_config["postgres_username"].strip() != "":
+    if (
+        "postgres_username" in the_config
+        and the_config["postgres_username"].strip() != ""
+    ):
         globals.g_postgres_username = the_config["postgres_username"]
     else:
-        logger.warning(f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'")
+        logger.warning(
+            f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'"
+        )
 
-    if 'postgres_password' in the_config and the_config['postgres_password'].strip() != "":
-        globals.g_postgres_password = the_config['postgres_password']
+    if (
+        "postgres_password" in the_config
+        and the_config["postgres_password"].strip() != ""
+    ):
+        globals.g_postgres_password = the_config["postgres_password"]
     else:
         raise CbInvalidConfig(f"{header} has no 'postgres_password' defined")
 
     # NOTE: postgres_db has a default value in globals; use and warn if not defined
-    if 'postgres_db' in the_config and the_config['postgres_db'].strip() != "":
-        globals.g_postgres_db = the_config['postgres_db']
+    if "postgres_db" in the_config and the_config["postgres_db"].strip() != "":
+        globals.g_postgres_db = the_config["postgres_db"]
     else:
-        logger.warning(f"{header} has no defined 'postgres_db'; using default of '{globals.g_postgres_db}'")
+        logger.warning(
+            f"{header} has no defined 'postgres_db'; using default of '{globals.g_postgres_db}'"
+        )
 
     # NOTE: postgres_port has a default value in globals; use and warn if not defined
-    if 'postgres_port' in the_config:
-        globals.g_postgres_port = int(the_config['postgres_port'])
+    if "postgres_port" in the_config:
+        globals.g_postgres_port = int(the_config["postgres_port"])
     else:
-        logger.warning(f"{header} has no defined 'postgres_port'; using default of '{globals.g_postgres_port}'")
+        logger.warning(
+            f"{header} has no defined 'postgres_port'; using default of '{globals.g_postgres_port}'"
+        )
 
     # TODO: validate postgres connection with supplied information?
 
@@ -513,25 +553,37 @@ def verify_config(config_file: str, output_file: str = None) -> None:
 
     if "num_days_binaries" in the_config:
         globals.g_num_days_binaries = max(int(the_config["num_days_binaries"]), 1)
-        logger.debug("Number of days for binaries: {0}".format(globals.g_num_days_binaries))
+        logger.debug(
+            "Number of days for binaries: {0}".format(globals.g_num_days_binaries)
+        )
 
     if "vacuum_seconds" in the_config:
         globals.g_vacuum_seconds = max(int(the_config["vacuum_seconds"]), 0)
         if "vacuum_script" in the_config and the_config["vacuum_seconds"].strip() != "":
             if globals.g_vacuum_seconds > 0:
-                check = os.path.abspath(os.path.expanduser(placehold(the_config["vacuum_script"])))
+                check = os.path.abspath(
+                    os.path.expanduser(placehold(the_config["vacuum_script"]))
+                )
                 if os.path.exists(check):
                     if os.path.isdir(check):
-                        raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) is a directory")
+                        raise CbInvalidConfig(
+                            f"{header} specified 'vacuum_script' ({check}) is a directory"
+                        )
                 else:
-                    raise CbInvalidConfig(f"{header} specified 'vacuum_script' ({check}) does not exist")
+                    raise CbInvalidConfig(
+                        f"{header} specified 'vacuum_script' ({check}) does not exist"
+                    )
                 globals.g_vacuum_script = check
-                logger.warning(f"Vacuum Script '{check}' is enabled; use this advanced feature at your own discretion!")
+                logger.warning(
+                    f"Vacuum Script '{check}' is enabled; use this advanced feature at your own discretion!"
+                )
             else:
-                logger.debug(f"{header} has 'vacuum_script' defined, but it is disabled")
+                logger.debug(
+                    f"{header} has 'vacuum_script' defined, but it is disabled"
+                )
 
-    if 'feed_database_path' in the_config:
-        globals.feed_database_path = the_config['feed_database_path']
+    if "feed_database_path" in the_config:
+        globals.feed_database_path = the_config["feed_database_path"]
         check = os.path.abspath(placehold(the_config["feed_database_path"]))
         if not (os.path.exists(check) and os.path.isdir(check)):
             raise CbInvalidConfig("Invalid database path specified")
@@ -542,7 +594,9 @@ def main():
         # check for single operation
         singleton.SingleInstance()
     except Exception as err:
-        logger.error(f"Only one instance of this script is allowed to run at a time: {err}")
+        logger.error(
+            f"Only one instance of this script is allowed to run at a time: {err}"
+        )
     else:
         parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
         parser.add_argument(
@@ -601,7 +655,9 @@ def main():
             try:
                 globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
                 generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase(os.path.join(globals.g_feed_database_path, "binary.db"))
+                database = SqliteDatabase(
+                    os.path.join(globals.g_feed_database_path, "binary.db")
+                )
                 db.initialize(database)
                 db.connect()
                 db.create_tables([BinaryDetonationResult])
