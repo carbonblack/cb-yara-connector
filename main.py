@@ -262,7 +262,7 @@ def perform(yara_rule_dir):
 
     cur = get_cursor(conn, start_date_binaries)
 
-    rows = cur.fetchmany()
+    rows = cur.fetchall()
 
     conn.commit()
 
