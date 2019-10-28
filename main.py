@@ -607,9 +607,13 @@ def main():
                 db.create_tables([BinaryDetonationResult])
                 generate_feed_from_db()
                 perform(globals.g_yara_rules_dir)
+            except KeyboardInterrupt:
+                logger.info("\n\n##### Intterupted by User!\n")
+                sys.exit(2)
             except Exception as err:
                 logger.error(f"There were errors executing yara rules: {err}")
                 logger.error(traceback.format_exc())
+                sys.exit(1)
 
 
 if __name__ == "__main__":
