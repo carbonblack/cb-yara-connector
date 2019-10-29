@@ -4,10 +4,10 @@
 
 import os
 
-__all__ = ["HERE", "placehold"]
+__all__ = ["YARAHOME", "placehold"]
 
 # self location for the package
-HERE = os.path.dirname(__file__)
+YARAHOME = os.path.dirname(__file__)
 
 
 def placehold(source: str) -> str:
@@ -16,5 +16,5 @@ def placehold(source: str) -> str:
     :param source: source string to convert
     :return: converted string
     """
-    source = source.replace("{HERE}", HERE)
+    source = source.replace("{YARA}", YARAHOME)
     return source

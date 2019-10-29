@@ -82,12 +82,12 @@ class TestConfigurationInit(TestCase):
         # not defined in file
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_url.conf"), "sample.json")
-        assert "is 'local' and missing 'cb_server_url'" in "{0}".format(err.exception.args[0])
+        assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
         # defined as "cb_server_url="
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_url2.conf"), "sample.json")
-        assert "is 'local' and missing 'cb_server_url'" in "{0}".format(err.exception.args[0])
+        assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
     def test_05b_config_local_worker_missing_server_token(self):
         """
@@ -96,12 +96,12 @@ class TestConfigurationInit(TestCase):
         # not defined in file
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_token.conf"), "sample.json")
-        assert "is 'local' and missing 'cb_server_token'" in "{0}".format(err.exception.args[0])
+        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
 
         # defined as "cb_server_token="
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_token2.conf"), "sample.json")
-        assert "is 'local' and missing 'cb_server_token'" in "{0}".format(err.exception.args[0])
+        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
 
     def test_06_config_remote_worker_missing_broker_url(self):
         """
@@ -110,12 +110,12 @@ class TestConfigurationInit(TestCase):
         # not defined in file
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "remote_worker_no_broker_url.conf"), "sample.json")
-        assert "is 'remote' and missing 'broker_url'" in "{0}".format(err.exception.args[0])
+        assert "has no 'broker_url' definition" in "{0}".format(err.exception.args[0])
 
         # defined as "broker_url="
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "remote_worker_no_broker_url2.conf"), "sample.json")
-        assert "is 'remote' and missing 'broker_url'" in "{0}".format(err.exception.args[0])
+        assert "has no 'broker_url' definition" in "{0}".format(err.exception.args[0])
 
     def test_07a_config_missing_yara_rules_dir(self):
         """
@@ -186,12 +186,12 @@ class TestConfigurationInit(TestCase):
         # undefined
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_password.conf"), "sample.json")
-        assert "has no 'postgres_password' defined" in "{0}".format(err.exception.args[0])
+        assert "has no 'postgres_password' definition" in "{0}".format(err.exception.args[0])
 
         # defined as "postgres_password="
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_password2.conf"), "sample.json")
-        assert "has no 'postgres_password' defined" in "{0}".format(err.exception.args[0])
+        assert "has no 'postgres_password' definition" in "{0}".format(err.exception.args[0])
 
     # TODO: test_10a_config_invalid_postgres_password
 
@@ -222,9 +222,8 @@ class TestConfigurationInit(TestCase):
         self.assertEqual(check, globals.g_postgres_port)
 
         # defined as "postgres_port="
-        with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_port2.conf"), "sample.json")
-        assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_port2.conf"), "sample.json")
+        self.assertEqual(check, globals.g_postgres_port)
 
     def test_12b_config_bogus_postgres_port(self):
         """
@@ -238,12 +237,10 @@ class TestConfigurationInit(TestCase):
 
     def test_13a_config_missing_niceness(self):
         """
-        Ensure that config with missing niceness is detected.
+        Ensure that config with missing niceness is not a problem.
         """
         # defined as "niceness="
-        with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_niceness.conf"), "sample.json")
-        assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+        ConfigurationInit(os.path.join(TESTS, "config", "missing_niceness.conf"), "sample.json")
 
     def test_13b_config_bogus_niceness(self):
         """
@@ -255,12 +252,13 @@ class TestConfigurationInit(TestCase):
 
     def test_14a_config_missing_concurrent_hashes(self):
         """
-        Ensure that config with missing concurrent_hashes is detected.
+        Ensure that config with missing concurrent_hashes uses default.
         """
+        check = globals.g_max_hashes
+
         # defined as "concurrent_hashes="
-        with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_concurrent_hashes.conf"), "sample.json")
-        assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+        ConfigurationInit(os.path.join(TESTS, "config", "missing_concurrent_hashes.conf"), "sample.json")
+        self.assertEqual(check, globals.g_max_hashes)
 
     def test_14b_config_bogus_concurrent_hashes(self):
         """
@@ -286,17 +284,20 @@ class TestConfigurationInit(TestCase):
         """
         globals.g_disable_rescan = None
 
-        ConfigurationInit(os.path.join(TESTS, "config", "bogus_disable_rescan.conf"), "sample.json")
-        self.assertTrue(globals.g_disable_rescan)
+        # Not true, false, yes, no
+        with self.assertRaises(ValueError) as err:
+            ConfigurationInit(os.path.join(TESTS, "config", "bogus_disable_rescan.conf"), "sample.json")
+        assert "is not a valid boolean value" in "{0}".format(err.exception.args[0])
 
     def test_16a_config_missing_num_days_binaries(self):
         """
-        Ensure that config with missing num_days_binaries is detected.
+        Ensure that config with missing num_days_binaries reverts to default
         """
+        check = globals.g_num_days_binaries
+
         # defined as "num_days_binaries="
-        with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_num_days_binaries.conf"), "sample.json")
-        assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+        ConfigurationInit(os.path.join(TESTS, "config", "missing_num_days_binaries.conf"), "sample.json")
+        self.assertEqual(check, globals.g_num_days_binaries)
 
     def test_16b_config_bogus_num_days_binaries(self):
         """

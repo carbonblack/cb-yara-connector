@@ -29,7 +29,7 @@ to your desired location.
 
 
 > NOTES:
-> 1) The use of `{HERE}` is a placeholder representing the location of the yara package's `main.py` file,
+> 1) The use of `{YARA}` is a placeholder representing the location of the yara package's `main.py` file,
 > allowing for the use of relative paths to the package itself.
 > 2) All paths can use `~` to access your home directory, so you can locate files there as well.
 

@@ -1,5 +1,7 @@
 ################################################################################
 # This module contains global variables used by a single instance.
+#
+# A placeholder of "{YARA}" represents the location of this yara package
 ################################################################################
 
 # noinspection PyUnusedName
@@ -16,7 +18,7 @@ g_cb_server_token = ''
 # noinspection PyUnusedName
 g_broker_url = ''
 
-g_yara_rules_dir = './yara_rules'
+g_yara_rules_dir = '{YARA}/yara_rules'
 g_yara_rule_map = {}
 g_yara_rule_map_hash_list = []
 
@@ -36,6 +38,6 @@ g_disable_rescan = True
 g_num_days_binaries = 365
 
 g_vacuum_seconds = -1
-g_vacuum_script = './scripts/vacuumscript.sh'
+g_vacuum_script = '{YARA}/scripts/vacuumscript.sh'
 
 g_feed_database_dir = "./"
