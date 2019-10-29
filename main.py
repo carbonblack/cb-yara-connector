@@ -624,7 +624,7 @@ def main():
                 db.create_tables([BinaryDetonationResult])
                 generate_feed_from_db()
                 if not (globals.g_remote):
-                    launch_local_worker()
+                    launch_local_worker(args.config_file)
                 perform(globals.g_yara_rules_dir)
             except KeyboardInterrupt:
                 logger.info("\n\n##### Interupted by User!\n")
@@ -635,9 +635,9 @@ def main():
                 sys.exit(1)
 
 
-def launch_local_worker():
+def launch_local_worker(config_file):
     localworker = worker.worker(app=app)
-    localworker.run()
+    localworker.run(config_file=config_file)
 
 
 if __name__ == "__main__":

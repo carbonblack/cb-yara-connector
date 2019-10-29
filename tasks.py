@@ -21,11 +21,11 @@ import multiprocessing
 
 app = Celery()
 # noinspection PyUnusedName
-app.conf.task_serializer = "pickle"
+app.conf.task_serializer = "json"
 # noinspection PyUnusedName
-app.conf.result_serializer = "pickle"
+app.conf.result_serializer = "json"
 # noinspection PyUnusedName
-app.conf.accept_content = {"pickle"}
+app.conf.accept_content = {"json"}
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -152,6 +152,7 @@ class MyBootstep(bootsteps.Step):
     # noinspection PyUnusedLocal
     def __init__(self, worker, config_file='yara_worker.conf', **options):
         super().__init__(self)
+        print(options)
         verify_config(config_file)
 
         # g_yara_rules_dir = yara_rules_dir
