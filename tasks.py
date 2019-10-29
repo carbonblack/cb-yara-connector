@@ -245,7 +245,6 @@ def update_yara_rules():
 @app.task
 def analyze_bins(hashes):
     return group(analyze_binary.s(h) for h in hashes).apply_async()
-    #return analyze_binary.chunks(hashes,chunk).apply_async()
 
 @app.task
 def analyze_binary(md5sum: str) -> AnalysisResult:
@@ -276,7 +275,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             except Exception as err:
                 logger.debug(f"No binary agailable for {md5sum}: {err}")
                 analysis_result.binary_not_available = True
-                return analysis_result
+                return analysis_result.toJSON()
 
             yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
             compiled_yara_rules = yara.compile(filepaths=yara_rule_map)
@@ -310,12 +309,12 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 compiled_rules_lock.release_read()
         else:
             analysis_result.binary_not_available = True
-        return analysis_result
+        return analysis_result.toJSON()
     except Exception as err:
         error = f"Unexpected error: {err}\n" + traceback.format_exc()
         logger.error(error)
         analysis_result.last_error_msg = error
-        return analysis_result
+        return analysis_result.toJSON()
 
 
 def get_high_score(matches) -> int:

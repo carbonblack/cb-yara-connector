@@ -1,3 +1,5 @@
+import json
+
 class AnalysisResult(object):
     def __init__(self,
                  md5,
@@ -20,3 +22,8 @@ class AnalysisResult(object):
         self.stop_future_scans = stop_future_scans
         self.binary_not_available = binary_not_available
         self.misc = misc
+
+    def toJSON(self):
+        return json.dumps(self.__dict__)
+
+
