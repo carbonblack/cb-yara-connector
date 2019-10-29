@@ -21,11 +21,11 @@ import multiprocessing
 
 app = Celery()
 # noinspection PyUnusedName
-app.conf.task_serializer = "json"
+app.conf.task_serializer = "pickle"
 # noinspection PyUnusedName
-app.conf.result_serializer = "json"
+app.conf.result_serializer = "pickle"
 # noinspection PyUnusedName
-app.conf.accept_content = {"json", "pickle"}
+app.conf.accept_content = {"pickle"}
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

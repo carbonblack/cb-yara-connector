@@ -277,7 +277,9 @@ def perform(yara_rule_dir):
 
     conn.close()
 
-    logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
+    num_total_binaries = len(rows)
+
+    logger.info(f"Enumerating modulestore...found {num_total_binaries} resident binaries")
 
     _analyze_save_and_log(
         (row[0].hex() for row in rows),
