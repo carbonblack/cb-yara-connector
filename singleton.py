@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import fcntl
 import logging
@@ -6,21 +7,9 @@ import os
 import sys
 import tempfile
 
+from exceptions import SingleInstanceException
+
 logger = logging.getLogger(__name__)
-
-
-################################################################################
-# Exception Classes
-################################################################################
-
-
-class SingleInstanceException(BaseException):
-    pass
-
-
-################################################################################
-# Primary Classes
-################################################################################
 
 
 class SingleInstance(object):

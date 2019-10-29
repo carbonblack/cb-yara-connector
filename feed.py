@@ -1,3 +1,6 @@
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+
 import base64
 import binascii
 import json

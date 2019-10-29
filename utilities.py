@@ -1,3 +1,6 @@
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+
 ################################################################################
 # This file contains various package-wide utility functions
 ################################################################################
@@ -6,7 +9,7 @@ import os
 
 __all__ = ["YARAHOME", "placehold"]
 
-# self location for the package
+# self location for the package; remember to update this if this file is moved!
 YARAHOME = os.path.dirname(__file__)
 
 

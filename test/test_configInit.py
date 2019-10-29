@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright © 2018-2019 VMware, Inc. All Rights Reserved.
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import os
 from unittest import TestCase
@@ -12,6 +12,30 @@ TESTS = os.path.abspath(os.path.dirname(__file__))
 
 
 class TestConfigurationInit(TestCase):
+
+    def setUp(self):
+        globals.g_config = {}
+        globals.g_output_file = './yara_feed.json'
+        globals.g_remote = False
+        globals.g_cb_server_url = 'https://127.0.0.1'
+        globals.g_cb_server_token = ''
+        globals.g_broker_url = ''
+        globals.g_yara_rules_dir = '{YARA}/yara_rules'
+        globals.g_yara_rule_map = {}
+        globals.g_yara_rule_map_hash_list = []
+        globals.g_postgres_host = '127.0.0.1'
+        globals.g_postgres_username = 'cb'
+        globals.g_postgres_password = ''
+        globals.g_postgres_port = 5002
+        globals.g_postgres_db = 'cb'
+        globals.g_max_hashes = 8
+        globals.g_num_binaries_not_available = 0
+        globals.g_num_binaries_analyzed = 0
+        globals.g_disable_rescan = True
+        globals.g_num_days_binaries = 365
+        globals.g_vacuum_seconds = -1
+        globals.g_vacuum_script = '{YARA}/scripts/vacuumscript.sh'
+        globals.g_feed_database_dir = "./"
 
     def test_01_missing_config(self):
         """

@@ -1,3 +1,6 @@
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+
 ################################################################################
 # This module contains global variables used by a single instance.
 #

@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright © 2018-2019 VMware, Inc. All Rights Reserved.
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import configparser
 import logging
@@ -124,8 +124,8 @@ class ConfigurationInit(object):
         if globals.g_vacuum_seconds > 0:
             globals.g_vacuum_script = self._as_path("vacuum_script", required=True, is_dir=False,
                                                     default=globals.g_vacuum_script)
-            logger.warning((f"Vacuum Script '{globals.g_vacuum_script}' is enabled; ",
-                            "use this advanced feature at your own discretion!"))
+            logger.warning(f"Vacuum Script '{globals.g_vacuum_script}' is enabled; " +
+                           "use this advanced feature at your own discretion!")
         else:
             if self._as_path("vacuum_script", required=False, default=globals.g_vacuum_script):
                 logger.debug(f"{self.source} has 'vacuum_script' defined, but it is disabled")
@@ -201,9 +201,10 @@ class ConfigurationInit(object):
         :raises ValueError:
         """
         value = self._as_str(param, required)
-        if (value is None or value == "") and default is not None:
-            logger.warning(f"{self.source} has no defined '{param}'; using default of '{default}'")
-            return default
+        use_default = default if default is None else max(default, min_value)
+        if (value is None or value == "") and use_default is not None:
+            logger.warning(f"{self.source} has no defined '{param}'; using default of '{use_default}'")
+            return use_default
         else:
             return None if (value is None or value == "") else max(int(value), min_value)
 
