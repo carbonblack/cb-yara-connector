@@ -10,7 +10,7 @@ from typing import List
 import yara
 from cbapi.response.models import Binary
 from cbapi.response.rest_api import CbResponseAPI
-from celery import bootsteps, Celery
+from celery import bootsteps, Celery, group
 from celery.result import ResultSet
 
 import globals
@@ -230,7 +230,7 @@ def update_yara_rules():
     compiled_rules_lock.acquire_read()
     if compiled_yara_rules:
         #compiled_rules_lock.release_read()
-        return
+        return  
     else:
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         new_rules_object = yara.compile(filepaths=yara_rule_map)
@@ -243,8 +243,9 @@ def update_yara_rules():
 
 
 @app.task
-def analyze_bins(hashes, chunk=10):
-    return analyze_binary.chunks(hashes,chunk).apply_async()
+def analyze_bins(hashes):
+    return group(analyze_binary.s(h) for h in hashes).apply_async()
+    #return analyze_binary.chunks(hashes,chunk).apply_async()
 
 @app.task
 def analyze_binary(md5sum: str) -> AnalysisResult:
