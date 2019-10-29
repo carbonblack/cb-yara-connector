@@ -133,11 +133,11 @@ def verify_config(config_file: str) -> None:
             globals.g_cb_server_token = the_config['cb_server_token']
         else:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
-    else:
-        if 'broker_url' in the_config and the_config['broker_url'].strip() != "":
-            app.conf.update(broker_url=the_config['broker_url'], result_backend=the_config['broker_url'])
-        else:
-            raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
+    
+    if 'broker_url' in the_config and the_config['broker_url'].strip() != "":
+        app.conf.update(broker_url=the_config['broker_url'], result_backend=the_config['broker_url'])
+    elif remote:
+        raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
 
 
 def add_worker_arguments(parser):

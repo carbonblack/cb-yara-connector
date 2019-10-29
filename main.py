@@ -18,6 +18,7 @@ import psycopg2
 # noinspection PyPackageRequirements
 import yara
 from celery import group
+from celery.bin import worker
 from peewee import SqliteDatabase
 
 import globals
@@ -282,9 +283,11 @@ def perform(yara_rule_dir):
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
-    for result in analyze_bins([row[0].hex() for row in rows]).collect():
-        print(result)
-        save_result(result)
+    for result_set in analyze_bins([row[0].hex() for row in rows]):
+        print(result_set)
+        for result in result_set.collect():
+            print(result)
+            save_result(result)
 
     generate_feed_from_db()
 
@@ -427,15 +430,13 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         else:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
         # TODO: validate url & token with test call?
-    else:
-        if "broker_url" in the_config and the_config["broker_url"].strip() != "":
-            app.conf.update(
-                broker_url=the_config["broker_url"],
-                result_backend=the_config["broker_url"],
-            )
-        else:
-            raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
-        # TODO: validate broker with test call?
+
+    if "broker_url" in the_config and the_config["broker_url"].strip() != "":
+        app.conf.update(
+            broker_url=the_config["broker_url"], result_backend=the_config["broker_url"]
+        )
+    elif globals.g_remote:
+        raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
 
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
         check = os.path.abspath(
@@ -622,6 +623,8 @@ def main():
                 db.connect()
                 db.create_tables([BinaryDetonationResult])
                 generate_feed_from_db()
+                if not (globals.g_remote):
+                    launch_local_worker()
                 perform(globals.g_yara_rules_dir)
             except KeyboardInterrupt:
                 logger.info("\n\n##### Interupted by User!\n")
@@ -630,6 +633,11 @@ def main():
                 logger.error(f"There were errors executing yara rules: {err}")
                 logger.error(traceback.format_exc())
                 sys.exit(1)
+
+
+def launch_local_worker():
+    localworker = worker.worker(app=app)
+    localworker.run()
 
 
 if __name__ == "__main__":
