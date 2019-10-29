@@ -28,7 +28,7 @@ app.conf.result_serializer = "json"
 app.conf.accept_content = {"json", "pickle"}
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 class ReadWriteLock:

@@ -12,6 +12,8 @@ import traceback
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import threading
+
 import humanfriendly
 import psycopg2
 
@@ -284,7 +286,7 @@ def perform(yara_rule_dir):
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
     for result_set in analyze_bins.chunks(
-        [row[0].hex() for row in rows], globals.MAX_HASHES
+        [tuple(row[0].hex()) for row in rows], globals.MAX_HASHES
     ).apply_async():
         print(result_set)
         for result in result_set.collect():
@@ -626,7 +628,12 @@ def main():
                 db.create_tables([BinaryDetonationResult])
                 generate_feed_from_db()
                 if not (globals.g_remote):
-                    launch_local_worker(args.config_file)
+                    t = threading.Thread(
+                        target=launch_local_worker,
+                        kwargs={"config_file": args.config_file},
+                    )
+                    t.daemon = True
+                    t.start()
                 perform(globals.g_yara_rules_dir)
             except KeyboardInterrupt:
                 logger.info("\n\n##### Interupted by User!\n")
@@ -637,7 +644,7 @@ def main():
                 sys.exit(1)
 
 
-def launch_local_worker(config_file):
+def launch_local_worker(config_file=None):
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
 
