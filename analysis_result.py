@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 class AnalysisResult(object):
     def __init__(self,
@@ -24,6 +25,9 @@ class AnalysisResult(object):
         self.misc = misc
 
     def toJSON(self):
-        return json.dumps(self.__dict__)
+        dict_rep = self.__dict__
+        for key, value in dict_rep.items():
+            if isinstance(value, datetime):
+                dict_rep[key] = value.timetuple()
 
-
+        return json.dumps(dict_rep)

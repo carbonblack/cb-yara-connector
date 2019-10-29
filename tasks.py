@@ -25,7 +25,7 @@ app.conf.task_serializer = "json"
 # noinspection PyUnusedName
 app.conf.result_serializer = "json"
 # noinspection PyUnusedName
-app.conf.accept_content = {"json"}
+app.conf.accept_content = {"json", "pickle"}
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
