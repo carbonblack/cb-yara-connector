@@ -242,8 +242,8 @@ def update_yara_rules():
 
 
 @app.task
-def analyze_bins(hashes):
-    return ResultSet(analyze_binary.delay(h) for h in hashes)
+def analyze_bins(hashes, chunk=10):
+    return analyze_binary.chunks(hashes,chunk).apply_async()
 
 @app.task
 def analyze_binary(md5sum: str) -> AnalysisResult:
@@ -276,12 +276,12 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 analysis_result.binary_not_available = True
                 return analysis_result
 
-            #yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-            #yara_rules = yara.compile(filepaths=yara_rule_map)
+            yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+            compiled_yara_rules = yara.compile(filepaths=yara_rule_map)
 
             try:
                 # matches = "debug"
-                update_yara_rules()
+                #update_yara_rules()
                 matches = compiled_yara_rules.match(data=binary_data, timeout=30)
                 if matches:
                     score = get_high_score(matches)

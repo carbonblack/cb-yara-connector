@@ -282,7 +282,8 @@ def perform(yara_rule_dir):
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
-    for result in analyze_bins.delay([row[0].hex() for row in rows]).collect():
+    for result in analyze_bins([row[0].hex() for row in rows]).collect():
+        print(result)
         save_result(result)
 
     generate_feed_from_db()
