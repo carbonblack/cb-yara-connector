@@ -74,7 +74,6 @@ compiled_yara_rules = None
 compiled_rules_lock = ReadWriteLock()
 
 
-
 # noinspection DuplicatedCode
 def verify_config(config_file: str) -> None:
     """
@@ -96,61 +95,79 @@ def verify_config(config_file: str) -> None:
         raise CbInvalidConfig(err)
 
     logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section('general'):
+    if not config.has_section("general"):
         raise CbInvalidConfig(f"{header} does not have a 'general' section")
 
-    the_config = config['general']
+    the_config = config["general"]
 
-    if 'yara_rules_dir' in the_config and the_config['yara_rules_dir'].strip() != "":
-        check = os.path.abspath(os.path.expanduser(placehold(the_config["yara_rules_dir"])))
+    if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
+        check = os.path.abspath(
+            os.path.expanduser(placehold(the_config["yara_rules_dir"]))
+        )
         if os.path.exists(check):
             if os.path.isdir(check):
                 globals.g_yara_rules_dir = check
             else:
-                raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) is not a directory")
+                raise CbInvalidConfig(
+                    f"{header} specified 'yara_rules_dir' ({check}) is not a directory"
+                )
         else:
-            raise CbInvalidConfig(f"{header} specified 'yara_rules_dir' ({check}) does not exist")
+            raise CbInvalidConfig(
+                f"{header} specified 'yara_rules_dir' ({check}) does not exist"
+            )
     else:
         raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
 
-    if 'worker_type' in the_config:
-        if the_config['worker_type'] == 'local' or the_config['worker_type'].strip() == "":
+    if "worker_type" in the_config:
+        if (
+            the_config["worker_type"] == "local"
+            or the_config["worker_type"].strip() == ""
+        ):
             remote = False
-        elif the_config['worker_type'] == 'remote':
+        elif the_config["worker_type"] == "remote":
             remote = True
         else:  # anything else
-            raise CbInvalidConfig(f"{header} has an invalid 'worker_type' ({the_config['worker_type']})")
+            raise CbInvalidConfig(
+                f"{header} has an invalid 'worker_type' ({the_config['worker_type']})"
+            )
     else:
         remote = False
 
     # local/remote configuration data
     if not remote:
-        if 'cb_server_url' in the_config and the_config['cb_server_url'].strip() != "":
-            globals.g_cb_server_url = the_config['cb_server_url']
+        if "cb_server_url" in the_config and the_config["cb_server_url"].strip() != "":
+            globals.g_cb_server_url = the_config["cb_server_url"]
         else:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
-        if 'cb_server_token' in the_config and the_config['cb_server_token'].strip() != "":
-            globals.g_cb_server_token = the_config['cb_server_token']
+        if (
+            "cb_server_token" in the_config
+            and the_config["cb_server_token"].strip() != ""
+        ):
+            globals.g_cb_server_token = the_config["cb_server_token"]
         else:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
-    
-    if 'broker_url' in the_config and the_config['broker_url'].strip() != "":
-        app.conf.update(broker_url=the_config['broker_url'], result_backend=the_config['broker_url'])
+
+    if "broker_url" in the_config and the_config["broker_url"].strip() != "":
+        app.conf.update(
+            broker_url=the_config["broker_url"], result_backend=the_config["broker_url"]
+        )
     elif remote:
         raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
 
 
 def add_worker_arguments(parser):
-    parser.add_argument('--config-file', default='yara_worker.conf', help='Yara Worker Config')
+    parser.add_argument(
+        "--config-file", default="yara_worker.conf", help="Yara Worker Config"
+    )
 
 
-app.user_options['worker'].add(add_worker_arguments)
+app.user_options["worker"].add(add_worker_arguments)
 
 
 class MyBootstep(bootsteps.Step):
 
     # noinspection PyUnusedLocal
-    def __init__(self, worker, config_file='yara_worker.conf', **options):
+    def __init__(self, worker, config_file="yara_worker.conf", **options):
         super().__init__(self)
         print(options)
         verify_config(config_file)
@@ -158,7 +175,7 @@ class MyBootstep(bootsteps.Step):
         # g_yara_rules_dir = yara_rules_dir
 
 
-app.steps['worker'].add(MyBootstep)
+app.steps["worker"].add(MyBootstep)
 
 
 def generate_rule_map(yara_rule_path: str) -> dict:
@@ -174,7 +191,7 @@ def generate_rule_map(yara_rule_path: str) -> dict:
             if not os.path.isfile(fullpath):
                 continue
 
-            last_dot = fn.rfind('.')
+            last_dot = fn.rfind(".")
             if last_dot != -1:
                 namespace = fn[:last_dot]
             else:
@@ -198,7 +215,7 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
             fullpath = os.path.join(yara_rule_path, fn)
             if not os.path.isfile(fullpath):
                 continue
-            with open(os.path.join(yara_rule_path, fn), 'rb') as fp:
+            with open(os.path.join(yara_rule_path, fn), "rb") as fp:
                 data = fp.read()
                 # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
                 md5 = hashlib.md5()
@@ -207,6 +224,7 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
 
     temp_list.sort()
     return temp_list
+
 
 @app.task
 def update_yara_rules_remote(yara_rules: dict) -> None:
@@ -217,7 +235,7 @@ def update_yara_rules_remote(yara_rules: dict) -> None:
     """
     try:
         for key in yara_rules:
-            with open(os.path.join(globals.g_yara_rules_dir, key), 'wb') as fp:
+            with open(os.path.join(globals.g_yara_rules_dir, key), "wb") as fp:
                 fp.write(yara_rules[key])
     except Exception as err:
         logger.error(f"Error writing rule file: {err}")
@@ -229,8 +247,8 @@ def update_yara_rules():
     global compiled_rules_lock
     compiled_rules_lock.acquire_read()
     if compiled_yara_rules:
-        #compiled_rules_lock.release_read()
-        return  
+        # compiled_rules_lock.release_read()
+        return
     else:
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         new_rules_object = yara.compile(filepaths=yara_rule_map)
@@ -243,10 +261,6 @@ def update_yara_rules():
 
 
 @app.task
-def analyze_bins(hashes):
-    return group(analyze_binary.s(h) for h in hashes).apply_async()
-
-@app.task
 def analyze_binary(md5sum: str) -> AnalysisResult:
     """
     Analyze binary information.
@@ -254,7 +268,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     :return: AnalysisResult instance
     """
     global compiled_yara_rules
-    global compiled_rules_lock    
+    global compiled_rules_lock
 
     logger.debug(f"{md5sum}: in analyze_binary")
     analysis_result = AnalysisResult(md5sum)
@@ -262,10 +276,12 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     try:
         analysis_result.last_scan_date = datetime.datetime.now()
 
-        cb = CbResponseAPI(url=globals.g_cb_server_url,
-                           token=globals.g_cb_server_token,
-                           ssl_verify=False,
-                           timeout=5)
+        cb = CbResponseAPI(
+            url=globals.g_cb_server_url,
+            token=globals.g_cb_server_token,
+            ssl_verify=False,
+            timeout=5,
+        )
 
         binary_query = cb.select(Binary).where(f"md5:{md5sum}")
 
@@ -275,23 +291,26 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             except Exception as err:
                 logger.debug(f"No binary agailable for {md5sum}: {err}")
                 analysis_result.binary_not_available = True
-                return analysis_result.toJSON()
+                return analysis_result
 
-            yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-            compiled_yara_rules = yara.compile(filepaths=yara_rule_map)
+            # yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+            # compiled_yara_rules = yara.compile(filepaths=yara_rule_map)
 
             try:
                 # matches = "debug"
-                #update_yara_rules()
+                update_yara_rules()
                 matches = compiled_yara_rules.match(data=binary_data, timeout=30)
                 if matches:
                     score = get_high_score(matches)
                     analysis_result.score = score
-                    analysis_result.short_result = "Matched yara rules: %s" % ', '.join(
-                        [match.rule for match in matches])
+                    analysis_result.short_result = "Matched yara rules: %s" % ", ".join(
+                        [match.rule for match in matches]
+                    )
                     # analysis_result.short_result = "Matched yara rules: debug"
                     analysis_result.long_result = analysis_result.long_result
-                    analysis_result.misc = generate_yara_rule_map_hash(globals.g_yara_rules_dir)
+                    analysis_result.misc = generate_yara_rule_map_hash(
+                        globals.g_yara_rules_dir
+                    )
                 else:
                     analysis_result.score = 0
                     analysis_result.short_result = "No Matches"
@@ -303,18 +322,20 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 # Yara errored while trying to scan binary
                 analysis_result.last_error_msg = f"Yara exception: {err}"
             except Exception as err:
-                analysis_result.last_error_msg = f"Other exception while matching rules: {err}\n" + \
-                                                 traceback.format_exc()
+                analysis_result.last_error_msg = (
+                    f"Other exception while matching rules: {err}\n"
+                    + traceback.format_exc()
+                )
             finally:
                 compiled_rules_lock.release_read()
         else:
             analysis_result.binary_not_available = True
-        return analysis_result.toJSON()
+        return analysis_result
     except Exception as err:
         error = f"Unexpected error: {err}\n" + traceback.format_exc()
         logger.error(error)
         analysis_result.last_error_msg = error
-        return analysis_result.toJSON()
+        return analysis_result
 
 
 def get_high_score(matches) -> int:
@@ -327,8 +348,8 @@ def get_high_score(matches) -> int:
     """
     score = 0
     for match in matches:
-        if match.meta.get('score', 0) > score:
-            score = match.meta.get('score')
+        if match.meta.get("score", 0) > score:
+            score = match.meta.get("score")
     if score == 0:
         return 100
     else:

@@ -29,13 +29,7 @@ from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
 from exceptions import CbInvalidConfig
 from feed import CbFeed, CbFeedInfo, CbReport
-from tasks import (
-    analyze_binary,
-    app,
-    generate_rule_map,
-    update_yara_rules_remote,
-    analyze_bins,
-)
+from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
 from utilities import placehold
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
@@ -285,13 +279,13 @@ def perform(yara_rule_dir):
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
-    for result_set in analyze_bins.chunks(
-        [tuple(row[0].hex()) for row in rows], globals.MAX_HASHES
-    ).apply_async():
-        print(result_set)
-        for result in result_set.collect():
-            print(result)
-            save_result(result)
+    _analyze_save_and_log(
+        (row[0].hex() for row in rows),
+        start_time,
+        num_binaries_skipped,
+        num_total_binaries,
+        True
+    )
 
     generate_feed_from_db()
 
@@ -320,8 +314,8 @@ def _check_hash_against_feed(md5_hash):
     return True
 
 
-def _analyze_save_and_log(hashes, start_time, num_binaries_skipped, num_total_binaries):
-    analysis_results = analyze_binaries(hashes, local=(not globals.g_remote))
+def _analyze_save_and_log(hashes, start_time, num_binaries_skipped, num_total_binaries, local_override=False):
+    analysis_results = analyze_binaries(hashes, local=(not globals.g_remote or local_override))
     if analysis_results:
         for analysis_result in analysis_results:
             logger.debug(
