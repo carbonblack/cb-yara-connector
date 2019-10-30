@@ -64,7 +64,7 @@ def promise_worker():
                 promise = SCANNING_PROMISE_QUEUE.get()
                 while not promise.ready():
                     time.sleep(1)
-                result = promise.get()
+                result = promise.get(disable_sync_subtasks=False)
                 SCANNING_RESULTS_QUEUE.put(result)
             except Empty:
                 time.sleep(1)
@@ -178,8 +178,11 @@ def analyze_binary_and_queue(md5sum):
 
 
 def analyze_binaries_and_queue(md5_hashes):
-    for hsum in md5_hashes:
-        analyze_binary_and_queue(hsum)
+
+    print(analyze_bins.chunks([tuple(mh) for mh in md5_hashes], globals.MAX_HASHES).apply_async())    
+    
+    """for hsum in md5_hashes:
+        analyze_binary_and_queue(hsum)"""
 
 
 def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
