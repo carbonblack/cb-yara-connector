@@ -49,22 +49,23 @@ logger.setLevel(logging.INFO)
 celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
 
-#contains AsyncResult/Group Result of yara scanning tasks in celery
+# contains AsyncResult/Group Result of yara scanning tasks in celery
 SCANNING_PROMISE_QUEUE = Queue()
-#contains the Resolved AsyncResults ie [AnalysisResult]
+# contains the Resolved AsyncResults ie [AnalysisResult]
 SCANNING_RESULTS_QUEUE = Queue()
-#intended to gracefully signal workers to exit for shutdown
+# intended to gracefully signal workers to exit for shutdown
 WORKER_EXIT_EVENT = Event()
 
-#controls scheduling of database scans
+# controls scheduling of database scans
 DB_SCAN_SCHEDULER = sched.scheduler(time.time, time.sleep)
-
 
 
 """
 promise worker takes a promise from the task-queue and waits for it to resolve, then puts it into the scanning_results_queue
 
 """
+
+
 def promise_worker():
     global WORKER_EXIT_EVENT
     global SCANNING_PROMISE_QUEUE
@@ -83,11 +84,11 @@ def promise_worker():
             time.sleep(1)
 
 
-
 """ Sqlite aint meant to be thread-safe 
 
 This worker writes the result(s) to the configured database file
-""""
+"""
+
 
 def results_worker():
     global WORKER_EXIT_EVENT
@@ -188,21 +189,24 @@ def generate_rule_map_remote(yara_rule_path) -> None:
         time.sleep(0.1)
 
 
-#Scan a binary and enque the promise/future celery returns
+# Scan a binary and enque the promise/future celery returns
 def analyze_binary_and_queue(md5sum):
     global SCANNING_PROMISE_QUEUE
     promise = analyze_binary.delay(md5sum)
     SCANNING_PROMISE_QUEUE.put(promise)
 
-#Scans each binary asyncrhonously not grouping
+
+# Scans each binary asyncrhonously not grouping
 def analyze_binaries_and_queue(md5_hashes):
     for h in md5_hashes:
         analyze_binary_and_queue(h)
 
 
-#Attempts to do work in chunks of MAX_HASHES, at most
+# Attempts to do work in chunks of MAX_HASHES, at most
 def analyze_binaries_and_queue_chunked(md5_hashes):
-    promise = analyze_binary.chunks([(mh,) for mh in md5_hashes], globals.MAX_HASHES).apply_async()    
+    promise = analyze_binary.chunks(
+        [(mh,) for mh in md5_hashes], globals.MAX_HASHES
+    ).apply_async()
     for prom in promise.children:
         SCANNING_PROMISE_QUEUE.put(prom)
 
@@ -730,9 +734,7 @@ def main():
                 perf_thread.daemon = True
                 perf_thread.start()"""
 
-                 perf_thread = Thread(
-                    target=db_scan_worker
-                )
+                perf_thread = Thread(target=db_scan_worker)
                 perf_thread.daemon = True
                 perf_thread.start()
 
@@ -757,12 +759,14 @@ def main():
                 logger.error(traceback.format_exc())
                 sys.exit(1)
 
+
 def db_scan_worker():
-    DB_SCAN_SCHEDULER.enterabs(0,1,do_db_scan)
+    DB_SCAN_SCHEDULER.enterabs(0, 1, do_db_scan)
     DB_SCAN_SCHEDULER.run()
 
+
 def do_db_scan():
-    performance(globals.g_yara_rules_dir)
+    perform(globals.g_yara_rules_dir)
     DB_SCAN_SCHEDULER.enterabs(60, 1, do_db_scan)
 
 
