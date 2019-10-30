@@ -21,7 +21,7 @@ g_cb_server_token = ''
 # noinspection PyUnusedName
 g_broker_url = ''
 
-g_yara_rules_dir = '{YARA}/yara_rules'
+g_yara_rules_dir = '{YARA}/local/yara_rules'
 g_yara_rule_map = {}
 g_yara_rule_map_hash_list = []
 
@@ -43,4 +43,4 @@ g_num_days_binaries = 365
 g_vacuum_seconds = -1
 g_vacuum_script = '{YARA}/scripts/vacuumscript.sh'
 
-g_feed_database_dir = "./"
+g_feed_database_dir = "{YARA}/local"

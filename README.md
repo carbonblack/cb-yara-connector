@@ -1,12 +1,6 @@
 # Installing Yara Agent (Centos/RHEL 6)
 
 The Yara agent must be installed on the same system as Cb Response.
-
-* Create directories
-
-	```
-	mkdir -p /usr/share/cb/integrations/yara/yara_rules
-	```
 	
 * Download Yara Agent
 
@@ -20,10 +14,7 @@ The Yara agent must be installed on the same system as Cb Response.
 	wget -O /usr/share/cb/integrations/yara/yara-logo.png https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.1/yara-logo.png
 	```
 	
-* Create Yara Agent Config File
-
-
-#### Sample Yara Agent Config
+## Create Yara Agent Config
 Copy and modify either `sample_local.conf` or `sample_remote.conf` from the `samples` folder
 to your desired location.
 
@@ -40,6 +31,7 @@ to your desired location.
 ```
 
 #### Example Cron Entry
+_[TBD]_
 
 # Remote Worker Installation (Centos/RHEL 7)
 
@@ -89,7 +81,6 @@ to your desired location.
 	source ./venv/bin/activate
 	pip install -r requirements.txt
 	deactivate
-	mkdir yara_rules
 	```
 	
 	
@@ -116,7 +107,7 @@ to your desired location.
 	; Directory for temporary yara rules storage
 	; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
 	;
-	yara_rules_dir=yara_rules
+	yara_rules_dir={YARA}/local/yara_rules
 	
 * Copy, modify and save to `yara_worker.conf`
 	

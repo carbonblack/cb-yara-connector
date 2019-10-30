@@ -447,9 +447,7 @@ def main():
             try:
                 globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
                 generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase(
-                    os.path.join(globals.g_feed_database_dir, "binary.db")
-                )
+                database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
                 db.initialize(database)
                 db.connect()
                 db.create_tables([BinaryDetonationResult])

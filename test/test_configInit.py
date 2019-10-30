@@ -20,7 +20,7 @@ class TestConfigurationInit(TestCase):
         globals.g_cb_server_url = 'https://127.0.0.1'
         globals.g_cb_server_token = ''
         globals.g_broker_url = ''
-        globals.g_yara_rules_dir = '{YARA}/yara_rules'
+        globals.g_yara_rules_dir = '{YARA}/local/yara_rules'
         globals.g_yara_rule_map = {}
         globals.g_yara_rule_map_hash_list = []
         globals.g_postgres_host = '127.0.0.1'
@@ -35,7 +35,7 @@ class TestConfigurationInit(TestCase):
         globals.g_num_days_binaries = 365
         globals.g_vacuum_seconds = -1
         globals.g_vacuum_script = '{YARA}/scripts/vacuumscript.sh'
-        globals.g_feed_database_dir = "./"
+        globals.g_feed_database_dir = "{YARA}/local"
 
     def test_01_missing_config(self):
         """
