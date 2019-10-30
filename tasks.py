@@ -8,8 +8,9 @@ from typing import List
 
 # noinspection PyPackageRequirements
 import yara
-from cbapi.response.models import Binary
-from cbapi.response.rest_api import CbResponseAPI
+import requests
+import io
+import zipfile
 from celery import bootsteps, Celery, group
 from celery.result import ResultSet
 
@@ -260,6 +261,19 @@ def update_yara_rules():
         return
 
 
+def get_binary_by_hash(url, hsum, token):
+    headers = {"X-Auth-Token": token}
+    request_url = f"{url}/api/v1/binary/{hsum}"
+    response = requests.get(request_url, headers=headers, stream=True)
+    if response:
+        with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
+            fp = the_binary_zip.open("filedata")
+            the_binary_zip.close()
+            return fp
+    else:
+        return None
+
+
 @app.task
 def analyze_binary(md5sum: str) -> AnalysisResult:
     """
@@ -276,60 +290,48 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     try:
         analysis_result.last_scan_date = datetime.datetime.now()
 
-        cb = CbResponseAPI(
-            url=globals.g_cb_server_url,
-            token=globals.g_cb_server_token,
-            ssl_verify=False,
-            timeout=5,
+        binary_data = get_binary_by_hash(
+            globals.g_cb_server_token, md5sum.toUpper(), globals.g_cb_server_token
         )
 
-        binary_query = cb.select(Binary).where(f"md5:{md5sum}")
-
-        if binary_query:
-            try:
-                binary_data = binary_query[0].file.read()
-            except Exception as err:
-                logger.debug(f"No binary agailable for {md5sum}: {err}")
-                analysis_result.binary_not_available = True
-                return analysis_result
-
-            # yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-            # compiled_yara_rules = yara.compile(filepaths=yara_rule_map)
-
-            try:
-                # matches = "debug"
-                update_yara_rules()
-                matches = compiled_yara_rules.match(data=binary_data, timeout=30)
-                if matches:
-                    score = get_high_score(matches)
-                    analysis_result.score = score
-                    analysis_result.short_result = "Matched yara rules: %s" % ", ".join(
-                        [match.rule for match in matches]
-                    )
-                    # analysis_result.short_result = "Matched yara rules: debug"
-                    analysis_result.long_result = analysis_result.long_result
-                    analysis_result.misc = generate_yara_rule_map_hash(
-                        globals.g_yara_rules_dir
-                    )
-                else:
-                    analysis_result.score = 0
-                    analysis_result.short_result = "No Matches"
-            except yara.TimeoutError:
-                # yara timed out
-                analysis_result.last_error_msg = "Analysis timed out after 60 seconds"
-                analysis_result.stop_future_scans = True
-            except yara.Error as err:
-                # Yara errored while trying to scan binary
-                analysis_result.last_error_msg = f"Yara exception: {err}"
-            except Exception as err:
-                analysis_result.last_error_msg = (
-                    f"Other exception while matching rules: {err}\n"
-                    + traceback.format_exc()
-                )
-            finally:
-                compiled_rules_lock.release_read()
-        else:
+        if not binary_data:
+            logger.debug(f"No binary agailable for {md5sum}")
             analysis_result.binary_not_available = True
+            return analysis_result
+
+        try:
+            # matches = "debug"
+            update_yara_rules()
+            matches = compiled_yara_rules.match(data=binary_data, timeout=30)
+            if matches:
+                score = get_high_score(matches)
+                analysis_result.score = score
+                analysis_result.short_result = "Matched yara rules: %s" % ", ".join(
+                    [match.rule for match in matches]
+                )
+                # analysis_result.short_result = "Matched yara rules: debug"
+                analysis_result.long_result = analysis_result.long_result
+                analysis_result.misc = generate_yara_rule_map_hash(
+                    globals.g_yara_rules_dir
+                )
+            else:
+                analysis_result.score = 0
+                analysis_result.short_result = "No Matches"
+        except yara.TimeoutError:
+            # yara timed out
+            analysis_result.last_error_msg = "Analysis timed out after 60 seconds"
+            analysis_result.stop_future_scans = True
+        except yara.Error as err:
+            # Yara errored while trying to scan binary
+            analysis_result.last_error_msg = f"Yara exception: {err}"
+        except Exception as err:
+            analysis_result.last_error_msg = (
+                f"Other exception while matching rules: {err}\n"
+                + traceback.format_exc()
+            )
+        finally:
+            compiled_rules_lock.release_read()
+            binary_data.close()
         return analysis_result
     except Exception as err:
         error = f"Unexpected error: {err}\n" + traceback.format_exc()

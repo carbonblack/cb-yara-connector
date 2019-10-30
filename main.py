@@ -318,6 +318,7 @@ def _check_hash_against_feed(md5_hash):
 
 def _analyze_save_and_log(hashes, start_time, num_binaries_skipped, num_total_binaries, local_override=False):
     analysis_results = analyze_binaries(hashes, local=(not globals.g_remote and not local_override))
+    logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
             logger.debug(
