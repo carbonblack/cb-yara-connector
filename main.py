@@ -96,8 +96,8 @@ def results_worker():
     while not (WORKER_EXIT_EVENT.is_set()):
         if not (SCANNING_RESULTS_QUEUE.empty()):
             try:
-                results = SCANNING_RESULTS_QUEUE.get()
-                save_results(results)
+                result = SCANNING_RESULTS_QUEUE.get()
+                save_result(result)
             except Empty:
                 time.sleep(1)
         else:
@@ -761,13 +761,13 @@ def main():
 
 
 def db_scan_worker():
-    DB_SCAN_SCHEDULER.enterabs(0, 1, do_db_scan)
+    DB_SCAN_SCHEDULER.enter(0, 1, do_db_scan)
     DB_SCAN_SCHEDULER.run()
 
 
 def do_db_scan():
     perform(globals.g_yara_rules_dir)
-    DB_SCAN_SCHEDULER.enterabs(60, 1, do_db_scan)
+    DB_SCAN_SCHEDULER.enter(60, 1, do_db_scan)
 
 
 def launch_local_worker(config_file=None):
