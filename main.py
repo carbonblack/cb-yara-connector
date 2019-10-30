@@ -691,7 +691,7 @@ def main():
                 generate_feed_from_db()
 
                 if not (globals.g_remote):
-                    t = threading.Thread(
+                    t = Thread(
                         target=launch_local_worker,
                         kwargs={"config_file": args.config_file},
                     )
@@ -699,19 +699,19 @@ def main():
                     t.start()
 
                 logger.debug("Starting perf thread")
-                perf_thread = threading.Thread(
+                perf_thread = Thread(
                     target=perform, args=(globals.g_yara_rules_dir,)
                 )
                 perf_thread.daemon = True
                 perf_thread.start()
 
                 logger.debug("Starting promise thread")
-                promise_worker_thread = threading.Thread(target=promise_worker)
+                promise_worker_thread = Thread(target=promise_worker)
                 promise_worker_thread.daemon = True
                 promise_worker_thread.start()
 
                 logger.debug("Starting results saver thread")
-                results_worker_thread = threading.Thread(target=results_worker)
+                results_worker_thread = Thread(target=results_worker)
                 results_worker_thread.daemon = True
                 results_worker_thread.start()
 
