@@ -12,7 +12,8 @@ import traceback
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-import threading
+from threading import Thread, Event
+from queue import Queue, Empty
 
 import humanfriendly
 import psycopg2
@@ -46,6 +47,43 @@ logger.setLevel(logging.INFO)
 
 celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
+
+
+SCANNING_PROMISE_QUEUE = Queue()
+SCANNING_RESULTS_QUEUE = Queue()
+WORKER_EXIT_EVENT = Event()
+
+
+def promise_worker():
+    global WORKER_EXIT_EVENT
+    global SCANNING_PROMISE_QUEUE
+    global SCANNING_RESULTS_QUEUE
+    while not (WORKER_EXIT_EVENT.is_set()):
+        if not (SCANNING_PROMISE_QUEUE.empty()):
+            try:
+                promise = SCANNING_PROMISE_QUEUE.get()
+                while not promise.ready():
+                    time.sleep(1)
+                result = promise.get()
+                SCANNING_RESULTS_QUEUE.put(result)
+            except Empty:
+                time.sleep(1)
+        else:
+            time.sleep(1)
+
+
+def results_worker():
+    global WORKER_EXIT_EVENT
+    global SCANNING_RESULTS_QUEUE
+    while not (WORKER_EXIT_EVENT.is_set()):
+        if not (SCANNING_RESULTS_QUEUE.empty()):
+            try:
+                result = SCANNING_RESULTS_QUEUE.get()
+                save_result(result)
+            except Empty:
+                time.sleep(1)
+        else:
+            time.sleep(1)
 
 
 def generate_feed_from_db() -> None:
@@ -131,6 +169,17 @@ def generate_rule_map_remote(yara_rule_path) -> None:
     globals.g_yara_rule_map = ret_dict
     while not result.ready():
         time.sleep(0.1)
+
+
+def analyze_binary_and_queue(md5sum):
+    global SCANNING_PROMISE_QUEUE
+    promise = analyze_binary.delay(md5sum)
+    SCANNING_PROMISE_QUEUE.put(promise)
+
+
+def analyze_binaries_and_queue(md5_hashes):
+    for hsum in md5_hashes:
+        analyze_binary_and_queue(hsum)
 
 
 def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
@@ -299,9 +348,9 @@ def perform(yara_rule_dir):
 
     md5_hashes = list(row[0].hex() for row in rows)
 
-    analyze_binaries(md5_hashes, True)
+    analyze_binaries_and_queue(md5_hashes)
 
-    generate_feed_from_db()
+    # generate_feed_from_db()
 
 
 def _check_hash_against_feed(md5_hash):
@@ -640,6 +689,7 @@ def main():
                 db.connect()
                 db.create_tables([BinaryDetonationResult])
                 generate_feed_from_db()
+
                 if not (globals.g_remote):
                     t = threading.Thread(
                         target=launch_local_worker,
@@ -647,7 +697,27 @@ def main():
                     )
                     t.daemon = True
                     t.start()
-                perform(globals.g_yara_rules_dir)
+
+                logger.debug("Starting perf thread")
+                perf_thread = threading.Thread(
+                    target=perform, args=(globals.g_yara_rules_dir,)
+                )
+                perf_thread.daemon = True
+                perf_thread.start()
+
+                logger.debug("Starting promise thread")
+                promise_worker_thread = threading.Thread(target=promise_worker)
+                promise_worker_thread.daemon = True
+                promise_worker_thread.start()
+
+                logger.debug("Starting results saver thread")
+                results_worker_thread = threading.Thread(target=results_worker)
+                results_worker_thread.daemon = True
+                results_worker_thread.start()
+
+                input("Press any key to shutdown")
+                WORKER_EXIT_EVENT.set()
+
             except KeyboardInterrupt:
                 logger.info("\n\n##### Interupted by User!\n")
                 sys.exit(2)
