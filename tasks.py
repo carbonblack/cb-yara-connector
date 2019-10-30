@@ -101,6 +101,17 @@ def verify_config(config_file: str) -> None:
 
     the_config = config["general"]
 
+    postgres_port = the_config["postgres_port"]
+    postgres_host = the_config["postgres_host"]
+    postgres_db = the_config["postgres_db"]
+    postgres_user = the_config["postgres_username"]
+    postgres_password = the_config["postgres_password"]
+    # result_backend = 'db+postgresql://scott:tiger@localhost/mydatabase'
+
+    postgres_con_str = f"db+postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
+
+    app.conf.update(results_backend=postgres_con_str)
+
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
         check = os.path.abspath(
             os.path.expanduser(placehold(the_config["yara_rules_dir"]))
@@ -149,9 +160,7 @@ def verify_config(config_file: str) -> None:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
 
     if "broker_url" in the_config and the_config["broker_url"].strip() != "":
-        app.conf.update(
-            broker_url=the_config["broker_url"], result_backend=the_config["broker_url"]
-        )
+        app.conf.update(broker_url=the_config["broker_url"])
     elif remote:
         raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
 
@@ -272,6 +281,11 @@ def get_binary_by_hash(url, hsum, token):
             return fp
     else:
         return None
+
+
+@app.task
+def analyze_bins(hashes):
+    return group(analyze_binary.s(h) for h in hashes).apply_async()
 
 
 @app.task
