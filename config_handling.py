@@ -99,17 +99,11 @@ class ConfigurationInit(object):
         :raises CbInvalidConfig:
         :raises ValueError:
         """
-
-        # TODO: validate url & token with test call (if local)
-        # TODO: validate broker with test call (if remote)
-
         globals.g_postgres_host = self._as_str("postgres_host", default=globals.g_postgres_host)
         globals.g_postgres_username = self._as_str("postgres_username", default=globals.g_postgres_username)
         globals.g_postgres_password = self._as_str("postgres_password", required=True)
         globals.g_postgres_db = self._as_str("postgres_db", default=globals.g_postgres_username)
         globals.g_postgres_port = self._as_int("postgres_port", default=globals.g_postgres_port)
-
-        # TODO: validate postgres connection with supplied information?
 
         value = self._as_int("niceness")
         if value:

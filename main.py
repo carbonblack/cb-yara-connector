@@ -26,8 +26,10 @@ import singleton
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
 from config_handling import ConfigurationInit
+from exceptions import SingleInstanceException
 from feed import CbFeed, CbFeedInfo, CbReport
 from tasks import analyze_binary, generate_rule_map, update_yara_rules_remote
+from utilities import placehold
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)
@@ -42,7 +44,6 @@ celery_logger.setLevel(logging.ERROR)
 def generate_feed_from_db() -> None:
     """
     Creates a feed based on specific database information.
-    :return:
     """
     query = BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0)
 
@@ -76,13 +77,11 @@ def generate_feed_from_db() -> None:
         fp.write(feed.dump())
 
 
-# noinspection DuplicatedCode
 def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
     """
     Create a list of hashes for each yara rule.
 
     :param yara_rule_path: the path to where the yara rules are stored.
-    :return:
     """
     temp_list = []
     for fn in os.listdir(yara_rule_path):
@@ -92,7 +91,6 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
                 continue
             with open(os.path.join(yara_rule_path, fn), "rb") as fp:
                 data = fp.read()
-                # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
                 md5 = hashlib.md5()
                 md5.update(data)
                 temp_list.append(str(md5.hexdigest()))
@@ -104,8 +102,8 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
 def generate_rule_map_remote(yara_rule_path: str) -> None:
     """
     Get remote rules and store into an internal map keyed by file name.
-    :param yara_rule_path: path to wheer thr rules are stored
-    :return:
+
+    :param yara_rule_path: path to where the rules are stored
     """
     ret_dict = {}
     for fn in os.listdir(yara_rule_path):
@@ -202,8 +200,9 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
 
 def get_database_conn():
     """
-    Generate a database connection.
-    :return:
+    Generate a database connection based on our postgres settings.
+
+    :return: database connection
     """
     logger.info("Connecting to Postgres database...")
     conn = psycopg2.connect(
@@ -220,6 +219,7 @@ def get_database_conn():
 def get_cursor(conn, start_date_binaries: datetime):
     """
     Get a query qursor into the database.
+
     :param conn: database connection
     :param start_date_binaries: Timestamp representing the earliest time to check for binaries
     :return: cursor pointing to the query results
@@ -241,20 +241,21 @@ def execute_script() -> None:
     """
     logger.info("!!!Executing vacuum script!!!")
 
-    target = os.path.join(os.getcwd(), globals.g_vacuum_script)
-
-    prog = subprocess.Popen(target, shell=True, universal_newlines=True)
+    prog = subprocess.Popen(globals.g_vacuum_script, shell=True, universal_newlines=True)
     stdout, stderr = prog.communicate()
-    logger.info(stdout)
-    logger.error(stderr)
+    if len(stdout.strip()) > 0:
+        logger.info(stdout)
+    if len(stderr.strip()) > 0:
+        logger.error(stderr)
     if prog.returncode:
-        logger.warning("program returned error code {0}".format(prog.returncode))
+        logger.warning(f"program returned error code {prog.returncode}")
     logger.info("!!!Done Executing vacuum script!!!")
 
 
 def perform(yara_rule_dir: str) -> None:
     """
     Perform a yara search.
+
     :param yara_rule_dir: location of the rules directory
     """
     if globals.g_remote:
@@ -312,7 +313,7 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     """
     Check if the found hash matches our feed criteria.
 
-    :param md5_hash:
+    :param md5_hash: hash to be checked
     :return: True if the binary does not exist
     """
     query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
@@ -341,7 +342,7 @@ def _analyze_save_and_log(hashes: List[str], start_time: float, num_binaries_ski
     :param hashes: List of hashes
     :param start_time: start time of the operation (python time)
     :param num_binaries_skipped: numb er of binaries skipped for any reason
-    :param num_total_binaries: numb er of binaries seen
+    :param num_total_binaries: number of binaries seen
     """
     analysis_results = analyze_binaries(hashes, local=(not globals.g_remote))
     if analysis_results:
@@ -358,9 +359,10 @@ def _analyze_save_and_log(hashes: List[str], start_time: float, num_binaries_ski
 def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
     """
     Simple method to log yara work.
+
     :param start_time: start time for the work
     :param num_binaries_skipped: numb er of binaries skipped for any reason
-    :param num_total_binaries: numb er of binaries seen
+    :param num_total_binaries: number of binaries seen
     """
     elapsed_time = time.time() - start_time
     logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
@@ -369,95 +371,111 @@ def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binari
     logger.debug(f"   number binaries unavailable: {globals.g_num_binaries_not_available}")
     logger.info(f"total binaries from db: {num_total_binaries}")
     logger.debug("   binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
-    logger.info("num binaries score greater than zero: {0}".format(
-        len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0)))
-    )
-    logger.info("")
+    overzero = len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))
+    logger.info(f"num binaries score greater than zero: {overzero}\n")
 
 
 ################################################################################
 # Main entrypoint
 ################################################################################
 
+def handle_arguments():
+    """
+    Setup the main program options.
+
+    :return: parsed arguments
+    """
+    parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
+    parser.add_argument(
+        "--config-file",
+        required=True,
+        default="yara_agent.conf",
+        help="Location of the config file",
+    )
+    parser.add_argument(
+        "--log-file",
+        default="{YARA}/local/yara_agent.log",
+        help="Log file output (defaults to `local` folder)"
+    )
+    parser.add_argument(
+        "--output-file",
+        default="{YARA}/local/yara_feed.json",
+        help="output feed file (defaults to `local` folder)"
+    )
+    parser.add_argument(
+        "--validate-yara-rules",
+        action="store_true",
+        help="ONLY validate yara rules in a specified directory",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Provide additional logging"
+    )
+
+    return parser.parse_args()
+
+
 def main():
+    """
+    Main execution function.  Script will exit with a non-zero value based on the following:
+        1: Not the only instance running
+        2: Configuration problem
+        3: User interrupt
+        4: Unexpected Yara scan exception
+        5: Yara rule validation problem
+    """
     try:
-        # check for single operation
         singleton.SingleInstance()
-    except Exception as err:
-        logger.error(
-            f"Only one instance of this script is allowed to run at a time: {err}"
-        )
+    except SingleInstanceException as err:
+        logger.error(f"Only one instance of this script is allowed to run at a time: {err}")
+        sys.exit(1)
+
+    args = handle_arguments()
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+
+    if args.log_file:
+        use_log_file = os.path.abspath(os.path.expanduser(placehold(args.log_file)))
+        formatter = logging.Formatter(logging_format)
+        handler = logging.handlers.RotatingFileHandler(use_log_file, maxBytes=10 * 1000000, backupCount=10)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
     else:
-        parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
-        parser.add_argument(
-            "--config-file",
-            required=True,
-            default="yara_agent.conf",
-            help="Location of the config file",
-        )
-        parser.add_argument(
-            "--log-file", default="yara_agent.log", help="Log file output"
-        )
-        parser.add_argument(
-            "--output-file", default="yara_feed.json", help="output feed file"
-        )
-        parser.add_argument(
-            "--validate-yara-rules",
-            action="store_true",
-            help="ONLY validate yara rules in a specified directory",
-        )
-        parser.add_argument("--debug", action="store_true")
+        use_log_file = None
 
-        args = parser.parse_args()
+    # Verify the configuration file and load up important global variables
+    try:
+        ConfigurationInit(args.config_file, use_log_file)
+    except Exception as err:
+        logger.error(f"Unable to continue due to a configuration problem: {err}")
+        sys.exit(2)
 
-        if args.debug:
-            logger.setLevel(logging.DEBUG)
-
-        if args.log_file:
-            formatter = logging.Formatter(logging_format)
-            handler = logging.handlers.RotatingFileHandler(
-                args.log_file, maxBytes=10 * 1000000, backupCount=10
-            )
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
-
-        # Verify the configuration file and load up important global variables
+    if args.validate_yara_rules:
+        logger.info(f"Validating yara rules in directory: {globals.g_yara_rules_dir}")
+        yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         try:
-            ConfigurationInit(args.config_file, args.output_file)
+            yara.compile(filepaths=yara_rule_map)
+            logger.info("All yara rules compiled successfully")
         except Exception as err:
-            logger.error(f"Unable to continue due to a configuration problem: {err}")
-            sys.exit(1)
-
-        if args.validate_yara_rules:
-            logger.info(
-                "Validating yara rules in directory: {0}".format(
-                    globals.g_yara_rules_dir
-                )
-            )
-            yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-            try:
-                yara.compile(filepaths=yara_rule_map)
-                logger.info("All yara rules compiled successfully")
-            except Exception as err:
-                logger.error(f"There were errors compiling yara rules: {err}")
-                logger.error(traceback.format_exc())
-        else:
-            try:
-                globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-                generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
-                db.initialize(database)
-                db.connect()
-                db.create_tables([BinaryDetonationResult])
-                generate_feed_from_db()
-                perform(globals.g_yara_rules_dir)
-            except KeyboardInterrupt:
-                logger.info("\n\n##### Interupted by User!\n")
-                sys.exit(2)
-            except Exception as err:
-                logger.error(f"There were errors executing yara rules: {err}")
-                logger.error(traceback.format_exc())
-                sys.exit(1)
+            logger.error(f"There were errors compiling yara rules: {err}\n{traceback.format_exc()}")
+            sys.exit(5)
+    else:
+        try:
+            globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+            generate_yara_rule_map_hash(globals.g_yara_rules_dir)
+            database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
+            db.initialize(database)
+            db.connect()
+            db.create_tables([BinaryDetonationResult])
+            generate_feed_from_db()
+            perform(globals.g_yara_rules_dir)
+        except KeyboardInterrupt:
+            logger.info("\n\n##### Interupted by User!\n")
+            sys.exit(3)
+        except Exception as err:
+            logger.error(f"There were errors executing yara rules: {err}\n{traceback.format_exc()}")
+            sys.exit(4)
 
 
 if __name__ == "__main__":
