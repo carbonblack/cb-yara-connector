@@ -178,9 +178,9 @@ def analyze_binary_and_queue(md5sum):
 
 
 def analyze_binaries_and_queue(md5_hashes):
-
-    print(analyze_bins.chunks([tuple(mh) for mh in md5_hashes], globals.MAX_HASHES).apply_async())    
-    
+    promise = analyze_binary.chunks([(mh,) for mh in md5_hashes], globals.MAX_HASHES).apply_async()    
+    for prom in promise.children:
+        SCANNING_PROMISE_QUEUE.put(prom)
     """for hsum in md5_hashes:
         analyze_binary_and_queue(hsum)"""
 
