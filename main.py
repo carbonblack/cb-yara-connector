@@ -78,8 +78,8 @@ def results_worker():
     while not (WORKER_EXIT_EVENT.is_set()):
         if not (SCANNING_RESULTS_QUEUE.empty()):
             try:
-                result = SCANNING_RESULTS_QUEUE.get()
-                save_result(result)
+                results = SCANNING_RESULTS_QUEUE.get()
+                save_results(results)
             except Empty:
                 time.sleep(1)
         else:
@@ -181,8 +181,6 @@ def analyze_binaries_and_queue(md5_hashes):
     promise = analyze_binary.chunks([(mh,) for mh in md5_hashes], globals.MAX_HASHES).apply_async()    
     for prom in promise.children:
         SCANNING_PROMISE_QUEUE.put(prom)
-    """for hsum in md5_hashes:
-        analyze_binary_and_queue(hsum)"""
 
 
 def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
