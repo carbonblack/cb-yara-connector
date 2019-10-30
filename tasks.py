@@ -264,7 +264,7 @@ def update_yara_rules():
 def get_binary_by_hash(url, hsum, token):
     headers = {"X-Auth-Token": token}
     request_url = f"{url}/api/v1/binary/{hsum}"
-    response = requests.get(request_url, headers=headers, stream=True)
+    response = requests.get(request_url, headers=headers, stream=True, verify=False)
     if response:
         with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
             fp = the_binary_zip.open("filedata")
@@ -291,7 +291,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
         analysis_result.last_scan_date = datetime.datetime.now()
 
         binary_data = get_binary_by_hash(
-            globals.g_cb_server_token, md5sum.toUpper(), globals.g_cb_server_token
+            globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token
         )
 
         if not binary_data:
