@@ -112,6 +112,13 @@ def verify_config(config_file: str) -> None:
 
     app.conf.update(results_backend=postgres_con_str)
 
+    app.conf.database_engine_options = {'echo': True}
+
+    app.conf.database_table_names = {
+        'task': 'yara_taskmeta',
+        'group': 'yara_groupmeta',
+    }
+
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
         check = os.path.abspath(
             os.path.expanduser(placehold(the_config["yara_rules_dir"]))
