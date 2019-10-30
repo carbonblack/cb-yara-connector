@@ -243,9 +243,9 @@ def execute_script() -> None:
 
     prog = subprocess.Popen(globals.g_vacuum_script, shell=True, universal_newlines=True)
     stdout, stderr = prog.communicate()
-    if len(stdout.strip()) > 0:
+    if stdout is not None and len(stdout.strip()) > 0:
         logger.info(stdout)
-    if len(stderr.strip()) > 0:
+    if stderr is not None and len(stderr.strip()) > 0:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
