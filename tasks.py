@@ -302,7 +302,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
         try:
             # matches = "debug"
             update_yara_rules()
-            matches = compiled_yara_rules.match(data=binary_data, timeout=30)
+            matches = compiled_yara_rules.match(data=binary_data.read(), timeout=30)
             if matches:
                 score = get_high_score(matches)
                 analysis_result.score = score
