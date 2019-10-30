@@ -239,8 +239,7 @@ def execute_script() -> None:
     """
     Execute a external maintenence script (vacuum script).
     """
-    logger.info("!!!Executing vacuum script!!!")
-
+    logger.info("----- Executing vacuum script ----------------------------------------")
     prog = subprocess.Popen(globals.g_vacuum_script, shell=True, universal_newlines=True)
     stdout, stderr = prog.communicate()
     if stdout is not None and len(stdout.strip()) > 0:
@@ -249,7 +248,7 @@ def execute_script() -> None:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
-    logger.info("!!!Done Executing vacuum script!!!")
+    logger.info("---------------------------------------- Vacuum script completed -----\n")
 
 
 def perform(yara_rule_dir: str) -> None:
