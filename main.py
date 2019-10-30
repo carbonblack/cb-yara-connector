@@ -97,13 +97,11 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
                 md5.update(data)
                 temp_list.append(str(md5.hexdigest()))
 
-    # FUTURE: Would this be better served as a map keyed by md5, with the value being the rule text, as for the
-    #  following method?
     globals.g_yara_rule_map_hash_list = temp_list
     globals.g_yara_rule_map_hash_list.sort()
 
 
-def generate_rule_map_remote(yara_rule_path) -> None:
+def generate_rule_map_remote(yara_rule_path: str) -> None:
     """
     Get remote rules and store into an internal map keyed by file name.
     :param yara_rule_path: path to wheer thr rules are stored
@@ -176,10 +174,7 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
     """
     Save the current analysis results.
 
-    TODO: figure out typing!
-
-    :param analysis_results:
-    :return:
+    :param analysis_results: list of AnalysisResult objects
     """
     for analysis_result in analysis_results:
         if analysis_result.binary_not_available:
@@ -206,6 +201,10 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
 
 
 def get_database_conn():
+    """
+    Generate a database connection.
+    :return:
+    """
     logger.info("Connecting to Postgres database...")
     conn = psycopg2.connect(
         host=globals.g_postgres_host,
@@ -218,7 +217,13 @@ def get_database_conn():
     return conn
 
 
-def get_cursor(conn, start_date_binaries):
+def get_cursor(conn, start_date_binaries: datetime):
+    """
+    Get a query qursor into the database.
+    :param conn: database connection
+    :param start_date_binaries: Timestamp representing the earliest time to check for binaries
+    :return: cursor pointing to the query results
+    """
     cur = conn.cursor(name="yara_agent")
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
@@ -230,8 +235,11 @@ def get_cursor(conn, start_date_binaries):
     return cur
 
 
-def execute_script():
-    logger.warning("!!!Executing vacuum script!!!")
+def execute_script() -> None:
+    """
+    Execute a external maintenence script (vacuum script).
+    """
+    logger.info("!!!Executing vacuum script!!!")
 
     target = os.path.join(os.getcwd(), globals.g_vacuum_script)
 
@@ -241,10 +249,14 @@ def execute_script():
     logger.error(stderr)
     if prog.returncode:
         logger.warning("program returned error code {0}".format(prog.returncode))
-    logger.warning("!!!Done Executing vacuum script!!!")
+    logger.info("!!!Done Executing vacuum script!!!")
 
 
-def perform(yara_rule_dir):
+def perform(yara_rule_dir: str) -> None:
+    """
+    Perform a yara search.
+    :param yara_rule_dir: location of the rules directory
+    """
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
         generate_rule_map_remote(yara_rule_dir)
@@ -256,22 +268,18 @@ def perform(yara_rule_dir):
 
     start_time = time.time()
 
+    # Determine our binaries window (date forward)
     start_datetime = datetime.now()
-
-    conn = get_database_conn()
-
     start_date_binaries = start_datetime - timedelta(days=globals.g_num_days_binaries)
 
+    # make the connection, get the info, get out
+    conn = get_database_conn()
     cur = get_cursor(conn, start_date_binaries)
-
     rows = cur.fetchall()
-
     conn.commit()
-
     conn.close()
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
-
     for row in rows:
         seconds_since_start = (datetime.now() - start_datetime).seconds
         if seconds_since_start >= globals.g_vacuum_seconds > 0:
@@ -288,23 +296,27 @@ def perform(yara_rule_dir):
         else:
             num_binaries_skipped += 1
 
+        # if we hit our hash chunking limit, save and reset
         if len(md5_hashes) >= globals.g_max_hashes:
-            _analyze_save_and_log(
-                md5_hashes, start_time, num_binaries_skipped, num_total_binaries
-            )
+            _analyze_save_and_log(md5_hashes, start_time, num_binaries_skipped, num_total_binaries)
             md5_hashes = []
 
-    _analyze_save_and_log(
-        md5_hashes, start_time, num_binaries_skipped, num_total_binaries
-    )
+    # any finishup work
+    if len(md5_hashes) > 0:
+        _analyze_save_and_log(md5_hashes, start_time, num_binaries_skipped, num_total_binaries)
 
     generate_feed_from_db()
 
 
-def _check_hash_against_feed(md5_hash):
-    query = BinaryDetonationResult.select().where(
-        BinaryDetonationResult.md5 == md5_hash
-    )
+def _check_hash_against_feed(md5_hash: str) -> bool:
+    """
+    Check if the found hash matches our feed criteria.
+
+    :param md5_hash:
+    :return: True if the binary does not exist
+    """
+    query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
+
     if query.exists():
         try:
             bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
@@ -312,29 +324,30 @@ def _check_hash_against_feed(md5_hash):
             if globals.g_disable_rescan and bdr.misc:
                 return False
 
+            # If it is the same then we don't need to scan again
             if scanned_hash_list == globals.g_yara_rule_map_hash_list:
-                #
-                # If it is the same then we don't need to scan again
-                #
                 return False
-        except Exception as e:
-            logger.error(
-                "Unable to decode yara rule map hash from database: {0}".format(e)
-            )
+        except Exception as err:
+            logger.error(f"Unable to decode yara rule map hash from database: {err}")
             return False
     return True
 
 
-def _analyze_save_and_log(hashes, start_time, num_binaries_skipped, num_total_binaries):
+def _analyze_save_and_log(hashes: List[str], start_time: float, num_binaries_skipped: int,
+                          num_total_binaries: int) -> None:
+    """
+    Analyise and save any found binaries.
+
+    :param hashes: List of hashes
+    :param start_time: start time of the operation (python time)
+    :param num_binaries_skipped: numb er of binaries skipped for any reason
+    :param num_total_binaries: numb er of binaries seen
+    """
     analysis_results = analyze_binaries(hashes, local=(not globals.g_remote))
     if analysis_results:
         for analysis_result in analysis_results:
-            logger.debug(
-                (
-                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
-                )
-            )
+            logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                          f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
@@ -342,37 +355,22 @@ def _analyze_save_and_log(hashes, start_time, num_binaries_skipped, num_total_bi
     _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
 
 
-def _rule_logging(
-        start_time: float, num_binaries_skipped: int, num_total_binaries: int
-) -> None:
+def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
     """
     Simple method to log yara work.
     :param start_time: start time for the work
-    :param num_binaries_skipped:
-    :param num_total_binaries:
-    :return:
+    :param num_binaries_skipped: numb er of binaries skipped for any reason
+    :param num_total_binaries: numb er of binaries seen
     """
     elapsed_time = time.time() - start_time
     logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
-    logger.debug(
-        "   number binaries scanned: {0}".format(globals.g_num_binaries_analyzed)
-    )
-    logger.debug("   number binaries already scanned: {0}".format(num_binaries_skipped))
-    logger.debug(
-        "   number binaries unavailable: {0}".format(
-            globals.g_num_binaries_not_available
-        )
-    )
-    logger.info("total binaries from db: {0}".format(num_total_binaries))
-    logger.debug(
-        "   binaries per second: {0}:".format(
-            round(num_total_binaries / elapsed_time, 2)
-        )
-    )
-    logger.info(
-        "num binaries score greater than zero: {0}".format(
-            len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))
-        )
+    logger.debug(f"   number binaries scanned: {globals.g_num_binaries_analyzed}")
+    logger.debug(f"   number binaries already scanned: {num_binaries_skipped}")
+    logger.debug(f"   number binaries unavailable: {globals.g_num_binaries_not_available}")
+    logger.info(f"total binaries from db: {num_total_binaries}")
+    logger.debug("   binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
+    logger.info("num binaries score greater than zero: {0}".format(
+        len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0)))
     )
     logger.info("")
 
