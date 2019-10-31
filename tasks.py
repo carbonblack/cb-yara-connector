@@ -268,13 +268,16 @@ def update_yara_rules():
     compiled_rules_lock.acquire_read()
     if compiled_yara_rules:
         # compiled_rules_lock.release_read()
+        logger.debug("Just Reading the Compiled rules")
         return
     else:
+        logger.debug("Updating yara rules in worker(s)")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         new_rules_object = yara.compile(filepaths=yara_rule_map)
         compiled_rules_lock.release_read()
         compiled_rules_lock.acquire_write()
         compiled_yara_rules = new_rules_object
+        logger.debug("Succesfully updated yara rules")
         compiled_rules_lock.release_write()
         compiled_rules_lock.acquire_read()
         return
@@ -283,7 +286,7 @@ def update_yara_rules():
 def get_binary_by_hash(url, hsum, token):
     headers = {"X-Auth-Token": token}
     request_url = f"{url}/api/v1/binary/{hsum}"
-    response = requests.get(request_url, headers=headers, stream=True, verify=False)
+    response = requests.get(request_url, headers=headers, stream=True, verify=False, timeout=5)
     if response:
         with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
             fp = the_binary_zip.open("filedata")
