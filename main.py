@@ -30,7 +30,6 @@ from celery.bin import worker
 from peewee import SqliteDatabase
 
 import globals
-import singleton
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
 from exceptions import CbInvalidConfig
@@ -346,7 +345,7 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
     conn.commit()
 
-    #conn.close()
+    # conn.close()
     # Todo needs to be closed by the running-thread or someone
     #
 
@@ -357,7 +356,7 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
     )
 
     ##TODO should send just row over the wire and do the .hex() in the remote worker / tasks.py
-    md5_hashes = (row[0].hex() for row in rows)
+    md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
     analyze_binaries_and_queue(scanning_promises_queue, md5_hashes)
 
@@ -365,10 +364,13 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
 
 def _check_hash_against_feed(md5_hash):
+    # straigthen this out
     query = BinaryDetonationResult.select().where(
         BinaryDetonationResult.md5 == md5_hash
     )
     if query.exists():
+        return False
+        """
         try:
             bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
             scanned_hash_list = json.loads(bdr.misc)
@@ -384,7 +386,7 @@ def _check_hash_against_feed(md5_hash):
             logger.error(
                 "Unable to decode yara rule map hash from database: {0}".format(e)
             )
-            return False
+            return False """
     return True
 
 
@@ -628,122 +630,110 @@ def verify_config(config_file: str, output_file: str = None) -> None:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
+
+    parser.add_argument(
+        "--config-file",
+        required=True,
+        default="yara_agent.conf",
+        help="Location of the config file",
+    )
+
+    parser.add_argument("--log-file", default="yara_agent.log", help="Log file output")
+
+    parser.add_argument(
+        "--output-file", default="yara_feed.json", help="output feed file"
+    )
+
+    parser.add_argument(
+        "--working-dir", default=".", help="working directory", required=False
+    )
+
+    parser.add_argument(
+        "--lock-file", default="./yara.pid", help="lock file", required=False
+    )
+
+    parser.add_argument(
+        "--validate-yara-rules",
+        action="store_true",
+        help="ONLY validate yara rules in a specified directory",
+    )
+
+    parser.add_argument("--debug", action="store_true")
+
+    args = parser.parse_args()
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+
+    if args.log_file:
+        formatter = logging.Formatter(logging_format)
+        handler = logging.handlers.RotatingFileHandler(
+            args.log_file, maxBytes=10 * 1000000, backupCount=10
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
+    # Verify the configuration file and load up important global variables
     try:
-        # check for single operation
-        singleton.SingleInstance()
+        verify_config(args.config_file, args.output_file)
     except Exception as err:
-        logger.error(
-            f"Only one instance of this script is allowed to run at a time: {err}"
+        logger.error(f"Unable to continue due to a configuration problem: {err}")
+        sys.exit(1)
+
+    if args.validate_yara_rules:
+        logger.info(
+            "Validating yara rules in directory: {0}".format(globals.g_yara_rules_dir)
         )
-    else:
-        parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
-
-        parser.add_argument(
-            "--config-file",
-            required=True,
-            default="yara_agent.conf",
-            help="Location of the config file",
-        )
-
-        parser.add_argument(
-            "--log-file", default="yara_agent.log", help="Log file output"
-        )
-
-        parser.add_argument(
-            "--output-file", default="yara_feed.json", help="output feed file"
-        )
-
-        parser.add_argument(
-            "--working-dir", default=".", help="working directory", required=False
-        )
-
-        parser.add_argument(
-            "--lock-file", default="./yara.pid", help="lock file", required=False
-        )
-
-        parser.add_argument(
-            "--validate-yara-rules",
-            action="store_true",
-            help="ONLY validate yara rules in a specified directory",
-        )
-
-        parser.add_argument("--debug", action="store_true")
-
-        args = parser.parse_args()
-
-        if args.debug:
-            logger.setLevel(logging.DEBUG)
-
-        if args.log_file:
-            formatter = logging.Formatter(logging_format)
-            handler = logging.handlers.RotatingFileHandler(
-                args.log_file, maxBytes=10 * 1000000, backupCount=10
-            )
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
-
-        # Verify the configuration file and load up important global variables
+        yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         try:
-            verify_config(args.config_file, args.output_file)
+            yara.compile(filepaths=yara_rule_map)
+            logger.info("All yara rules compiled successfully")
         except Exception as err:
-            logger.error(f"Unable to continue due to a configuration problem: {err}")
-            sys.exit(1)
+            logger.error(f"There were errors compiling yara rules: {err}")
+            logger.error(traceback.format_exc())
+    else:
+        EXIT_EVENT = Event()
+        try:
 
-        if args.validate_yara_rules:
-            logger.info(
-                "Validating yara rules in directory: {0}".format(
-                    globals.g_yara_rules_dir
-                )
+            working_dir = args.working_dir
+
+            lock_file = args.lock_file
+
+            files_preserve = getLogFileHandles(logger)
+            files_preserve.extend([args.log_file, args.output_file])
+
+            context = daemon.DaemonContext(
+                working_directory=working_dir,
+                pidfile=None,
+                stdout=sys.stdout,
+                stderr=sys.stderr,
+                files_preserve=files_preserve,
             )
-            yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-            try:
-                yara.compile(filepaths=yara_rule_map)
-                logger.info("All yara rules compiled successfully")
-            except Exception as err:
-                logger.error(f"There were errors compiling yara rules: {err}")
-                logger.error(traceback.format_exc())
-        else:
-            EXIT_EVENT = Event()
-            try:
 
-                working_dir = args.working_dir
+            scanning_promise_queue = Queue()
+            scanning_results_queue = Queue()
 
-                lock_file = args.lock_file
+            context.signal_map = {signal.SIGTERM: partial(handle_sig, EXIT_EVENT)}
 
-                files_preserve = getLogFileHandles(logger)
-                files_preserve.extend([args.log_file, args.output_file])
+            with context:
+                if not globals.g_remote:
+                    init_local_resources()
+                    start_workers(
+                        EXIT_EVENT, scanning_promise_queue, scanning_results_queue
+                    )
+                start_celery_worker_thread(args.config_file)
+                run_to_signal(EXIT_EVENT)
 
-                context = daemon.DaemonContext(
-                    working_directory=working_dir,
-                    pidfile=None,
-                    stdout=sys.stdout,
-                    stderr=sys.stderr,
-                    files_preserve=files_preserve,
-                )
-
-                scanning_promise_queue = Queue()
-                scanning_results_queue = Queue()
-
-                context.signal_map = {signal.SIGTERM: partial(handle_sig, EXIT_EVENT)}
-
-                with context:
-                    if not globals.g_remote:
-                        init_local_resources()
-                        start_workers(
-                            EXIT_EVENT, scanning_promise_queue, scanning_results_queue
-                        )
-                    start_celery_worker_thread(args.config_file)
-                    run_to_signal(EXIT_EVENT)
-
-            except KeyboardInterrupt:
-                logger.info("\n\n##### Interupted by User!\n")
-                EXIT_EVENT.set()
-                sys.exit(2)
-            except Exception as err:
-                logger.error(f"There were errors executing yara rules: {err}")
-                logger.error(traceback.format_exc())
-                EXIT_EVENT.set()
-                sys.exit(1)
+        except KeyboardInterrupt:
+            logger.info("\n\n##### Interupted by User!\n")
+            EXIT_EVENT.set()
+            sys.exit(2)
+        except Exception as err:
+            logger.error(f"There were errors executing yara rules: {err}")
+            logger.error(traceback.format_exc())
+            EXIT_EVENT.set()
+            sys.exit(1)
 
 
 def getLogFileHandles(logger):
@@ -766,6 +756,8 @@ def handle_sig(exit_event, sig):
     if sig in exit_sigs:
         exit_event.set()
         sys.exit()
+
+
 #
 # wait until the exit_event has been set by the signal handler
 #
@@ -798,7 +790,7 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
-    for _ in range(2):
+    for _ in range(4):
         promise_worker_thread = Thread(
             target=promise_worker,
             args=(exit_event, scanning_promises_queue, scanning_results_queue),
@@ -816,8 +808,11 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
 
 
 class DatabaseScanningThread(Thread):
-    def __init__(self, interval, scanning_promises_queue):
-        super().__init__(daemon=True)
+    def __init__(self, interval, scanning_promises_queue, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.demon = True
+        self._args = args
+        self._kwargs = kwargs
         self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, time.sleep)
         self._conn = get_database_conn()
         self._interval = interval
@@ -832,6 +827,22 @@ class DatabaseScanningThread(Thread):
         perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
         self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
         self.DB_SCAN_SCHEDULER.run()
+
+    def run(self):
+        """Method representing the thread's activity.
+        You may override this method in a subclass. The standard run() method
+        invokes the callable object passed to the object's constructor as the
+        target argument, if any, with sequential and keyword arguments taken
+        from the args and kwargs arguments, respectively.
+        """
+        try:
+            if self._target:
+                self._target(*self._args, **self._kwargs)
+        finally:
+            # Avoid a refcycle if the thread is running a function with
+            # an argument that has a member that points to the thread.
+            self._conn.close()
+            del self._target, self._args, self._kwargs
 
 
 def launch_celery_worker(config_file=None):
