@@ -1,8 +1,9 @@
-celery==4.3.0
-humanfriendly==4.18
-lockfile==0.12.2
-peewee==3.11.2
-psycopg2-binary==2.8.4
-python-daemon==2.2.4
-requests==2.22.0
-yara-python==3.11.0
+celery
+redis
+humanfriendly
+lockfile
+peewee
+psycopg2-binary
+python-daemon
+requests
+yara-python

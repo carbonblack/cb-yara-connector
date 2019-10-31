@@ -763,8 +763,6 @@ def handle_sig(exit_event, sig):
     if sig in exit_sigs:
         exit_event.set()
         sys.exit()
-
-
 #
 # wait until the exit_event has been set by the signal handler
 #
