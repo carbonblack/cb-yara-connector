@@ -8,11 +8,15 @@ import os
 import subprocess
 import sys
 import time
+import signal
 import traceback
+from daemon import daemon
+import lockfile
+from functools import partial
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from threading import Thread, Event
+from threading import Thread, Event, Barrier
 from queue import Queue, Empty
 
 import humanfriendly
@@ -49,16 +53,6 @@ logger.setLevel(logging.INFO)
 celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
 
-# contains AsyncResult/Group Result of yara scanning tasks in celery
-SCANNING_PROMISE_QUEUE = Queue()
-# contains the Resolved AsyncResults ie [AnalysisResult]
-SCANNING_RESULTS_QUEUE = Queue()
-# intended to gracefully signal workers to exit for shutdown
-WORKER_EXIT_EVENT = Event()
-
-# controls scheduling of database scans
-DB_SCAN_SCHEDULER = sched.scheduler(time.time, time.sleep)
-
 
 """
 promise worker takes a promise from the task-queue and waits for it to resolve, then puts it into the scanning_results_queue
@@ -66,18 +60,15 @@ promise worker takes a promise from the task-queue and waits for it to resolve, 
 """
 
 
-def promise_worker():
-    global WORKER_EXIT_EVENT
-    global SCANNING_PROMISE_QUEUE
-    global SCANNING_RESULTS_QUEUE
-    while not (WORKER_EXIT_EVENT.is_set()):
-        if not (SCANNING_PROMISE_QUEUE.empty()):
+def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
+    while not (exit_event.is_set()):
+        if not (scanning_promise_queue.empty()):
             try:
-                promise = SCANNING_PROMISE_QUEUE.get()
+                promise = scanning_promise_queue.get()
                 while not promise.ready():
                     time.sleep(1)
                 result = promise.get(disable_sync_subtasks=False)
-                SCANNING_RESULTS_QUEUE.put(result)
+                scanning_results_queue.put(result)
             except Empty:
                 time.sleep(1)
         else:
@@ -90,13 +81,11 @@ This worker writes the result(s) to the configured database file
 """
 
 
-def results_worker():
-    global WORKER_EXIT_EVENT
-    global SCANNING_RESULTS_QUEUE
-    while not (WORKER_EXIT_EVENT.is_set()):
-        if not (SCANNING_RESULTS_QUEUE.empty()):
+def results_worker(exit_event, results_queue):
+    while not (exit_event.is_set()):
+        if not (results_queue.empty()):
             try:
-                result = SCANNING_RESULTS_QUEUE.get()
+                result = results_queue.get()
                 save_result(result)
             except Empty:
                 time.sleep(1)
@@ -190,27 +179,27 @@ def generate_rule_map_remote(yara_rule_path) -> None:
 
 
 # Scan a binary and enque the promise/future celery returns
-def analyze_binary_and_queue(md5sum):
-    global SCANNING_PROMISE_QUEUE
+def analyze_binary_and_queue(scanning_promise_queue, md5sum):
     promise = analyze_binary.delay(md5sum)
-    SCANNING_PROMISE_QUEUE.put(promise)
+    scanning_promise_queue.put(promise)
 
 
 # Scans each binary asyncrhonously not grouping
-def analyze_binaries_and_queue(md5_hashes):
+def analyze_binaries_and_queue(scanning_promise_queue, md5_hashes):
     for h in md5_hashes:
-        analyze_binary_and_queue(h)
+        analyze_binary_and_queue(scanning_promise_queue, h)
 
 
 # Attempts to do work in chunks of MAX_HASHES, at most
-def analyze_binaries_and_queue_chunked(md5_hashes):
+def analyze_binaries_and_queue_chunked(scanning_promise_queue, md5_hashes):
     promise = analyze_binary.chunks(
         [(mh,) for mh in md5_hashes], globals.MAX_HASHES
     ).apply_async()
     for prom in promise.children:
-        SCANNING_PROMISE_QUEUE.put(prom)
+        scanning_promise_queue.put(prom)
 
 
+# TODO REMOVE THIS
 def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
     """
     Analyze binaries.
@@ -335,7 +324,7 @@ def execute_script():
     logger.warning("!!!Done Executing vacuum script!!!")
 
 
-def perform(yara_rule_dir):
+def perform(yara_rule_dir, conn, scanning_promises_queue):
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
         generate_rule_map_remote(yara_rule_dir)
@@ -348,8 +337,6 @@ def perform(yara_rule_dir):
     start_time = time.time()
 
     start_datetime = datetime.now()
-
-    conn = get_database_conn()
 
     start_date_binaries = start_datetime - timedelta(days=globals.g_num_days_binaries)
 
@@ -367,17 +354,9 @@ def perform(yara_rule_dir):
         f"Enumerating modulestore...found {num_total_binaries} resident binaries"
     )
 
-    """_analyze_save_and_log(
-        (row[0].hex() for row in rows),
-        start_time,
-        num_binaries_skipped,
-        num_total_binaries,
-        True
-    ) """
-
     md5_hashes = list(row[0].hex() for row in rows)
 
-    analyze_binaries_and_queue(md5_hashes)
+    analyze_binaries_and_queue(scanning_promises_queue, md5_hashes)
 
     # generate_feed_from_db()
 
@@ -655,23 +634,36 @@ def main():
         )
     else:
         parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
+
         parser.add_argument(
             "--config-file",
             required=True,
             default="yara_agent.conf",
             help="Location of the config file",
         )
+
         parser.add_argument(
             "--log-file", default="yara_agent.log", help="Log file output"
         )
+
         parser.add_argument(
             "--output-file", default="yara_feed.json", help="output feed file"
         )
+
+        parser.add_argument(
+            "--working-dir", default=".", help="working directory", required=False
+        )
+
+        parser.add_argument(
+            "--lock-file", default="./yara.pid", help="lock file", required=False
+        )
+
         parser.add_argument(
             "--validate-yara-rules",
             action="store_true",
             help="ONLY validate yara rules in a specified directory",
         )
+
         parser.add_argument("--debug", action="store_true")
 
         args = parser.parse_args()
@@ -708,69 +700,125 @@ def main():
                 logger.error(f"There were errors compiling yara rules: {err}")
                 logger.error(traceback.format_exc())
         else:
+            EXIT_EVENT = Event()
             try:
-                globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-                generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-                database = SqliteDatabase(
-                    os.path.join(globals.g_feed_database_path, "binary.db")
+
+                working_dir = args.workign_dir
+
+                lock_file = args.lock_file
+
+                context = daemon.DaemonContext(
+                    working_directory=working_dir, pidfile=lockfile.FileLock(lock_file)
                 )
-                db.initialize(database)
-                db.connect()
-                db.create_tables([BinaryDetonationResult])
-                generate_feed_from_db()
 
-                if not (globals.g_remote):
-                    t = Thread(
-                        target=launch_local_worker,
-                        kwargs={"config_file": args.config_file},
-                    )
-                    t.daemon = True
-                    t.start()
+                scanning_promise_queue = Queue()
+                scanning_results_queue = Queue()
 
-                logger.debug("Starting perf thread")
-                """perf_thread = Thread(
-                    target=perform, args=(globals.g_yara_rules_dir,)
-                )
-                perf_thread.daemon = True
-                perf_thread.start()"""
+                context.signal_map = {
+                    signal.SIGTERM: partial(handle_sig, EXIT_EVENT)
+                }
 
-                perf_thread = Thread(target=db_scan_worker)
-                perf_thread.daemon = True
-                perf_thread.start()
-
-                logger.debug("Starting promise thread")
-                promise_worker_thread = Thread(target=promise_worker)
-                promise_worker_thread.daemon = True
-                promise_worker_thread.start()
-
-                logger.debug("Starting results saver thread")
-                results_worker_thread = Thread(target=results_worker)
-                results_worker_thread.daemon = True
-                results_worker_thread.start()
-
-                input("Press any key to shutdown")
-                WORKER_EXIT_EVENT.set()
+                with context:
+                    if not globals.g_remote:
+                        init_local_resources()
+                        start_workers(
+                            EXIT_EVENT,
+                            scanning_promise_queue,
+                            scanning_results_queue,
+                        )
+                    start_celery_worker_thread(args.config_file)
+                    run_to_signal(EXIT_EVENT)
 
             except KeyboardInterrupt:
                 logger.info("\n\n##### Interupted by User!\n")
+                EXIT_EVENT.set()
                 sys.exit(2)
             except Exception as err:
                 logger.error(f"There were errors executing yara rules: {err}")
                 logger.error(traceback.format_exc())
+                EXIT_EVENT.set()
                 sys.exit(1)
 
 
-def db_scan_worker():
-    DB_SCAN_SCHEDULER.enter(0, 1, do_db_scan)
-    DB_SCAN_SCHEDULER.run()
+#
+# Signal handler - handle the signal and mark exit if its an exiting signal
+#
+def handle_sig(exit_event, sig):
+    exit_sigs = (signal.SIGTERM, signal.SIGQUIT)
+    if sig in exit_sigs:
+        exit_event.set()
+        sys.exit()
 
 
-def do_db_scan():
-    perform(globals.g_yara_rules_dir)
-    DB_SCAN_SCHEDULER.enter(60, 1, do_db_scan)
+#
+# wait until the exit_event has been set by the signal handler
+#
+def run_to_signal(exit_event):
+    while not exit_event.is_set():
+        signal.pause()
 
 
-def launch_local_worker(config_file=None):
+def init_local_resources():
+    globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+    generate_yara_rule_map_hash(globals.g_yara_rules_dir)
+    database = SqliteDatabase(os.path.join(globals.g_feed_database_path, "binary.db"))
+    db.initialize(database)
+    db.connect()
+    db.create_tables([BinaryDetonationResult])
+    generate_feed_from_db()
+
+
+def start_celery_worker_thread(config_file):
+    t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
+    t.daemon = True
+    t.start()
+
+
+def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
+    logger.debug("Starting perf thread")
+
+    perf_thread = DatabaseScanningThread(60, scanning_promises_queue)
+    perf_thread.daemon = True
+    perf_thread.start()
+
+    logger.debug("Starting promise thread(s)")
+    for _ in range(2):
+        promise_worker_thread = Thread(
+            target=promise_worker,
+            args=(exit_event, scanning_promises_queue, scanning_results_queue),
+        )
+        promise_worker_thread.daemon = True
+        promise_worker_thread.start()
+
+    logger.debug("Starting results saver thread")
+    results_worker_thread = Thread(
+        target=results_worker, args=(exit_event, scanning_results_queue)
+    )
+
+    results_worker_thread.daemon = True
+    results_worker_thread.start()
+
+
+class DatabaseScanningThread(Thread):
+    def __init__(self, interval, scanning_promises_queue):
+        super().__init__(daemon=True)
+        self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, time.sleep)
+        self._conn = get_database_conn()
+        self._interval = interval
+        self._scanning_promises_queue = scanning_promises_queue
+        self._target = self.do_db_scan
+
+    def db_scan_worker(self):
+        self.DB_SCAN_SCHEDULER.enter(0, 1, self.do_db_scan)
+        self.DB_SCAN_SCHEDULER.run()
+
+    def do_db_scan(self):
+        perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
+        self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
+        self.DB_SCAN_SCHEDULER.run()
+
+
+def launch_celery_worker(config_file=None):
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
 
