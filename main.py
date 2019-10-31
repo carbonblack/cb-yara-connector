@@ -713,8 +713,8 @@ def main():
                 context = daemon.DaemonContext(
                     working_directory=working_dir,
                     pidfile=None,
-                    stdout=logger.stdout,
-                    stdin=logger.stdin,
+                    stdout=sys.stdout,
+                    stderr=sys.stderr,
                     files_preserve=files_preserve,
                 )
 
