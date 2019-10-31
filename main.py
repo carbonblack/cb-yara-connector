@@ -269,8 +269,10 @@ def perform(yara_rule_dir: str) -> None:
     start_time = time.time()
 
     # Determine our binaries window (date forward)
-    start_datetime = datetime.now()
-    start_date_binaries = start_datetime - timedelta(days=globals.g_num_days_binaries)
+    start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
+
+    # vacuum script window start
+    vacuum_window_start = datetime.now()
 
     # make the connection, get the info, get out
     conn = get_database_conn()
@@ -281,10 +283,11 @@ def perform(yara_rule_dir: str) -> None:
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
     for row in rows:
-        seconds_since_start = (datetime.now() - start_datetime).seconds
-        if seconds_since_start >= globals.g_vacuum_seconds > 0:
-            execute_script()
-            start_datetime = datetime.now()
+        if globals.g_vacuum_interval > 0:
+            seconds_since_start = (datetime.now() - vacuum_window_start).seconds
+            if seconds_since_start >= globals.g_vacuum_interval * 60:
+                execute_script()
+                vacuum_window_start = datetime.now()
 
         num_total_binaries += 1
         md5_hash = row[0].hex()

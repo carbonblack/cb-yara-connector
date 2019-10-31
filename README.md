@@ -30,6 +30,39 @@ to your desired location.
 ./yara_agent --config-file=<config file location>
 ```
 
+##### Command-line Options
+```text
+usage: main.py [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
+               [--output-file OUTPUT_FILE] [--validate-yara-rules] [--debug]
+
+Yara Agent for Yara Connector
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --config-file CONFIG_FILE
+                        Location of the config file
+  --log-file LOG_FILE   Log file output (defaults to `local` folder)
+  --output-file OUTPUT_FILE
+                        output feed file (defaults to `local` folder)
+  --validate-yara-rules
+                        ONLY validate yara rules in a specified directory
+  --debug               Provide additional logging
+
+```
+###### --config-file
+Provides the path of the configuration file to be used _**(REQUIRED)**_
+
+###### --log-file
+Provides the path of the yara log file.  If not supplied, defaults to `local/yara_agent.log`
+within the current yara package.
+
+###### --output-file
+Provides the path containing the feed description file.  If not supplied, defaults to
+`/local/yara_feed.json` within the current yara package.
+
+###### --validate-yara-rules
+If supplied, yara rules will be validated and the script will exit.
+
 #### Example Cron Entry
 _[TBD]_
 
@@ -140,6 +173,28 @@ _[TBD]_
 	systemctl restart supervisord
 	```
 # Development Notes	
+
+## Vacuum Script
+Included with this version is a feature for discretionary use by advanced users and
+should be used with caution.
+
+When `vacuum_interval` is defined with a value greater than 0, it represents the interval
+in minutes at which the yara agent will pause its work and execute and external
+shell script, defined by default as `vacuumscript.sh`  within the `scripts` folder
+of the current Yara conector installation. After execution, the Yara aganet continues with
+its work.
+
+```ini
+;
+; The use of the vacuum script is an ADVANCED FEATURE and should be used with caution!
+;
+; If "vacuum_interval" is greater than 0 it represents the interval in minutes after which the yara connector will
+; pause to execute a shell script for databse maintenance. This can present risks. Be careful what you allow the
+; script to do, and use this option at your own discretion.
+;
+vacuum_interval=-1
+vacuum_script={YARA}/scripts/vacuumscript.sh
+```
 
 ## Yara Agent Build Instructions (Centos 6)
 

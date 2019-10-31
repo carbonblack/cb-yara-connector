@@ -35,7 +35,9 @@ g_num_binaries_analyzed = 0
 g_disable_rescan = True
 g_num_days_binaries = 365
 
-g_vacuum_seconds = -1
+# the vacuum interval, if 1 or greater, is the number of minutes between invocations of the
+# configured vacuum script
+g_vacuum_interval = -1
 g_vacuum_script = "{YARA}/scripts/vacuumscript.sh"
 
-g_feed_database_dir = "{YARA}/local"
+g_feed_database_dir = "{YARA}/local/feed_db"

@@ -7,6 +7,7 @@ from unittest import TestCase
 import globals
 from config_handling import ConfigurationInit
 from exceptions import CbInvalidConfig
+from utilities import placehold
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 
@@ -33,7 +34,7 @@ class TestConfigurationInit(TestCase):
         globals.g_num_binaries_analyzed = 0
         globals.g_disable_rescan = True
         globals.g_num_days_binaries = 365
-        globals.g_vacuum_seconds = -1
+        globals.g_vacuum_interval = -1
         globals.g_vacuum_script = '{YARA}/scripts/vacuumscript.sh'
         globals.g_feed_database_dir = "{YARA}/local"
 
@@ -331,21 +332,21 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(os.path.join(TESTS, "config", "bogus_num_days_binaries.conf"), "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_17a_config_bogus_vacuum_seconds(self):
+    def test_17a_config_bogus_vacuum_interval(self):
         """
-        Ensure that config with bogus (non-int) vacuum_seconds is detected.
+        Ensure that config with bogus (non-int) vacuum_interval is detected.
         """
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_vacuum_seconds.conf"), "sample.json")
+            ConfigurationInit(os.path.join(TESTS, "config", "bogus_vacuum_interval.conf"), "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_17b_config_negative_vacuum_seconds(self):
+    def test_17b_config_negative_vacuum_interval(self):
         """
-        Ensure that config with bogus (non-int) vacuum_seconds is detected.
+        Ensure that config with bogus (non-int) vacuum_interval is detected.
         """
-        globals.g_vacuum_seconds = None
-        ConfigurationInit(os.path.join(TESTS, "config", "negative_vacuum_seconds.conf"), "sample.json")
-        self.assertEqual(0, globals.g_vacuum_seconds)
+        globals.g_vacuum_interval = None
+        ConfigurationInit(os.path.join(TESTS, "config", "negative_vacuum_interval.conf"), "sample.json")
+        self.assertEqual(0, globals.g_vacuum_interval)
 
     def test_18a_config_missing_vacuum_script(self):
         """
@@ -365,31 +366,35 @@ class TestConfigurationInit(TestCase):
 
     def test_19a_config_vacuum_script_enabled(self):
         """
-        Ensure that config with vacuum_script and vacuum_seconds is ready to go.
+        Ensure that config with vacuum_script and vacuum_interval is ready to go.
         """
-        globals.g_vacuum_seconds = None
+        globals.g_vacuum_interval = None
         globals.g_vacuum_script = None
         ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_enabled.conf"), "sample.json")
-        self.assertEqual(3600, globals.g_vacuum_seconds)
+        self.assertEqual(360, globals.g_vacuum_interval)
         self.assertTrue(globals.g_vacuum_script.endswith("/scripts/vacuumscript.sh"))
 
-    def test_19a_config_vacuum_script_and_no_vacuum_seconds(self):
+    def test_19a_config_vacuum_script_and_no_vacuum_interval(self):
         """
-        Ensure that config with vacuum_script but vacuum_seconds == 0 has it disabled.
+        Ensure that config with vacuum_script but vacuum_interval == 0 has it disabled.
         """
-        globals.g_vacuum_seconds = None
+        globals.g_vacuum_interval = None
         globals.g_vacuum_script = None
-        ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_no_seconds.conf"), "sample.json")
-        self.assertEqual(0, globals.g_vacuum_seconds)
+        ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_no_interval.conf"), "sample.json")
+        self.assertEqual(0, globals.g_vacuum_interval)
         self.assertIsNone(globals.g_vacuum_script)
 
     def test_20a_config_feed_database_dir_not_exists(self):
         """
-        Ensure that config with feed database directory that does not exist is detected.
+        Ensure that config with feed database directory that does not exist will create that directory.
         """
-        with self.assertRaises(CbInvalidConfig) as err:
+        path = os.path.abspath(placehold("{YARA}/local/no-such-directory"))
+        self.assertFalse(os.path.exists(path))
+        try:
             ConfigurationInit(os.path.join(TESTS, "config", "missing_feed_database_dir.conf"), "sample.json")
-        assert "does not exist" in "{0}".format(err.exception.args[0])
+            self.assertTrue(os.path.exists(path))
+        finally:
+            os.rmdir(path)
 
     def test_20b_config_feed_database_dir_not_directory(self):
         """
@@ -398,6 +403,14 @@ class TestConfigurationInit(TestCase):
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(os.path.join(TESTS, "config", "bogus_feed_database_dir.conf"), "sample.json")
         assert "is not a directory" in "{0}".format(err.exception.args[0])
+
+    def test_21_config_malformed_parameter(self):
+        """
+        Ensure that config with malformed parameter is detected
+        """
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(os.path.join(TESTS, "config", "malformed_param.conf"), "sample.json")
+        assert "cannot be parsed" in "{0}".format(err.exception.args[0])
 
     # ----- Minimal validation (worker)
 

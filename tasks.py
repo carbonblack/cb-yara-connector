@@ -143,7 +143,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 matches = yara_rules.match(data=binary_data, timeout=30)
             except yara.TimeoutError:
                 # yara timed out
-                analysis_result.last_error_msg = "Analysis timed out after 60 seconds"
+                analysis_result.last_error_msg = "Analysis timed out after 30 seconds"
                 analysis_result.stop_future_scans = True
             except yara.Error as err:
                 # Yara errored while trying to scan binary

@@ -114,8 +114,8 @@ class ConfigurationInit(object):
         globals.g_num_days_binaries = self._as_int("num_days_binaries", default=globals.g_num_days_binaries,
                                                    min_value=1)
 
-        globals.g_vacuum_seconds = self._as_int("vacuum_seconds", default=globals.g_vacuum_seconds, min_value=0)
-        if globals.g_vacuum_seconds > 0:
+        globals.g_vacuum_interval = self._as_int("vacuum_interval", default=globals.g_vacuum_interval, min_value=0)
+        if globals.g_vacuum_interval > 0:
             globals.g_vacuum_script = self._as_path("vacuum_script", required=True, is_dir=False,
                                                     default=globals.g_vacuum_script)
             logger.warning(f"Vacuum Script '{globals.g_vacuum_script}' is enabled; " +
@@ -125,7 +125,7 @@ class ConfigurationInit(object):
                 logger.debug(f"{self.source} has 'vacuum_script' defined, but it is disabled")
 
         globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, is_dir=True,
-                                                    default=globals.g_feed_database_dir)
+                                                    default=globals.g_feed_database_dir, create_if_needed=True)
 
     # ----- Type Handlers
 
@@ -139,7 +139,11 @@ class ConfigurationInit(object):
         :return: the string value, or None/default if not required and no exception
         :raises CbInvalidConfig:
         """
-        value = self.the_config.get(param, None)
+        try:
+            value = self.the_config.get(param, None)
+        except Exception as err:
+            raise CbInvalidConfig(f"{self.source} parameter '{param}' cannot be parsed: {err}")
+
         if value is not None:
             value = value.strip()
         if (value is None or value == "") and default is not None:
@@ -150,7 +154,7 @@ class ConfigurationInit(object):
         return value
 
     def _as_path(self, param: str, required: bool = False, exists: bool = True, is_dir: bool = False,
-                 default: str = None) -> Optional[str]:
+                 default: str = None, create_if_needed: bool = False) -> Optional[str]:
         """
         Get an string parameter from the configuration and treat it as a path, performing normalization
         to produce an absolute path.  a "~" at the beginning will be treated as the current user's home
@@ -161,6 +165,7 @@ class ConfigurationInit(object):
         :param exists: if True and required, check for existance as well
         :param is_dir: if exists and True, source must be a directory
         :param default: If not required, default value if not supplied
+        :param create_if_needed: if True, create any directory if it does not exist
         :return: the integer value, or None if not required and no exception
         :raises CbInvalidConfig:
         """
@@ -171,7 +176,13 @@ class ConfigurationInit(object):
         value = os.path.abspath(os.path.expanduser(placehold(value)))
         if exists:
             if not os.path.exists(value):
-                raise CbInvalidConfig(f"{self.source} specified path parameter '{param}' ({value}) does not exist")
+                if create_if_needed and is_dir:
+                    try:
+                        os.makedirs(value)
+                    except Exception as err:
+                        raise CbInvalidConfig(f"{self.source} unable to create '{value}' for '{param}': {err}")
+                else:
+                    raise CbInvalidConfig(f"{self.source} specified path parameter '{param}' ({value}) does not exist")
             if is_dir:
                 if not os.path.isdir(value):
                     raise CbInvalidConfig(f"{self.source} specified path '{param}' ({value}) is not a directory")
