@@ -179,9 +179,9 @@ Included with this version is a feature for discretionary use by advanced users 
 should be used with caution.
 
 When `vacuum_interval` is defined with a value greater than 0, it represents the interval
-in minutes at which the yara agent will pause its work and execute and external
+in minutes at which the yara agent will pause its work and execute an external
 shell script, defined by default as `vacuumscript.sh`  within the `scripts` folder
-of the current Yara conector installation. After execution, the Yara aganet continues with
+of the current Yara connector installation. After execution, the Yara agent continues with
 its work.
 
 ```ini
@@ -189,7 +189,7 @@ its work.
 ; The use of the vacuum script is an ADVANCED FEATURE and should be used with caution!
 ;
 ; If "vacuum_interval" is greater than 0 it represents the interval in minutes after which the yara connector will
-; pause to execute a shell script for databse maintenance. This can present risks. Be careful what you allow the
+; pause to execute a shell script for database maintenance. This can present risks. Be careful what you allow the
 ; script to do, and use this option at your own discretion.
 ;
 vacuum_interval=-1
