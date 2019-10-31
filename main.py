@@ -703,28 +703,31 @@ def main():
             EXIT_EVENT = Event()
             try:
 
-                working_dir = args.workign_dir
+                working_dir = args.working_dir
 
                 lock_file = args.lock_file
 
+                files_preserve = getLogFileHandles(logger)
+                files_preserve.extend([args.log_file, args.out_file])
+
                 context = daemon.DaemonContext(
-                    working_directory=working_dir, pidfile=lockfile.FileLock(lock_file)
+                    working_directory=working_dir,
+                    pidfile=None,
+                    stdout=logger.stdout,
+                    stdin=logger.stdin,
+                    files_preserve=files_preserve,
                 )
 
                 scanning_promise_queue = Queue()
                 scanning_results_queue = Queue()
 
-                context.signal_map = {
-                    signal.SIGTERM: partial(handle_sig, EXIT_EVENT)
-                }
+                context.signal_map = {signal.SIGTERM: partial(handle_sig, EXIT_EVENT)}
 
                 with context:
                     if not globals.g_remote:
                         init_local_resources()
                         start_workers(
-                            EXIT_EVENT,
-                            scanning_promise_queue,
-                            scanning_results_queue,
+                            EXIT_EVENT, scanning_promise_queue, scanning_results_queue
                         )
                     start_celery_worker_thread(args.config_file)
                     run_to_signal(EXIT_EVENT)
@@ -738,6 +741,18 @@ def main():
                 logger.error(traceback.format_exc())
                 EXIT_EVENT.set()
                 sys.exit(1)
+
+
+def getLogFileHandles(logger):
+    """ Get a list of filehandle numbers from logger
+        to be handed to DaemonContext.files_preserve
+    """
+    handles = []
+    for handler in logger.handlers:
+        handles.append(handler.stream.fileno())
+    if logger.parent:
+        handles += getLogFileHandles(logger.parent)
+    return handles
 
 
 #
