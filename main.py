@@ -19,6 +19,8 @@ from typing import List, Optional
 from threading import Thread, Event, Barrier
 from queue import Queue, Empty
 
+from asyncresultqueue import AsyncResultQueue
+
 import humanfriendly
 import psycopg2
 import sched
@@ -64,10 +66,9 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
         if not (scanning_promise_queue.empty()):
             try:
                 promise = scanning_promise_queue.get()
-                while not promise.ready():
-                    time.sleep(1)
-                result = promise.get(disable_sync_subtasks=False)
-                scanning_results_queue.put(result)
+                if promise:
+                    result = promise.get(disable_sync_subtasks=False)
+                    scanning_results_queue.put(result)
             except Empty:
                 time.sleep(1)
         else:
@@ -711,7 +712,7 @@ def main():
                 files_preserve=files_preserve,
             )
 
-            scanning_promise_queue = Queue()
+            scanning_promise_queue = AsyncResultQueue()
             scanning_results_queue = Queue()
 
             context.signal_map = {signal.SIGTERM: partial(handle_sig, EXIT_EVENT)}
@@ -785,7 +786,6 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
     logger.debug("Starting perf thread")
 
     perf_thread = DatabaseScanningThread(60, scanning_promises_queue)
-    perf_thread.daemon = True
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
@@ -794,7 +794,6 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
             target=promise_worker,
             args=(exit_event, scanning_promises_queue, scanning_results_queue),
         )
-        promise_worker_thread.daemon = True
         promise_worker_thread.start()
 
     logger.debug("Starting results saver thread")
@@ -802,14 +801,12 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
         target=results_worker, args=(exit_event, scanning_results_queue)
     )
 
-    results_worker_thread.daemon = True
     results_worker_thread.start()
 
 
 class DatabaseScanningThread(Thread):
     def __init__(self, interval, scanning_promises_queue, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.demon = True
         self._args = args
         self._kwargs = kwargs
         self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, time.sleep)
