@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from threading import Thread, Event, Barrier
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 
 import humanfriendly
 import psycopg2
@@ -64,8 +64,13 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
         if not (scanning_promise_queue.empty()):
             try:
                 promise = scanning_promise_queue.get()
-                while not promise.ready():
-                    time.sleep(1)
+                if not promise.ready() and not scanning_promise_queue.full():
+                    try:
+                        scanning_promise_queue.put_nowait(promise)
+                    except Full:
+                        while not(promise.ready()):
+                            time.sleep(1)
+
                 result = promise.get(disable_sync_subtasks=False)
                 scanning_results_queue.put(result)
             except Empty:
