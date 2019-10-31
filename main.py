@@ -346,7 +346,9 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
     conn.commit()
 
-    conn.close()
+    #conn.close()
+    # Todo needs to be closed by the running-thread or someone
+    #
 
     num_total_binaries = len(rows)
 
@@ -354,7 +356,8 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
         f"Enumerating modulestore...found {num_total_binaries} resident binaries"
     )
 
-    md5_hashes = list(row[0].hex() for row in rows)
+    ##TODO should send just row over the wire and do the .hex() in the remote worker / tasks.py
+    md5_hashes = (row[0].hex() for row in rows)
 
     analyze_binaries_and_queue(scanning_promises_queue, md5_hashes)
 
