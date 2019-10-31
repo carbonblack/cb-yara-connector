@@ -708,7 +708,7 @@ def main():
                 lock_file = args.lock_file
 
                 files_preserve = getLogFileHandles(logger)
-                files_preserve.extend([args.log_file, args.out_file])
+                files_preserve.extend([args.log_file, args.output_file])
 
                 context = daemon.DaemonContext(
                     working_directory=working_dir,
