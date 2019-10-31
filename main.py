@@ -356,7 +356,7 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
     )
 
     ##TODO should send just row over the wire and do the .hex() in the remote worker / tasks.py
-    md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
+    md5_hashes = filter(lambda x: not(_check_hash_against_feed(x)), (row[0].hex() for row in rows))
 
     analyze_binaries_and_queue(scanning_promises_queue, md5_hashes)
 
