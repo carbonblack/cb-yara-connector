@@ -721,11 +721,10 @@ def main():
 
             context = daemon.DaemonContext(
                 working_directory=working_dir,
-                pidfile=None,
+                pidfile=lock_file,
                 stdout=sys.stdout,
                 stderr=sys.stderr,
                 files_preserve=files_preserve,
-                pidfile= lock_file
             )
 
             scanning_promise_queue = AsyncResultQueue()
@@ -776,7 +775,7 @@ def getLogFileHandles(logger):
 #
 # Signal handler - handle the signal and mark exit if its an exiting signal
 #
-def handle_sig(exit_event, sig):
+def handle_sig(exit_event, sig, frame):
     exit_sigs = (signal.SIGTERM, signal.SIGQUIT)
     if sig in exit_sigs:
         exit_event.set()
@@ -789,6 +788,7 @@ def handle_sig(exit_event, sig):
 def run_to_signal(exit_event):
     while not exit_event.is_set():
         signal.pause()
+    
 
 
 def init_local_resources():
