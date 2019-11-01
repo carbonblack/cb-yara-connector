@@ -480,6 +480,20 @@ def verify_config(config_file: str, output_file: str = None) -> None:
     logger.debug(f"NOTE: output file will be '{globals.output_file}'")
 
     the_config = config["general"]
+
+    if "mode" in config["general"]:
+        operating_mode = the_config["mode"].lower()
+        if operating_mode in ["master", "slave"]:
+            globals.g_mode = operating_mode
+        else:
+            raise CbInvalidConfig(
+                f"{header} does not specify a valid operating mode (slave/master)"
+            )
+    else:
+        raise CbInvalidConfig(
+            f"{header} does not specify a valid operating mode (slave/master)"
+        )
+
     if "worker_type" in the_config:
         if (
             the_config["worker_type"] == "local"
@@ -720,12 +734,18 @@ def main():
             context.signal_map = {signal.SIGTERM: partial(handle_sig, EXIT_EVENT)}
 
             with context:
-                if not globals.g_remote:
+                # only connect to cbr if we're the master
+                if globals.g_mode is "master":
                     init_local_resources()
                     start_workers(
                         EXIT_EVENT, scanning_promise_queue, scanning_results_queue
                     )
-                start_celery_worker_thread(args.config_file)
+                    if not globals.g_remote:
+                        start_celery_worker_thread(args.config_file)
+                else:
+                    start_celery_worker_thread(args.config_file)
+
+                # run until the service/daemon gets a quitting sig
                 run_to_signal(EXIT_EVENT)
 
         except KeyboardInterrupt:
@@ -750,6 +770,7 @@ def getLogFileHandles(logger):
         handles += getLogFileHandles(logger.parent)
     return handles
 
+
 #
 # Signal handler - handle the signal and mark exit if its an exiting signal
 #
@@ -758,6 +779,7 @@ def handle_sig(exit_event, sig):
     if sig in exit_sigs:
         exit_event.set()
         sys.exit()
+
 
 #
 # wait until the exit_event has been set by the signal handler
@@ -776,13 +798,15 @@ def init_local_resources():
     db.create_tables([BinaryDetonationResult])
     generate_feed_from_db()
 
+
 # Start celery worker
 # TODO - Aggresive autoscaling config options
-#
+# TODO _ honour the kill sig / exit event
 def start_celery_worker_thread(config_file):
     t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
-    #t.daemon = True
+    # t.daemon = True
     t.start()
+
 
 # starts worker-threads (not celery workers)
 # worker threads do work until they get the exit_event signal
@@ -815,6 +839,7 @@ class DatabaseScanningThread(Thread):
         Pushes work to scanning_promises_queue 
         Design is marginal - ideally it would incorporate the event as the others do
     """
+
     def __init__(self, interval, scanning_promises_queue, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args = args
@@ -847,7 +872,7 @@ class DatabaseScanningThread(Thread):
         finally:
             # Avoid a refcycle if the thread is running a function with
             # an argument that has a member that points to the thread.
-            #shutdown database connection
+            # shutdown database connection
             self._conn.close()
             del self._target, self._args, self._kwargs
 
