@@ -66,7 +66,7 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
             try:
                 promise = scanning_promise_queue.get()
                 if promise:
-                    result = promise.get(disable_sync_subtasks=False)
+                    result = promise.get(timeout=2.0,disable_sync_subtasks=False)
                     scanning_results_queue.put(result)
             except Empty:
                 exit_event.wait(1)
@@ -719,6 +719,7 @@ def main():
             files_preserve = getLogFileHandles(logger)
             files_preserve.extend([args.log_file, args.output_file])
 
+            #defauls to piping to /dev/null
             context = daemon.DaemonContext(
                 working_directory=working_dir,
                 pidfile=lock_file,
@@ -806,7 +807,7 @@ def init_local_resources():
 # TODO _ honour the kill sig / exit event
 def start_celery_worker_thread(config_file):
     t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
-    # t.daemon = True
+    t.daemon = True
     t.start()
 
 
@@ -845,6 +846,7 @@ class DatabaseScanningThread(Thread):
     def __init__(self, interval, scanning_promises_queue, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args = args
+        self.deamon = True
         self._kwargs = kwargs
         self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, time.sleep)
         self._conn = get_database_conn()
