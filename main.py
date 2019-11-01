@@ -694,7 +694,9 @@ def main():
             logger.error(f"There were errors compiling yara rules: {err}")
             logger.error(traceback.format_exc())
     else:
+
         EXIT_EVENT = Event()
+
         try:
 
             working_dir = args.working_dir
@@ -748,7 +750,6 @@ def getLogFileHandles(logger):
         handles += getLogFileHandles(logger.parent)
     return handles
 
-
 #
 # Signal handler - handle the signal and mark exit if its an exiting signal
 #
@@ -775,13 +776,16 @@ def init_local_resources():
     db.create_tables([BinaryDetonationResult])
     generate_feed_from_db()
 
-
+# Start celery worker
+# TODO - Aggresive autoscaling config options
+#
 def start_celery_worker_thread(config_file):
     t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
-    t.daemon = True
+    #t.daemon = True
     t.start()
 
-
+# starts worker-threads (not celery workers)
+# worker threads do work until they get the exit_event signal
 def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
     logger.debug("Starting perf thread")
 
@@ -805,6 +809,12 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
 
 
 class DatabaseScanningThread(Thread):
+
+    """
+        A chron like thread that scans over the database for new hashes ever INTERVAL seconds 
+        Pushes work to scanning_promises_queue 
+        Design is marginal - ideally it would incorporate the event as the others do
+    """
     def __init__(self, interval, scanning_promises_queue, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args = args
@@ -837,6 +847,7 @@ class DatabaseScanningThread(Thread):
         finally:
             # Avoid a refcycle if the thread is running a function with
             # an argument that has a member that points to the thread.
+            #shutdown database connection
             self._conn.close()
             del self._target, self._args, self._kwargs
 
