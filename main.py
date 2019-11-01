@@ -735,14 +735,16 @@ def main():
 
             with context:
                 # only connect to cbr if we're the master
-                if globals.g_mode is "master":
+                if globals.g_mode == "master":
                     init_local_resources()
                     start_workers(
                         EXIT_EVENT, scanning_promise_queue, scanning_results_queue
                     )
+                    # start local celery if working mode is local
                     if not globals.g_remote:
                         start_celery_worker_thread(args.config_file)
                 else:
+                    # otherwise, we must start a worker since we are not the master
                     start_celery_worker_thread(args.config_file)
 
                 # run until the service/daemon gets a quitting sig
