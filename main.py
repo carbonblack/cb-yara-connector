@@ -714,7 +714,7 @@ def main():
 
             working_dir = args.working_dir
 
-            lock_file = lockfile.LockFile(args.lock_file)
+            lock_file = lockfile.FileLock(args.lock_file)
 
             files_preserve = getLogFileHandles(logger)
             files_preserve.extend([args.log_file, args.output_file])
@@ -725,7 +725,7 @@ def main():
                 stdout=sys.stdout,
                 stderr=sys.stderr,
                 files_preserve=files_preserve,
-                lockfile = lock_file
+                pidfile= lock_file
             )
 
             scanning_promise_queue = AsyncResultQueue()
