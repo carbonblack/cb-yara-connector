@@ -12,7 +12,7 @@ class AsyncResultQueue(object):
         self.qlock = RLock()
         self.queue = []
 
-    @property
+
     def empty(self):
         with self.qlock:
             return len(self.queue) == 0
