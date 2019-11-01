@@ -1,0 +1,3 @@
+/etc/cb/integrations/yaraconnector/yaraconnector.conf
+/usr/share/cb/integrations/yaraconnector/yaraconnector
+/etc/init/yaraconnector.conf

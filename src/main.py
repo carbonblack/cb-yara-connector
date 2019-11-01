@@ -820,7 +820,7 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
-    for _ in range(4):
+    for _ in range(3):
         promise_worker_thread = Thread(
             target=promise_worker,
             args=(exit_event, scanning_promises_queue, scanning_results_queue),
@@ -883,10 +883,13 @@ class DatabaseScanningThread(Thread):
             self._conn.close()
             del self._target, self._args, self._kwargs
 
+
 #launch a celery worker using the imported app context
 def launch_celery_worker(config_file=None):
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
+
+
 
 
 if __name__ == "__main__":

@@ -4,5 +4,5 @@ clean:
 rpm:
 	cp -r src ~/rpmbuild/SOURCES 
 	cp -r init-scripts ~/rpmbuild/SOURCES 
-	cp main.spec ~/rpmbuild/SOURCES/main.spec
-	rpmbuild -ba cb-yara-agent.rpm.spec
+	cp cb-yara-connector.spec ~/rpmbuild/SOURCES/cb-yara-connector.spec
+	rpmbuild -ba cb-yara-connector.rpm.spec
