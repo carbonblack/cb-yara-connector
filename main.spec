@@ -5,12 +5,9 @@
 block_cipher = None
 
 
-a = Analysis(['main.py'],
+a = Analysis(['src/main.py'],
              pathex=['.'],
              binaries=[],
-             datas=[ (HOMEPATH + '/cbapi/response/models/*', 'cbapi/response/models/'),
-                     (HOMEPATH + '/cbapi/protection/models/*', 'cbapi/protection/models/'),
-                     (HOMEPATH + '/cbapi/defense/models/*', 'cbapi/defense/models/') ],
              hiddenimports=['celery.fixups', 'celery.fixups.django', 'celery.loaders.app',
              				'celery.app.amqp', 'kombu.transport.redis', 'redis', 'celery.backends',
              				'celery.backends.redis', 'celery.app.events', 'celery.events',
