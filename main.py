@@ -60,7 +60,6 @@ promise worker takes a promise from the task-queue and waits for it to resolve, 
 
 """
 
-
 def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
     while not (exit_event.is_set()):
         if not (scanning_promise_queue.empty()):
@@ -70,14 +69,14 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
                     result = promise.get(disable_sync_subtasks=False)
                     scanning_results_queue.put(result)
             except Empty:
-                time.sleep(1)
+                exit_event.wait(1)
         else:
-            time.sleep(1)
+            exit_event.wait(1)
 
 
-""" Sqlite aint meant to be thread-safe 
+""" Sqlite is not meant to be thread-safe 
 
-This worker writes the result(s) to the configured database file
+This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and seen binaries/results from scans
 """
 
 
@@ -88,9 +87,9 @@ def results_worker(exit_event, results_queue):
                 result = results_queue.get()
                 save_result(result)
             except Empty:
-                time.sleep(1)
+                exit_event.wait(1)
         else:
-            time.sleep(1)
+            exit_event.wait(1)
 
 
 def generate_feed_from_db() -> None:
@@ -726,7 +725,7 @@ def main():
                 stdout=sys.stdout,
                 stderr=sys.stderr,
                 files_preserve=files_preserve,
-                lock_file = lock_file
+                lockfile = lock_file
             )
 
             scanning_promise_queue = AsyncResultQueue()
@@ -853,6 +852,9 @@ class DatabaseScanningThread(Thread):
         self._scanning_promises_queue = scanning_promises_queue
         self._target = self.do_db_scan
 
+
+    #use enterabs and non-drifting time ?
+
     def db_scan_worker(self):
         self.DB_SCAN_SCHEDULER.enter(0, 1, self.do_db_scan)
         self.DB_SCAN_SCHEDULER.run()
@@ -879,7 +881,7 @@ class DatabaseScanningThread(Thread):
             self._conn.close()
             del self._target, self._args, self._kwargs
 
-
+#launch a celery worker using the imported app context
 def launch_celery_worker(config_file=None):
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
