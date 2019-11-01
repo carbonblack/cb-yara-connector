@@ -14,7 +14,7 @@ class AsyncResultQueue(object):
 
     @property
     def empty(self):
-        with self.qlock.acquire():
+        with self.qlock:
             return len(self.queue) == 0
 
     """ emplace an element at the end of the queue """
