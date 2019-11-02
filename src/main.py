@@ -327,6 +327,8 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
     analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
+    logger.debug("Exit PERFORM")
+
 
 def _check_hash_against_feed(md5_hash):
 
@@ -770,9 +772,10 @@ def wait_all_worker_exit():
     """ Await the exit of our worker threads """
     threadcount = 2
     while (threadcount > 1):
-          threadcount = threading.active_count()
+          threads = filter(lambda running_thread: not running_thread.deamon , threading.enumerate())
+          threadcount = len(threads)
           logger.debug(f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)...")
-          logger.debug(f"Live threads (including daemons): {threading.enumerate()}")
+          logger.debug(f"Live threads (excluding daemons): {threads}")
           time.sleep(0.1)
           pass       
 
@@ -814,7 +817,6 @@ class DatabaseScanningThread(Thread):
     def __init__(self, interval, scanning_promises_queue, exit_event, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args = args
-        self.deamon = True
         self._kwargs = kwargs
         self.exit_event = exit_event
         self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, exit_event.wait)
@@ -823,11 +825,21 @@ class DatabaseScanningThread(Thread):
         self._scanning_promises_queue = scanning_promises_queue
         self._target = self.do_db_scan
 
-    def do_db_scan(self):
+    def do_db_scan(self, cancel_if_exiting=True):
+        """
+            scans continously until the exit_event has been set
+            and next is after (at most) INTERVAL seconds
+        """
         if not self.exit_event.is_set():
             perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
+            #self.DB_SCAN_SCHEDULER.enter(0.0, 1 , self.do_db_scan, argument = (True, False))
             self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
+            logger.debug("do db scan scheduler run blocking")
             self.DB_SCAN_SCHEDULER.run()
+            logger.debug("do db scan scheduler run unblocked")
+         elif cancel_if_exiting:
+            list(map(self.DB_SCAN_SCHEDULER.cancel, SELF.DB_SCAN_SCHEDULER.queue))
+
 
     def run(self):
         """ Represents the lifetime of the thread """
