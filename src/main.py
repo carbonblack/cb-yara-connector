@@ -710,7 +710,7 @@ def main():
                 # run until the service/daemon gets a quitting sig
                 run_to_exit_signal(EXIT_EVENT)
                 wait_all_worker_exit()
-                logger.Info("Yara connector shutdown OK")
+                logger.info("Yara connector shutdown OK")
 
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
@@ -848,11 +848,11 @@ class DatabaseScanningThread(Thread):
                 break
             else:
                 self.do_db_scan()
-        logger.Debug("Database Scanning Thread told to exit")
+        logger.debug("Database Scanning Thread told to exit")
         return
 
     def do_db_scan(self):
-        logger.Debug("START database sweep")
+        logger.debug("START database sweep")
         try:
             perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
         except Exception as e:
@@ -871,6 +871,7 @@ class DatabaseScanningThread(Thread):
             self._conn.close()
             del self._target, self._args, self._kwargs
             logger.debug("Database scanning Thread Exiting gracefully")
+            self.exit_event.set()
 
 
 # Start celery worker in a daemon-thread
