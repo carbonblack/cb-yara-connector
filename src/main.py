@@ -837,7 +837,7 @@ class DatabaseScanningThread(Thread):
             logger.debug("do db scan scheduler run blocking")
             self.DB_SCAN_SCHEDULER.run()
             logger.debug("do db scan scheduler run unblocked")
-         elif cancel_if_exiting:
+        elif cancel_if_exiting:
             list(map(self.DB_SCAN_SCHEDULER.cancel, SELF.DB_SCAN_SCHEDULER.queue))
 
 
