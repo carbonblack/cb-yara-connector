@@ -101,27 +101,6 @@ def verify_config(config_file: str) -> None:
 
     the_config = config["general"]
 
-    """
-    postgres_port = the_config["postgres_port"]
-    postgres_host = the_config["postgres_host"]
-    postgres_db = the_config["postgres_db"]
-    postgres_user = the_config["postgres_username"]
-    postgres_password = the_config["postgres_password"]
-    # result_backend = 'db+postgresql://scott:tiger@localhost/mydatabase'
-
-    #"db+postgresql+psycopg2
-
-    postgres_con_str = f"db+postgresql+psycopg2://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
-
-    app.conf.update(results_backend=postgres_con_str)
-
-    app.conf.database_engine_options = {'echo': True}
-
-    app.conf.database_table_names = {
-        'task': 'yara_taskmeta',
-        'group': 'yara_groupmeta',
-    } """
-
     if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
         check = os.path.abspath(
             os.path.expanduser(placehold(the_config["yara_rules_dir"]))
@@ -140,10 +119,13 @@ def verify_config(config_file: str) -> None:
     else:
         raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
 
+
+    if "worker_network_timeout" in the_config:
+        globals.g_worker_network_timeout = int(the_config['worker_network_timeout'])
+
     if "worker_type" in the_config:
         if (
             the_config["worker_type"] == "local"
-            or the_config["worker_type"].strip() == ""
         ):
             remote = False
         elif the_config["worker_type"] == "remote":
@@ -267,8 +249,7 @@ def update_yara_rules():
     global compiled_rules_lock
     compiled_rules_lock.acquire_read()
     if compiled_yara_rules:
-        # compiled_rules_lock.release_read()
-        logger.debug("Just Reading the Compiled rules")
+        logger.debug("Reading the Compiled rules")
         return
     else:
         logger.debug("Updating yara rules in worker(s)")
@@ -284,15 +265,21 @@ def update_yara_rules():
 
 
 def get_binary_by_hash(url, hsum, token):
+    """
+        do a binary-retrival-by hash (husm) api call against 
+        the configured server-by (url) using (token)
+    """
     headers = {"X-Auth-Token": token}
     request_url = f"{url}/api/v1/binary/{hsum}"
-    response = requests.get(request_url, headers=headers, stream=True, verify=False, timeout=5)
+    response = requests.get(request_url, headers=headers, stream=True, verify=False, timeout=globals.g_worker_network_timeout)
     if response:
         with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
+            #the response contains the file ziped in 'filedata'
             fp = the_binary_zip.open("filedata")
             the_binary_zip.close()
             return fp
     else:
+        #otherwise return None which will be interpreted correctly in analyze_binary as haven failed to lookup the hash
         return None
 
 

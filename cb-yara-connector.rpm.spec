@@ -12,7 +12,6 @@ Carbon Black Yara Agent - Scans binaries with configured yara rules
 pyinstaller %{_sourcedir}/cb-yara-connector.spec
 
 %install
-mkdir -p %{buildroot}%{_bindir}
 mkdir -p /var/log/cb/integrations/yaraconnector
 mkdir -p /usr/share/cb/integrations/yaraconnector
 mkdir -p /etc/cb/integrations/yaraconnector

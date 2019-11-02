@@ -16,6 +16,7 @@ from functools import partial
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import threading
 from threading import Thread, Event, Barrier
 from queue import Queue, Empty
 
@@ -55,19 +56,13 @@ celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
 
 
-"""
-promise worker takes a promise from the task-queue and waits for it to resolve, then puts it into the scanning_results_queue
-
-"""
-
 def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
     while not (exit_event.is_set()):
         if not (scanning_promise_queue.empty()):
             try:
-                promise = scanning_promise_queue.get()
-                if promise:
-                    result = promise.get(timeout=2.0,disable_sync_subtasks=False)
-                    scanning_results_queue.put(result)
+                promise = scanning_promise_queue.get(timeout=1.0)
+                result = promise.get(disable_sync_subtasks=False)
+                scanning_results_queue.put(result)
             except Empty:
                 exit_event.wait(1)
         else:
@@ -91,6 +86,16 @@ def results_worker(exit_event, results_queue):
         else:
             exit_event.wait(1)
 
+def results_worker_chunked(exit_event, results_queue):
+    while not (exit_event.is_set()):
+        if not (results_queue.empty()):
+            try:
+                results = results_queue.get()
+                save_results(results)
+            except Empty:
+                exit_event.wait(1)
+        else:
+            exit_event.wait(1)
 
 def generate_feed_from_db() -> None:
     """
@@ -177,74 +182,27 @@ def generate_rule_map_remote(yara_rule_path) -> None:
         time.sleep(0.1)
 
 
-# Scan a binary and enque the promise/future celery returns
 def analyze_binary_and_queue(scanning_promise_queue, md5sum):
+    """ Analyze Binary And Queue """
     promise = analyze_binary.delay(md5sum)
     scanning_promise_queue.put(promise)
 
 
-# Scans each binary asyncrhonously not grouping
 def analyze_binaries_and_queue(scanning_promise_queue, md5_hashes):
+    """ Analyze each binary and enqueue """
     for h in md5_hashes:
         analyze_binary_and_queue(scanning_promise_queue, h)
 
 
-# Attempts to do work in chunks of MAX_HASHES, at most
 def analyze_binaries_and_queue_chunked(scanning_promise_queue, md5_hashes):
+    """
+        Attempts to do work in parrallelized chunks of MAX_HASHES grouped
+    """
     promise = analyze_binary.chunks(
         [(mh,) for mh in md5_hashes], globals.MAX_HASHES
     ).apply_async()
     for prom in promise.children:
         scanning_promise_queue.put(prom)
-
-
-# TODO REMOVE THIS
-def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
-    """
-    Analyze binaries.
-
-    TODO: determine return typing!
-
-    :param md5_hashes: list of  hashes to check.
-    :param local: True if local
-    :return: None if there is a problem; results otherwise
-    """
-    if local:
-        try:
-            results = []
-            for md5_hash in md5_hashes:
-                results.append(analyze_binary(md5_hash))
-        except Exception as err:
-            logger.error("{0}".format(err))
-            time.sleep(5)
-            return None
-        else:
-            return results
-    else:
-        try:
-            scan_group = []
-            for md5_hash in md5_hashes:
-                scan_group.append(analyze_binary.s(md5_hash))
-            job = group(scan_group)
-
-            result = job.apply_async()
-
-            start = time.time()
-            while not result.ready():
-                if time.time() - start >= 120:  # 2 minute timeout
-                    break
-                else:
-                    time.sleep(0.1)
-        except Exception as err:
-            logger.error("Error when analyzing: {0}".format(err))
-            logger.error(traceback.format_exc())
-            time.sleep(5)
-            return None
-        else:
-            if result.successful():
-                return result.get(timeout=30)
-            else:
-                return None
 
 
 def save_results(analysis_results: List[AnalysisResult]) -> None:
@@ -297,14 +255,17 @@ def get_database_conn():
     return conn
 
 
-def get_cursor(conn, start_date_binaries):
+def get_binary_file_cursor(conn, start_date_binaries):
+    logger.debug("Getting database cursor...")
+
     cur = conn.cursor(name="yara_agent")
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
-    cur.execute(
-        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' "
-        "ORDER BY timestamp DESC".format(start_date_binaries)
-    )
+    query =  "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+
+    logger.debug(query)
+
+    cur.execute(query)
 
     return cur
 
@@ -339,15 +300,11 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
     start_date_binaries = start_datetime - timedelta(days=globals.g_num_days_binaries)
 
-    cur = get_cursor(conn, start_date_binaries)
+    cur = get_binary_file_cursor(conn, start_date_binaries)
 
     rows = cur.fetchall()
 
     conn.commit()
-
-    # conn.close()
-    # Todo needs to be closed by the running-thread or someone
-    #
 
     num_total_binaries = len(rows)
 
@@ -355,47 +312,28 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
         f"Enumerating modulestore...found {num_total_binaries} resident binaries"
     )
 
-    ##TODO should send just row over the wire and do the .hex() in the remote worker / tasks.py
     md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
-    analyze_binaries_and_queue(scanning_promises_queue, md5_hashes)
-
-    # generate_feed_from_db()
+    analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
+    #analyze_binaries_and_queue(scanning_promises_queue, md5_hashes)
 
 
 def _check_hash_against_feed(md5_hash):
-    # straigthen this out
+
     query = BinaryDetonationResult.select().where(
         BinaryDetonationResult.md5 == md5_hash
     )
+
     if query.exists():
         return False
-        """
-        try:
-            bdr = BinaryDetonationResult.get(BinaryDetonationResult.md5 == md5_hash)
-            scanned_hash_list = json.loads(bdr.misc)
-            if globals.g_disable_rescan and bdr.misc:
-                return False
-
-            if scanned_hash_list == globals.g_yara_rule_map_hash_list:
-                #
-                # If it is the same then we don't need to scan again
-                #
-                return False
-        except Exception as e:
-            logger.error(
-                "Unable to decode yara rule map hash from database: {0}".format(e)
-            )
-            return False """
+        
     return True
 
 
-def _analyze_save_and_log(
-    hashes, start_time, num_binaries_skipped, num_total_binaries, local_override=False
+def save_and_log(
+    analysis_results, start_time, num_binaries_skipped, num_total_binaries
 ):
-    analysis_results = analyze_binaries(
-        hashes, local=(not globals.g_remote and not local_override)
-    )
+   
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
@@ -642,6 +580,9 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         if not (os.path.exists(check) and os.path.isdir(check)):
             raise CbInvalidConfig("Invalid database path specified")
 
+    if "database_sweep_interval" in the_config:
+        globals.g_scanning_interval = the_config["database_sweep_interval"]     
+
 
 def main():
     parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
@@ -649,11 +590,11 @@ def main():
     parser.add_argument(
         "--config-file",
         required=True,
-        default="yara_agent.conf",
+        default="yaraconnector.conf",
         help="Location of the config file",
     )
 
-    parser.add_argument("--log-file", default="yara_agent.log", help="Log file output")
+    parser.add_argument("--log-file", default="yaraconnector.log", help="Log file output")
 
     parser.add_argument(
         "--output-file", default="yara_feed.json", help="output feed file"
@@ -709,7 +650,7 @@ def main():
     else:
 
         EXIT_EVENT = Event()
-
+    
         try:
 
             working_dir = args.working_dir
@@ -717,16 +658,16 @@ def main():
             lock_file = lockfile.FileLock(args.lock_file)
 
             files_preserve = getLogFileHandles(logger)
-            files_preserve.extend([args.log_file, args.output_file])
+            files_preserve.extend([args.lock_file, args.log_file, args.output_file])
 
-            #defauls to piping to /dev/null
+            # defauls to piping to /dev/null
             context = daemon.DaemonContext(
                 working_directory=working_dir,
                 pidfile=lock_file,
-                stdout=sys.stdout,
-                stderr=sys.stderr,
                 files_preserve=files_preserve,
             )
+
+            run_as_master = globals.g_mode == "master"
 
             scanning_promise_queue = AsyncResultQueue()
             scanning_results_queue = Queue()
@@ -735,10 +676,12 @@ def main():
 
             with context:
                 # only connect to cbr if we're the master
-                if globals.g_mode == "master":
+                if run_as_master:
                     init_local_resources()
                     start_workers(
-                        EXIT_EVENT, scanning_promise_queue, scanning_results_queue
+                        EXIT_EVENT,
+                        scanning_promise_queue,
+                        scanning_results_queue,
                     )
                     # start local celery if working mode is local
                     if not globals.g_remote:
@@ -748,7 +691,8 @@ def main():
                     start_celery_worker_thread(args.config_file)
 
                 # run until the service/daemon gets a quitting sig
-                run_to_signal(EXIT_EVENT)
+                run_to_exit_signal(EXIT_EVENT)
+                wait_all_worker_exit()
 
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
@@ -773,26 +717,34 @@ def getLogFileHandles(logger):
     return handles
 
 
-#
-# Signal handler - handle the signal and mark exit if its an exiting signal
-#
+
 def handle_sig(exit_event, sig, frame):
-    exit_sigs = (signal.SIGTERM, signal.SIGQUIT)
+    """
+      Signal handler - handle the signal and mark exit if its an exiting signal
+    """
+    exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL)
     if sig in exit_sigs:
         exit_event.set()
-        sys.exit()
+        logger.debug("Sig handler set exit event")
 
 
 #
 # wait until the exit_event has been set by the signal handler
 #
-def run_to_signal(exit_event):
-    while not exit_event.is_set():
-        signal.pause()
-    
+def run_to_exit_signal(exit_event):
+    exit_event.wait()
+    logger.debug("Begin graceful shutdown...")
 
 
 def init_local_resources():
+    """
+        Initialize the local resources required to get module information
+        from cbr module store as well as local storage of module and scanning
+        metadata in sqlite 'binary.db' - generate an initial fead from the 
+        database
+
+        generate yara_rule_set metadata
+    """
     globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
     generate_yara_rule_map_hash(globals.g_yara_rules_dir)
     database = SqliteDatabase(os.path.join(globals.g_feed_database_path, "binary.db"))
@@ -802,25 +754,28 @@ def init_local_resources():
     generate_feed_from_db()
 
 
-# Start celery worker
-# TODO - Aggresive autoscaling config options
-# TODO _ honour the kill sig / exit event
-def start_celery_worker_thread(config_file):
-    t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
-    t.daemon = True
-    t.start()
+def wait_all_worker_exit():
+    """ Await the exit of our worker threads """
+    threadcount = 2
+    while (threadcount > 1):
+          threadcount = threading.active_count()
+          logger.debug("Main thread Waiting on {threacount} live worker-threads...")
+          time.sleep(0.1)
+          pass      
 
 
 # starts worker-threads (not celery workers)
 # worker threads do work until they get the exit_event signal
-def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
+def start_workers(exit_event, scanning_promises_queue, scanning_results_queue
+):
     logger.debug("Starting perf thread")
 
-    perf_thread = DatabaseScanningThread(60, scanning_promises_queue)
+    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, scanning_promises_queue, exit_event)
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
-    for _ in range(3):
+
+    for _ in range(2):
         promise_worker_thread = Thread(
             target=promise_worker,
             args=(exit_event, scanning_promises_queue, scanning_results_queue),
@@ -829,7 +784,7 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
 
     logger.debug("Starting results saver thread")
     results_worker_thread = Thread(
-        target=results_worker, args=(exit_event, scanning_results_queue)
+        target=results_worker_chunked, args=(exit_event, scanning_results_queue)
     )
 
     results_worker_thread.start()
@@ -838,33 +793,28 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
 class DatabaseScanningThread(Thread):
 
     """
-        A chron like thread that scans over the database for new hashes ever INTERVAL seconds 
-        Pushes work to scanning_promises_queue 
-        Design is marginal - ideally it would incorporate the event as the others do
+        A worker thread that scans over the database for new hashes ever INTERVAL seconds 
+        Pushes work to scanning_promises_queue , exits when the event is triggered
+        by the signal handler
     """
 
-    def __init__(self, interval, scanning_promises_queue, *args, **kwargs):
+    def __init__(self, interval, scanning_promises_queue, exit_event, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args = args
         self.deamon = True
         self._kwargs = kwargs
-        self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, time.sleep)
+        self.exit_event = exit_event
+        self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, exit_event.wait)
         self._conn = get_database_conn()
         self._interval = interval
         self._scanning_promises_queue = scanning_promises_queue
         self._target = self.do_db_scan
 
-
-    #use enterabs and non-drifting time ?
-
-    def db_scan_worker(self):
-        self.DB_SCAN_SCHEDULER.enter(0, 1, self.do_db_scan)
-        self.DB_SCAN_SCHEDULER.run()
-
     def do_db_scan(self):
-        perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
-        self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
-        self.DB_SCAN_SCHEDULER.run()
+        if not self.exit_event.is_set():
+            perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
+            self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
+            self.DB_SCAN_SCHEDULER.run()
 
     def run(self):
         """Method representing the thread's activity.
@@ -882,14 +832,22 @@ class DatabaseScanningThread(Thread):
             # shutdown database connection
             self._conn.close()
             del self._target, self._args, self._kwargs
+            logger.debug("Database scanning Thread Exit")
 
 
-#launch a celery worker using the imported app context
+# Start celery worker in a daemon-thread
+# TODO - Aggresive autoscaling config options
+def start_celery_worker_thread(config_file):
+    t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
+    t.daemon = True
+    t.start()
+
+
+# launch a celery worker using the imported app context
 def launch_celery_worker(config_file=None):
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
-
-
+    logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
 
 if __name__ == "__main__":
