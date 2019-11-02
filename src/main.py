@@ -621,7 +621,7 @@ def main():
     )
 
     parser.add_argument(
-        "--lock-file", default="./yara.pid", help="lock file", required=False
+        "--lock-file", default="./yaraconnector.lock", help="lock file", required=False
     )
 
     parser.add_argument(
@@ -712,6 +712,7 @@ def main():
                 # run until the service/daemon gets a quitting sig
                 run_to_exit_signal(EXIT_EVENT)
                 wait_all_worker_exit()
+                logger.Info("Yara connector shutdown OK")
 
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
@@ -792,6 +793,8 @@ def wait_all_worker_exit():
         time.sleep(0.1)
         pass
 
+    logger.debug("Main thread going to exit...")
+
 
 # starts worker-threads (not celery workers)
 # worker threads do work until they get the exit_event signal
@@ -840,6 +843,7 @@ class DatabaseScanningThread(Thread):
 
     def scan_until_exit(self):
         # TODO DRIFT
+        self.do_db_scan()
         while not self.exit_event.is_set():
             self.exit_event.wait(timeout=self._interval)
             if self.exit_event.is_set():
@@ -851,7 +855,10 @@ class DatabaseScanningThread(Thread):
 
     def do_db_scan(self):
         logger.Debug("START database sweep")
-        perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
+        try:
+            perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
+        except Exception as e:
+            logger.error(f"Something went wrong sweeping the CbR module store...{str(e)} \n {traceback.format_exc()}")
 
     def run(self):
         """ Represents the lifetime of the thread """
