@@ -833,32 +833,27 @@ class DatabaseScanningThread(Thread):
         self._args = args
         self._kwargs = kwargs
         self.exit_event = exit_event
-        self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, exit_event.wait)
+        self.DB_SCAN_SCHEDULER = sched.scheduler(time.time, self.exit_event.wait)
         self._conn = get_database_conn()
         self._interval = interval
         self._scanning_promises_queue = scanning_promises_queue
         self._target = self.do_db_scan
 
-    def do_db_scan(self, cancel_if_exiting=True, scan=True):
+    def do_db_scan(self):
         """
             scans continously until the exit_event has been set
             and next is after (at most) INTERVAL seconds
         """
+        logger.debug(f"in do_db_scan exit ? {self.exit_event.is_set()}")
         if not self.exit_event.is_set():
-            if scan:
-                perform(
-                    globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue
-                )
+            perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
             if not self.exit_event.is_set():
-                # self.DB_SCAN_SCHEDULER.enter(
-                #    0.0, 1, self.do_db_scan, argument=(True, False)
-                # )
                 self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
                 logger.debug("do db scan scheduler run blocking")
                 self.DB_SCAN_SCHEDULER.run()
                 logger.debug("do db scan scheduler run unblocked")
 
-        elif cancel_if_exiting:
+        else: #attempt to cancel all jobs before exiting
             logger.debug("db scan trying to cancel queued scans to exit...")
             list(map(self.DB_SCAN_SCHEDULER.cancel, self.DB_SCAN_SCHEDULER.queue))
 
