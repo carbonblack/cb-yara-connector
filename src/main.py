@@ -772,7 +772,7 @@ def wait_all_worker_exit():
     """ Await the exit of our worker threads """
     threadcount = 2
     while (threadcount > 1):
-          threads = filter(lambda running_thread: not running_thread.deamon , threading.enumerate())
+          threads = list(filter(lambda running_thread: not running_thread.deamon if running_thread.has_attr("deamon") else true, threading.enumerate()))
           threadcount = len(threads)
           logger.debug(f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)...")
           logger.debug(f"Live threads (excluding daemons): {threads}")
