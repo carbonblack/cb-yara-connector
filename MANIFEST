@@ -1,3 +1,4 @@
-/etc/cb/integrations/yaraconnector/yaraconnector.conf
 /usr/share/cb/integrations/yaraconnector/yaraconnector
+%dir /usr/share/cb/integrations/yaraconnector
+%dir /var/log/cb/integrations/yaraconnector
 /etc/init/yaraconnector.conf

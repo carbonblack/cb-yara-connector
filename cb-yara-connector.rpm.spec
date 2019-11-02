@@ -12,14 +12,12 @@ Carbon Black Yara Agent - Scans binaries with configured yara rules
 pyinstaller %{_sourcedir}/cb-yara-connector.spec
 
 %install
-mkdir -p /var/log/cb/integrations/yaraconnector
-mkdir -p /usr/share/cb/integrations/yaraconnector
-mkdir -p /etc/cb/integrations/yaraconnector
-cp yara.conf /etc/cb/integrations/yaraconnector/yaraconnector.conf.example
-install -m 0755 init-scripts/yaraconnector.conf /etc/init/yaraconnector.conf
-install -m 0755 dist/yaraconnector /usr/share/cb/integrations/yaraconnector/yaraconnector
+mkdir -p ${RPM_BUILD_ROOT}/var/log/cb/integrations/yaraconnector
+mkdir -p ${RPM_BUILD_ROOT}/usr/share/cb/integrations/yaraconnector
+mkdir -p ${RPM_BUILD_ROOT}/etc/cb/integrations/yaraconnector
+mkdir -p ${RPM_BUILD_ROOT}/etc/init
+cp yara.conf ${RPMB_BUILD_ROOT}/etc/cb/integrations/yaraconnector/yaraconnector.conf.example
+install -m 0755 init-scripts/yaraconnector.conf ${RPM_BUILD_ROOT}/etc/init/yaraconnector.conf
+install -m 0755 dist/yaraconnector ${RPM_BUILD_ROOT}/usr/share/cb/integrations/yaraconnector/yaraconnector
 
 %files -f MANIFEST
-
-%config /etc/init/yaraconnector.conf
-%config(noreplace) /etc/cb/integrations/yaraconnector/yaraconnector.conf
