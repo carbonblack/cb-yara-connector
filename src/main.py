@@ -68,6 +68,10 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
         else:
             exit_event.wait(1)
 
+    logger.debug("PROMISE WORKING EXITING")
+
+
+
 
 """ Sqlite is not meant to be thread-safe 
 
@@ -86,6 +90,8 @@ def results_worker(exit_event, results_queue):
         else:
             exit_event.wait(1)
 
+    logger.debug("Results working exiting")
+
 def results_worker_chunked(exit_event, results_queue):
     while not (exit_event.is_set()):
         if not (results_queue.empty()):
@@ -96,6 +102,8 @@ def results_worker_chunked(exit_event, results_queue):
                 exit_event.wait(1)
         else:
             exit_event.wait(1)
+
+    logger.debug("Results working exiting")
 
 def generate_feed_from_db() -> None:
     """
@@ -271,6 +279,7 @@ def get_binary_file_cursor(conn, start_date_binaries):
 
 
 def execute_script():
+    """ Execute the configured shell script """
     logger.warning("!!!Executing vacuum script!!!")
 
     target = os.path.join(os.getcwd(), globals.g_vacuum_script)
@@ -285,6 +294,8 @@ def execute_script():
 
 
 def perform(yara_rule_dir, conn, scanning_promises_queue):
+    """ Main routine - checks the cbr modulestore/storfiles table for new hashes 
+    by comparing the sliding-window (now - globals.g_num_days_binaries) with the contents of the feed database on disk"""
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
         generate_rule_map_remote(yara_rule_dir)
@@ -315,7 +326,6 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
     md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
     analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
-    #analyze_binaries_and_queue(scanning_promises_queue, md5_hashes)
 
 
 def _check_hash_against_feed(md5_hash):
@@ -669,10 +679,12 @@ def main():
 
             run_as_master = globals.g_mode == "master"
 
-            scanning_promise_queue = AsyncResultQueue()
+            scanning_promise_queue = Queue()
             scanning_results_queue = Queue()
 
-            context.signal_map = {signal.SIGTERM: partial(handle_sig, EXIT_EVENT)}
+            sig_handler = partial(handle_sig, EXIT_EVENT)
+
+            context.signal_map = {signal.SIGTERM: sig_handler, signal.SIGQUIT : sig_handler, signal.SIGKILL : sig_handler}
 
             with context:
                 # only connect to cbr if we're the master
@@ -759,11 +771,12 @@ def wait_all_worker_exit():
     threadcount = 2
     while (threadcount > 1):
           threadcount = threading.active_count()
-          logger.debug("Main thread Waiting on {threacount} live worker-threads...")
+          logger.debug(f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)...")
+          logger.debug(f"Live threads (including daemons): {threading.enumerate()}")
           time.sleep(0.1)
-          pass      
+          pass       
 
-
+ 
 # starts worker-threads (not celery workers)
 # worker threads do work until they get the exit_event signal
 def start_workers(exit_event, scanning_promises_queue, scanning_results_queue
@@ -817,12 +830,8 @@ class DatabaseScanningThread(Thread):
             self.DB_SCAN_SCHEDULER.run()
 
     def run(self):
-        """Method representing the thread's activity.
-        You may override this method in a subclass. The standard run() method
-        invokes the callable object passed to the object's constructor as the
-        target argument, if any, with sequential and keyword arguments taken
-        from the args and kwargs arguments, respectively.
-        """
+        """ Represents the lifetime of the thread """
+    
         try:
             if self._target:
                 self._target(*self._args, **self._kwargs)
@@ -832,7 +841,7 @@ class DatabaseScanningThread(Thread):
             # shutdown database connection
             self._conn.close()
             del self._target, self._args, self._kwargs
-            logger.debug("Database scanning Thread Exit")
+            logger.debug("Database scanning Thread Exiting gracefully")
 
 
 # Start celery worker in a daemon-thread
