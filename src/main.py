@@ -20,8 +20,6 @@ import threading
 from threading import Thread, Event, Barrier
 from queue import Queue, Empty
 
-from asyncresultqueue import AsyncResultQueue
-
 import humanfriendly
 import psycopg2
 import sched
