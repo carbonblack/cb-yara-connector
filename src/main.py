@@ -71,8 +71,6 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
     logger.debug("PROMISE WORKING EXITING")
 
 
-
-
 """ Sqlite is not meant to be thread-safe 
 
 This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and seen binaries/results from scans
@@ -92,6 +90,7 @@ def results_worker(exit_event, results_queue):
 
     logger.debug("Results working exiting")
 
+
 def results_worker_chunked(exit_event, results_queue):
     while not (exit_event.is_set()):
         if not (results_queue.empty()):
@@ -104,6 +103,7 @@ def results_worker_chunked(exit_event, results_queue):
             exit_event.wait(1)
 
     logger.debug("Results working exiting")
+
 
 def generate_feed_from_db() -> None:
     """
@@ -269,7 +269,9 @@ def get_binary_file_cursor(conn, start_date_binaries):
     cur = conn.cursor(name="yara_agent")
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
-    query =  "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+    query = "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' ORDER BY timestamp DESC".format(
+        start_date_binaries
+    )
 
     logger.debug(query)
 
@@ -338,14 +340,14 @@ def _check_hash_against_feed(md5_hash):
 
     if query.exists():
         return False
-        
+
     return True
 
 
 def save_and_log(
     analysis_results, start_time, num_binaries_skipped, num_total_binaries
 ):
-   
+
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
@@ -593,7 +595,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
             raise CbInvalidConfig("Invalid database path specified")
 
     if "database_sweep_interval" in the_config:
-        globals.g_scanning_interval = the_config["database_sweep_interval"]     
+        globals.g_scanning_interval = the_config["database_sweep_interval"]
 
 
 def main():
@@ -606,7 +608,9 @@ def main():
         help="Location of the config file",
     )
 
-    parser.add_argument("--log-file", default="yaraconnector.log", help="Log file output")
+    parser.add_argument(
+        "--log-file", default="yaraconnector.log", help="Log file output"
+    )
 
     parser.add_argument(
         "--output-file", default="yara_feed.json", help="output feed file"
@@ -662,7 +666,7 @@ def main():
     else:
 
         EXIT_EVENT = Event()
-    
+
         try:
 
             working_dir = args.working_dir
@@ -686,16 +690,17 @@ def main():
 
             sig_handler = partial(handle_sig, EXIT_EVENT)
 
-            context.signal_map = {signal.SIGTERM: sig_handler, signal.SIGQUIT : sig_handler}
+            context.signal_map = {
+                signal.SIGTERM: sig_handler,
+                signal.SIGQUIT: sig_handler,
+            }
 
             with context:
                 # only connect to cbr if we're the master
                 if run_as_master:
                     init_local_resources()
                     start_workers(
-                        EXIT_EVENT,
-                        scanning_promise_queue,
-                        scanning_results_queue,
+                        EXIT_EVENT, scanning_promise_queue, scanning_results_queue
                     )
                     # start local celery if working mode is local
                     if not globals.g_remote:
@@ -729,7 +734,6 @@ def getLogFileHandles(logger):
     if logger.parent:
         handles += getLogFileHandles(logger.parent)
     return handles
-
 
 
 def handle_sig(exit_event, sig, frame):
@@ -771,22 +775,32 @@ def init_local_resources():
 def wait_all_worker_exit():
     """ Await the exit of our worker threads """
     threadcount = 2
-    while (threadcount > 1):
-          threads = list(filter(lambda running_thread: not running_thread.deamon if hasattr(running_thread, "deamon") else True, threading.enumerate()))
-          threadcount = len(threads)
-          logger.debug(f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)...")
-          logger.debug(f"Live threads (excluding daemons): {threads}")
-          time.sleep(0.1)
-          pass       
+    while threadcount > 1:
+        threads = list(
+            filter(
+                lambda running_thread: not running_thread.daemon
+                if hasattr(running_thread, "daemon")
+                else True,
+                threading.enumerate(),
+            )
+        )
+        threadcount = len(threads)
+        logger.debug(
+            f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)..."
+        )
+        logger.debug(f"Live threads (excluding daemons): {threads}")
+        time.sleep(0.1)
+        pass
 
- 
+
 # starts worker-threads (not celery workers)
 # worker threads do work until they get the exit_event signal
-def start_workers(exit_event, scanning_promises_queue, scanning_results_queue
-):
+def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
     logger.debug("Starting perf thread")
 
-    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, scanning_promises_queue, exit_event)
+    perf_thread = DatabaseScanningThread(
+        globals.g_scanning_interval, scanning_promises_queue, exit_event
+    )
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
@@ -825,25 +839,32 @@ class DatabaseScanningThread(Thread):
         self._scanning_promises_queue = scanning_promises_queue
         self._target = self.do_db_scan
 
-    def do_db_scan(self, cancel_if_exiting=True):
+    def do_db_scan(self, cancel_if_exiting=True, scan=True):
         """
             scans continously until the exit_event has been set
             and next is after (at most) INTERVAL seconds
         """
         if not self.exit_event.is_set():
-            perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
-            #self.DB_SCAN_SCHEDULER.enter(0.0, 1 , self.do_db_scan, argument = (True, False))
-            self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
-            logger.debug("do db scan scheduler run blocking")
-            self.DB_SCAN_SCHEDULER.run()
-            logger.debug("do db scan scheduler run unblocked")
-        elif cancel_if_exiting:
-            list(map(self.DB_SCAN_SCHEDULER.cancel, self.DB_SCAN_SCHEDULER.queue))
+            if scan:
+                perform(
+                    globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue
+                )
+            if not self.exit_event.is_set():
+                # self.DB_SCAN_SCHEDULER.enter(
+                #    0.0, 1, self.do_db_scan, argument=(True, False)
+                # )
+                self.DB_SCAN_SCHEDULER.enter(self._interval, 1, self.do_db_scan)
+                logger.debug("do db scan scheduler run blocking")
+                self.DB_SCAN_SCHEDULER.run()
+                logger.debug("do db scan scheduler run unblocked")
 
+        elif cancel_if_exiting:
+            logger.debug("db scan trying to cancel queued scans to exit...")
+            list(map(self.DB_SCAN_SCHEDULER.cancel, self.DB_SCAN_SCHEDULER.queue))
 
     def run(self):
         """ Represents the lifetime of the thread """
-    
+
         try:
             if self._target:
                 self._target(*self._args, **self._kwargs)
