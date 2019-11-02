@@ -684,7 +684,7 @@ def main():
 
             sig_handler = partial(handle_sig, EXIT_EVENT)
 
-            context.signal_map = {signal.SIGTERM: sig_handler, signal.SIGQUIT : sig_handler, signal.SIGKILL : sig_handler}
+            context.signal_map = {signal.SIGTERM: sig_handler, signal.SIGQUIT : sig_handler}
 
             with context:
                 # only connect to cbr if we're the master
