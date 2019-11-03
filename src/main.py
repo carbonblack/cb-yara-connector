@@ -80,7 +80,7 @@ def results_worker(exit_event, results_queue):
         if not (results_queue.empty()):
             try:
                 result = results_queue.get()
-                save_result(result)
+                save_results_with_logging(result)
             except Empty:
                 exit_event.wait(1)
         else:
@@ -313,21 +313,50 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
     cur = get_binary_file_cursor(conn, start_date_binaries)
 
-    rows = cur.fetchall()
-
-    conn.commit()
+    rows = cur.fetchmany()
 
     num_total_binaries = len(rows)
 
-    logger.info(
-        f"Enumerating modulestore...found {num_total_binaries} resident binaries"
-    )
+    while num_total_binaries > 0:
 
-    md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
+        logger.info(
+            f"Enumerating modulestore...found {num_total_binaries} resident binaries"
+        )
 
-    analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
+        md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
-    logger.debug("Exit PERFORM")
+        logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
+
+        analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
+
+        elapsed_time = datetime.now() - start_datetime
+
+        """
+            Holding the named-cursor through  a large historical result set
+            will cause storefiles table fragmentation
+            After a configurable amount of time - use the configured 
+            script to vacuum the table by hand before continuing
+        """
+
+        if elapsed_time > globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
+            # Make sure the cursor is closed, and we are commited()
+            # to release SHARED access to the table
+            cur.close()
+            conn.commit()
+            # execute the configured script
+            execute_script()
+            # restore cursor
+            cur = get_binary_file_cursor(conn, start_date_binaries)
+
+        rows = cur.fetchmany()
+
+        num_total_binaries = len(rows)
+
+    cur.close()
+
+    conn.commit()
+
+    logger.debug("Exiting database sweep routine")
 
 
 def _check_hash_against_feed(md5_hash):
@@ -340,6 +369,21 @@ def _check_hash_against_feed(md5_hash):
         return False
 
     return True
+
+
+def save_results_with_logging(analysis_results):
+    logger.debug(analysis_results)
+    if analysis_results:
+        for analysis_result in analysis_results:
+            logger.debug(
+                (
+                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
+                )
+            )
+            if analysis_result.last_error_msg:
+                logger.error(analysis_result.last_error_msg)
+        save_results(analysis_results)
 
 
 def save_and_log(
@@ -619,7 +663,7 @@ def main():
     )
 
     parser.add_argument(
-        "--lock-file", default="./yaraconnector.lock", help="lock file", required=False
+        "--lock-file", default="./yaraconnector", help="lock file", required=False
     )
 
     parser.add_argument(
@@ -856,7 +900,9 @@ class DatabaseScanningThread(Thread):
         try:
             perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
         except Exception as e:
-            logger.error(f"Something went wrong sweeping the CbR module store...{str(e)} \n {traceback.format_exc()}")
+            logger.error(
+                f"Something went wrong sweeping the CbR module store...{str(e)} \n {traceback.format_exc()}"
+            )
 
     def run(self):
         """ Represents the lifetime of the thread """
