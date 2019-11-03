@@ -325,11 +325,11 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
         md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
-        logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
+        #logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
 
         analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
-        elapsed_time = datetime.now() - start_datetime
+        elapsed_time = (datetime.now() - start_datetime).total_seconds()
 
         """
             Holding the named-cursor through  a large historical result set
@@ -345,6 +345,8 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
             conn.commit()
             # execute the configured script
             execute_script()
+            
+            start_datetime = datetime.now()
             # restore cursor
             cur = get_binary_file_cursor(conn, start_date_binaries)
 
