@@ -55,16 +55,19 @@ celery_logger.setLevel(logging.ERROR)
 
 
 def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
-    while not (exit_event.is_set()):
-        if not (scanning_promise_queue.empty()):
-            try:
-                promise = scanning_promise_queue.get(timeout=1.0)
-                result = promise.get(disable_sync_subtasks=False)
-                scanning_results_queue.put(result)
-            except Empty:
+    try:
+        while not (exit_event.is_set()):
+            if not (scanning_promise_queue.empty()):
+                try:
+                    promise = scanning_promise_queue.get(timeout=1.0)
+                    result = promise.get(disable_sync_subtasks=False)
+                    scanning_results_queue.put(result)
+                except Empty:
+                    exit_event.wait(1)
+            else:
                 exit_event.wait(1)
-        else:
-            exit_event.wait(1)
+    finally:
+        exit_event.set()            
 
     logger.debug("PROMISE WORKING EXITING")
 
@@ -76,29 +79,35 @@ This single-worker-thread writes the result(s) to the configured sqlite file to 
 
 
 def results_worker(exit_event, results_queue):
-    while not (exit_event.is_set()):
-        if not (results_queue.empty()):
-            try:
-                result = results_queue.get()
-                save_results_with_logging(result)
-            except Empty:
+    try:
+        while not (exit_event.is_set()):
+            if not (results_queue.empty()):
+                try:
+                    result = results_queue.get()
+                    save_results_with_logging(result)
+                except Empty:
+                    exit_event.wait(1)
+            else:
                 exit_event.wait(1)
-        else:
-            exit_event.wait(1)
+    finally:
+        exit_event.set()
 
     logger.debug("Results worker thread exiting")
 
 
 def results_worker_chunked(exit_event, results_queue):
-    while not (exit_event.is_set()):
-        if not (results_queue.empty()):
-            try:
-                results = results_queue.get()
-                save_results(results)
-            except Empty:
+    try:
+        while not (exit_event.is_set()):
+            if not (results_queue.empty()):
+                try:
+                    results = results_queue.get()
+                    save_results(results)
+                except Empty:
+                    exit_event.wait(1)
+            else:
                 exit_event.wait(1)
-        else:
-            exit_event.wait(1)
+    finally:
+        exit_event.set()
 
     logger.debug("Results worker thread exiting")
 
@@ -313,7 +322,7 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
     cur = get_binary_file_cursor(conn, start_date_binaries)
 
-    rows = cur.fetchmany()
+    rows = cur.fetchmany(2000)
 
     num_total_binaries = len(rows)
 
@@ -325,7 +334,7 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
         md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
-        #logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
+        # logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
 
         analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
@@ -345,14 +354,16 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
             conn.commit()
             # execute the configured script
             execute_script()
-            
+            # restore start for elapsed_time
             start_datetime = datetime.now()
             # restore cursor
             cur = get_binary_file_cursor(conn, start_date_binaries)
 
-        rows = cur.fetchmany()
+        rows = cur.fetchmany(2000)
 
         num_total_binaries = len(rows)
+
+    # Closing since there are no more binaries of interest to scan
 
     cur.close()
 
