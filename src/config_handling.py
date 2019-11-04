@@ -91,6 +91,8 @@ class ConfigurationInit(object):
             value = self._as_str("broker_url", required=True)
             app.conf.update(broker_url=value, result_backend=value)
 
+        globals.g_worker_network_timeout = self._as_int("worker_network_timeout")
+
     def _extended_check(self) -> None:
         """
         Validate entries used by the main process.

@@ -9,6 +9,7 @@ g_config = {}
 g_output_file = ""
 
 g_remote = False
+g_mode = ""
 
 # local info
 g_cb_server_url = "https://127.0.0.1"
@@ -37,6 +38,7 @@ g_feed_database_dir = "./feed_db"
 
 g_scanning_interval = 360
 
-g_worker_network_timeout=5
 g_vacuum_interval = -1
 g_vacuum_script = "./scripts/vacuumscript.sh"
+
+g_worker_network_timeout = 5

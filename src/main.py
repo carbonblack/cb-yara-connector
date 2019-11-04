@@ -1,5 +1,4 @@
 import argparse
-import configparser
 import hashlib
 import json
 import logging
@@ -29,7 +28,7 @@ from peewee import SqliteDatabase
 import globals
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
-from exceptions import CbInvalidConfig
+from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
 from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
 
@@ -272,24 +271,31 @@ def get_binary_file_cursor(conn, start_date_binaries):
     return cur
 
 
-def execute_script():
-    """ Execute the configured shell script """
-    logger.warning("!!!Executing vacuum script!!!")
-
-    target = os.path.join(os.getcwd(), globals.g_vacuum_script)
-
-    prog = subprocess.Popen(target, shell=True, universal_newlines=True)
+def execute_script() -> None:
+    """
+    Execute a external maintenence script (vacuum script).
+    """
+    logger.info("----- Executing vacuum script ----------------------------------------")
+    prog = subprocess.Popen(globals.g_vacuum_script, shell=True, universal_newlines=True)
     stdout, stderr = prog.communicate()
-    logger.info(stdout)
-    logger.error(stderr)
+    if stdout is not None and len(stdout.strip()) > 0:
+        logger.info(stdout)
+    if stderr is not None and len(stderr.strip()) > 0:
+        logger.error(stderr)
     if prog.returncode:
-        logger.warning("program returned error code {0}".format(prog.returncode))
-    logger.warning("!!!Done Executing vacuum script!!!")
+        logger.warning(f"program returned error code {prog.returncode}")
+    logger.info("---------------------------------------- Vacuum script completed -----\n")
 
 
-def perform(yara_rule_dir, conn, scanning_promises_queue):
-    """ Main routine - checks the cbr modulestore/storfiles table for new hashes 
-    by comparing the sliding-window (now - globals.g_num_days_binaries) with the contents of the feed database on disk"""
+def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
+    """
+    Main routine - checks the cbr modulestore/storfiles table for new hashes by comparing the sliding-window
+    with the contents of the feed database on disk.
+
+    :param yara_rule_dir: location of the rules directory
+    :param conn: The connection (TODO: type)
+    :param scanning_promises_queue:
+    """
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
         generate_rule_map_remote(yara_rule_dir)
@@ -301,29 +307,24 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
     start_time = time.time()
 
-    start_datetime = datetime.now()
+    # Determine our binaries window (date forward)
+    start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
 
-    start_date_binaries = start_datetime - timedelta(days=globals.g_num_days_binaries)
+    # vacuum script window start
+    vacuum_window_start = datetime.now()
 
     cur = get_binary_file_cursor(conn, start_date_binaries)
-
     rows = cur.fetchmany(2000)
-
     num_total_binaries = len(rows)
 
     while num_total_binaries > 0:
-
-        logger.info(
-            f"Enumerating modulestore...found {num_total_binaries} resident binaries"
-        )
+        logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
         md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
         # logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
 
         analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
-
-        elapsed_time = (datetime.now() - start_datetime).total_seconds()
 
         """
             Holding the named-cursor through  a large historical result set
@@ -332,26 +333,24 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
             script to vacuum the table by hand before continuing
         """
 
-        if elapsed_time > globals.g_vacuum_interval and globals.g_vacuum_seconds > 0:
-            # Make sure the cursor is closed, and we are commited()
-            # to release SHARED access to the table
-            cur.close()
-            conn.commit()
-            # execute the configured script
-            execute_script()
-            # restore start for elapsed_time
-            start_datetime = datetime.now()
-            # restore cursor
-            cur = get_binary_file_cursor(conn, start_date_binaries)
+        if globals.g_vacuum_interval > 0:
+            seconds_since_start = (datetime.now() - vacuum_window_start).seconds
+            if seconds_since_start >= globals.g_vacuum_interval * 60:
+                # close connection
+                cur.close()
+                conn.commit()
+
+                execute_script()
+                vacuum_window_start = datetime.now()
+
+                # get the connection back
+                cur = get_binary_file_cursor(conn, start_date_binaries)
 
         rows = cur.fetchmany(2000)
-
         num_total_binaries = len(rows)
 
     # Closing since there are no more binaries of interest to scan
-
     cur.close()
-
     conn.commit()
 
     logger.debug("Exiting database sweep routine")
@@ -383,9 +382,8 @@ def save_results_with_logging(analysis_results):
         save_results(analysis_results)
 
 
-def save_and_log(
-        analysis_results, start_time, num_binaries_skipped, num_total_binaries
-):
+# noinspection PyUnusedFunction
+def save_and_log(analysis_results, start_time, num_binaries_skipped, num_total_binaries):
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
@@ -402,9 +400,7 @@ def save_and_log(
     _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
 
 
-def _rule_logging(
-        start_time: float, num_binaries_skipped: int, num_total_binaries: int
-) -> None:
+def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
     """
     Simple method to log yara work.
     :param start_time: start time for the work
@@ -437,333 +433,7 @@ def _rule_logging(
     logger.info("")
 
 
-# noinspection DuplicatedCode
-def verify_config(config_file: str, output_file: str = None) -> None:
-    """
-    Validate the config file.
-    :param config_file: The config file to validate
-    :param output_file: the output file; if not specified equals config file plus ".json"
-    """
-    abs_config = os.path.abspath(os.path.expanduser(placehold(config_file)))
-    header = f"Config file '{abs_config}'"
-
-    config = configparser.ConfigParser()
-    if not os.path.exists(config_file):
-        raise CbInvalidConfig(f"{header} does not exist!")
-
-    try:
-        config.read(config_file)
-    except Exception as err:
-        raise CbInvalidConfig(err)
-
-    logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section("general"):
-        raise CbInvalidConfig(f"{header} does not have a 'general' section")
-
-    globals.output_file = (
-        output_file if output_file is not None else config_file.strip() + ".json"
-    )
-    globals.output_file = os.path.abspath(
-        os.path.expanduser(placehold(globals.output_file))
-    )
-    logger.debug(f"NOTE: output file will be '{globals.output_file}'")
-
-    the_config = config["general"]
-
-    if "mode" in config["general"]:
-        operating_mode = the_config["mode"].lower()
-        if operating_mode in ["master", "slave"]:
-            globals.g_mode = operating_mode
-        else:
-            raise CbInvalidConfig(
-                f"{header} does not specify a valid operating mode (slave/master)"
-            )
-    else:
-        raise CbInvalidConfig(
-            f"{header} does not specify a valid operating mode (slave/master)"
-        )
-
-    if "worker_type" in the_config:
-        if (
-                the_config["worker_type"] == "local"
-                or the_config["worker_type"].strip() == ""
-        ):
-            globals.g_remote = False  # 'local' or empty definition
-        elif the_config["worker_type"] == "remote":
-            globals.g_remote = True  # 'remote'
-        else:  # anything else
-            raise CbInvalidConfig(
-                f"{header} has an invalid 'worker_type' ({the_config['worker_type']})"
-            )
-    else:
-        globals.g_remote = False
-        logger.warning(f"{header} does not specify 'worker_type', assuming local")
-
-    # local/remote configuration data
-    if not globals.g_remote:
-        if "cb_server_url" in the_config and the_config["cb_server_url"].strip() != "":
-            globals.g_cb_server_url = the_config["cb_server_url"]
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
-        if (
-                "cb_server_token" in the_config
-                and the_config["cb_server_token"].strip() != ""
-        ):
-            globals.g_cb_server_token = the_config["cb_server_token"]
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
-        # TODO: validate url & token with test call?
-
-    if "broker_url" in the_config and the_config["broker_url"].strip() != "":
-        app.conf.update(
-            broker_url=the_config["broker_url"], result_backend=the_config["broker_url"]
-        )
-    elif globals.g_remote:
-        raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
-
-    if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
-        check = os.path.abspath(
-            os.path.expanduser(placehold(the_config["yara_rules_dir"]))
-        )
-        if os.path.exists(check):
-            if os.path.isdir(check):
-                globals.g_yara_rules_dir = check
-            else:
-                raise CbInvalidConfig(
-                    f"{header} specified 'yara_rules_dir' ({check}) is not a directory"
-                )
-        else:
-            raise CbInvalidConfig(
-                f"{header} specified 'yara_rules_dir' ({check}) does not exist"
-            )
-    else:
-        raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
-
-    # NOTE: postgres_host has a default value in globals; use and warn if not defined
-    if "postgres_host" in the_config and the_config["postgres_host"].strip() != "":
-        globals.g_postgres_host = the_config["postgres_host"]
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_host'; using default of '{globals.g_postgres_host}'"
-        )
-
-    # NOTE: postgres_username has a default value in globals; use and warn if not defined
-    if (
-            "postgres_username" in the_config
-            and the_config["postgres_username"].strip() != ""
-    ):
-        globals.g_postgres_username = the_config["postgres_username"]
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_username'; using default of '{globals.g_postgres_username}'"
-        )
-
-    if (
-            "postgres_password" in the_config
-            and the_config["postgres_password"].strip() != ""
-    ):
-        globals.g_postgres_password = the_config["postgres_password"]
-    else:
-        raise CbInvalidConfig(f"{header} has no 'postgres_password' defined")
-
-    # NOTE: postgres_db has a default value in globals; use and warn if not defined
-    if "postgres_db" in the_config and the_config["postgres_db"].strip() != "":
-        globals.g_postgres_db = the_config["postgres_db"]
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_db'; using default of '{globals.g_postgres_db}'"
-        )
-
-    # NOTE: postgres_port has a default value in globals; use and warn if not defined
-    if "postgres_port" in the_config:
-        globals.g_postgres_port = int(the_config["postgres_port"])
-    else:
-        logger.warning(
-            f"{header} has no defined 'postgres_port'; using default of '{globals.g_postgres_port}'"
-        )
-
-    # TODO: validate postgres connection with supplied information?
-
-    if "niceness" in the_config:
-        os.nice(int(the_config["niceness"]))
-
-    if "concurrent_hashes" in the_config:
-        globals.MAX_HASHES = int(the_config["concurrent_hashes"])
-        logger.debug("Consurrent Hashes: {0}".format(globals.MAX_HASHES))
-
-    if "disable_rescan" in the_config:
-        globals.g_disable_rescan = bool(the_config["disable_rescan"])
-        logger.debug("Disable Rescan: {0}".format(globals.g_disable_rescan))
-
-    if "num_days_binaries" in the_config:
-        globals.g_num_days_binaries = max(int(the_config["num_days_binaries"]), 1)
-        logger.debug(
-            "Number of days for binaries: {0}".format(globals.g_num_days_binaries)
-        )
-
-    if "vacuum_seconds" in the_config:
-        globals.g_vacuum_seconds = max(int(the_config["vacuum_seconds"]), 0)
-        if "vacuum_script" in the_config and the_config["vacuum_seconds"].strip() != "":
-            if globals.g_vacuum_seconds > 0:
-                check = os.path.abspath(
-                    os.path.expanduser(placehold(the_config["vacuum_script"]))
-                )
-                if os.path.exists(check):
-                    if os.path.isdir(check):
-                        raise CbInvalidConfig(
-                            f"{header} specified 'vacuum_script' ({check}) is a directory"
-                        )
-                else:
-                    raise CbInvalidConfig(
-                        f"{header} specified 'vacuum_script' ({check}) does not exist"
-                    )
-                globals.g_vacuum_script = check
-                logger.warning(
-                    f"Vacuum Script '{check}' is enabled; use this advanced feature at your own discretion!"
-                )
-            else:
-                logger.debug(
-                    f"{header} has 'vacuum_script' defined, but it is disabled"
-                )
-
-    if "feed_database_path" in the_config:
-        globals.feed_database_path = the_config["feed_database_path"]
-        check = os.path.abspath(placehold(the_config["feed_database_path"]))
-        if not (os.path.exists(check) and os.path.isdir(check)):
-            raise CbInvalidConfig("Invalid database path specified")
-
-    if "database_sweep_interval" in the_config:
-        globals.g_scanning_interval = int(the_config["database_sweep_interval"])
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
-
-    parser.add_argument(
-        "--config-file",
-        required=True,
-        default="yaraconnector.conf",
-        help="Location of the config file",
-    )
-
-    parser.add_argument(
-        "--log-file", default="yaraconnector.log", help="Log file output"
-    )
-
-    parser.add_argument(
-        "--output-file", default="yara_feed.json", help="output feed file"
-    )
-
-    parser.add_argument(
-        "--working-dir", default=".", help="working directory", required=False
-    )
-
-    parser.add_argument(
-        "--lock-file", default="./yaraconnector", help="lock file", required=False
-    )
-
-    parser.add_argument(
-        "--validate-yara-rules",
-        action="store_true",
-        help="ONLY validate yara rules in a specified directory",
-    )
-
-    parser.add_argument("--debug", action="store_true")
-
-    args = parser.parse_args()
-
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-
-    if args.log_file:
-        formatter = logging.Formatter(logging_format)
-        handler = logging.handlers.RotatingFileHandler(
-            args.log_file, maxBytes=10 * 1000000, backupCount=10
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-
-    # Verify the configuration file and load up important global variables
-    try:
-        verify_config(args.config_file, args.output_file)
-    except Exception as err:
-        logger.error(f"Unable to continue due to a configuration problem: {err}")
-        sys.exit(1)
-
-    if args.validate_yara_rules:
-        logger.info(
-            "Validating yara rules in directory: {0}".format(globals.g_yara_rules_dir)
-        )
-        yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-        try:
-            yara.compile(filepaths=yara_rule_map)
-            logger.info("All yara rules compiled successfully")
-        except Exception as err:
-            logger.error(f"There were errors compiling yara rules: {err}")
-            logger.error(traceback.format_exc())
-    else:
-
-        EXIT_EVENT = Event()
-
-        try:
-
-            working_dir = args.working_dir
-
-            lock_file = lockfile.FileLock(args.lock_file)
-
-            files_preserve = getLogFileHandles(logger)
-            files_preserve.extend([args.lock_file, args.log_file, args.output_file])
-
-            # defauls to piping to /dev/null
-            context = daemon.DaemonContext(
-                working_directory=working_dir,
-                pidfile=lock_file,
-                files_preserve=files_preserve,
-            )
-
-            run_as_master = globals.g_mode == "master"
-
-            scanning_promise_queue = Queue()
-            scanning_results_queue = Queue()
-
-            sig_handler = partial(handle_sig, EXIT_EVENT)
-
-            context.signal_map = {
-                signal.SIGTERM: sig_handler,
-                signal.SIGQUIT: sig_handler,
-            }
-
-            with context:
-                # only connect to cbr if we're the master
-                if run_as_master:
-                    init_local_resources()
-                    start_workers(
-                        EXIT_EVENT, scanning_promise_queue, scanning_results_queue
-                    )
-                    # start local celery if working mode is local
-                    if not globals.g_remote:
-                        start_celery_worker_thread(args.config_file)
-                else:
-                    # otherwise, we must start a worker since we are not the master
-                    start_celery_worker_thread(args.config_file)
-
-                # run until the service/daemon gets a quitting sig
-                run_to_exit_signal(EXIT_EVENT)
-                wait_all_worker_exit()
-                logger.info("Yara connector shutdown OK")
-
-        except KeyboardInterrupt:
-            logger.info("\n\n##### Interupted by User!\n")
-            EXIT_EVENT.set()
-            sys.exit(2)
-        except Exception as err:
-            logger.error(f"There were errors executing yara rules: {err}")
-            logger.error(traceback.format_exc())
-            EXIT_EVENT.set()
-            sys.exit(1)
-
-
-def getLogFileHandles(logger):
+def get_log_file_handles(logger):
     """ Get a list of filehandle numbers from logger
         to be handed to DaemonContext.files_preserve
     """
@@ -771,7 +441,7 @@ def getLogFileHandles(logger):
     for handler in logger.handlers:
         handles.append(handler.stream.fileno())
     if logger.parent:
-        handles += getLogFileHandles(logger.parent)
+        handles += get_log_file_handles(logger.parent)
     return handles
 
 
@@ -904,6 +574,7 @@ class DatabaseScanningThread(Thread):
 
         try:
             if self._target:
+                # noinspection PyArgumentList
                 self._target(*self._args, **self._kwargs)
         finally:
             # Avoid a refcycle if the thread is running a function with
@@ -928,6 +599,125 @@ def launch_celery_worker(config_file=None):
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
+
+
+################################################################################
+# Main entrypoint
+################################################################################
+
+def handle_arguments():
+    """
+    Setup the main program options.
+
+    :return: parsed arguments
+    """
+    parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
+
+    parser.add_argument("--config-file", required=True, default="yaraconnector.conf",
+                        help="Location of the config file")
+    parser.add_argument("--log-file", default="yaraconnector.log", help="Log file output")
+    parser.add_argument("--output-file", default="yara_feed.json", help="output feed file")
+    parser.add_argument("--working-dir", default=".", help="working directory", required=False)
+    parser.add_argument("--lock-file", default="./yaraconnector", help="lock file", required=False)
+    parser.add_argument("--validate-yara-rules", action="store_true", help="Only validate yara rules, then exit")
+    parser.add_argument("--debug", action="store_true")
+
+    return parser.parse_args()
+
+
+def main():
+    """
+    Main execution function.  Script will exit with a non-zero value based on the following:
+        1: Not the only instance running
+        2: Configuration problem
+        3: User interrupt
+        4: Unexpected Yara scan exception
+        5: Yara rule validation problem
+    """
+    args = handle_arguments()
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+
+    if args.log_file:
+        use_log_file = os.path.abspath(os.path.expanduser(args.log_file))
+        formatter = logging.Formatter(logging_format)
+        handler = logging.handlers.RotatingFileHandler(use_log_file, maxBytes=10 * 1000000, backupCount=10)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    else:
+        use_log_file = None
+
+    # Verify the configuration file and load up important global variables
+    try:
+        ConfigurationInit(args.config_file, use_log_file)
+    except Exception as err:
+        logger.error(f"Unable to continue due to a configuration problem: {err}")
+        sys.exit(2)
+
+    if args.validate_yara_rules:
+        logger.info(f"Validating yara rules in directory: {globals.g_yara_rules_dir}")
+        yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
+        try:
+            yara.compile(filepaths=yara_rule_map)
+            logger.info("All yara rules compiled successfully")
+        except Exception as err:
+            logger.error(f"There were errors compiling yara rules: {err}\n{traceback.format_exc()}")
+            sys.exit(5)
+    else:
+        exit_event = Event()
+
+        try:
+            working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
+
+            lock_file = lockfile.FileLock(args.lock_file)
+
+            files_preserve = get_log_file_handles(logger)
+            files_preserve.extend([args.lock_file, args.log_file, args.output_file])
+
+            # defauls to piping to /dev/null
+            context = daemon.DaemonContext(working_directory=working_dir, pidfile=lock_file,
+                                           files_preserve=files_preserve)
+
+            run_as_master = globals.g_mode == "master"
+
+            scanning_promise_queue = Queue()
+            scanning_results_queue = Queue()
+
+            sig_handler = partial(handle_sig, exit_event)
+
+            context.signal_map = {
+                signal.SIGTERM: sig_handler,
+                signal.SIGQUIT: sig_handler,
+            }
+
+            with context:
+                # only connect to cbr if we're the master
+                if run_as_master:
+                    init_local_resources()
+                    start_workers(
+                        exit_event, scanning_promise_queue, scanning_results_queue
+                    )
+                    # start local celery if working mode is local
+                    if not globals.g_remote:
+                        start_celery_worker_thread(args.config_file)
+                else:
+                    # otherwise, we must start a worker since we are not the master
+                    start_celery_worker_thread(args.config_file)
+
+                # run until the service/daemon gets a quitting sig
+                run_to_exit_signal(exit_event)
+                wait_all_worker_exit()
+                logger.info("Yara connector shutdown OK")
+
+        except KeyboardInterrupt:
+            logger.info("\n\n##### Interupted by User!\n")
+            exit_event.set()
+            sys.exit(3)
+        except Exception as err:
+            logger.error(f"There were errors executing yara rules: {err}\n{traceback.format_exc()}")
+            exit_event.set()
+            sys.exit(4)
 
 
 if __name__ == "__main__":

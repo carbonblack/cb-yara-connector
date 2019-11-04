@@ -1,24 +1,20 @@
-import configparser
 import datetime
 import hashlib
+import io
 import logging
+import multiprocessing
 import os
 import traceback
+import zipfile
 from typing import List
 
+import requests
 # noinspection PyPackageRequirements
 import yara
-import requests
-import io
-import zipfile
 from celery import bootsteps, Celery, group
-from celery.result import ResultSet
 
 import globals
 from analysis_result import AnalysisResult
-from exceptions import CbInvalidConfig
-from utilities import placehold
-import multiprocessing
 
 app = Celery()
 # noinspection PyUnusedName
@@ -74,87 +70,6 @@ class ReadWriteLock:
 compiled_yara_rules = None
 compiled_rules_lock = ReadWriteLock()
 
-
-# noinspection DuplicatedCode
-def verify_config(config_file: str) -> None:
-    """
-    Read and validate the current config file.
-
-    NOTE: Replicates, to a smaller degree, the function in main.py; it is presumed that more detailed checks are there
-    :param config_file: path to the config file
-    """
-    abs_config = os.path.abspath(os.path.expanduser(placehold(config_file)))
-    header = f"Config file '{abs_config}'"
-
-    config = configparser.ConfigParser()
-    if not os.path.exists(config_file):
-        raise CbInvalidConfig(f"{header} does not exist!")
-
-    try:
-        config.read(config_file)
-    except Exception as err:
-        raise CbInvalidConfig(err)
-
-    logger.debug(f"NOTE: using config file '{abs_config}'")
-    if not config.has_section("general"):
-        raise CbInvalidConfig(f"{header} does not have a 'general' section")
-
-    the_config = config["general"]
-
-    if "yara_rules_dir" in the_config and the_config["yara_rules_dir"].strip() != "":
-        check = os.path.abspath(
-            os.path.expanduser(placehold(the_config["yara_rules_dir"]))
-        )
-        if os.path.exists(check):
-            if os.path.isdir(check):
-                globals.g_yara_rules_dir = check
-            else:
-                raise CbInvalidConfig(
-                    f"{header} specified 'yara_rules_dir' ({check}) is not a directory"
-                )
-        else:
-            raise CbInvalidConfig(
-                f"{header} specified 'yara_rules_dir' ({check}) does not exist"
-            )
-    else:
-        raise CbInvalidConfig(f"{header} has no 'yara_rules_dir' definition")
-
-
-    if "worker_network_timeout" in the_config:
-        globals.g_worker_network_timeout = int(the_config['worker_network_timeout'])
-
-    if "worker_type" in the_config:
-        if (
-            the_config["worker_type"] == "local"
-        ):
-            remote = False
-        elif the_config["worker_type"] == "remote":
-            remote = True
-        else:  # anything else
-            raise CbInvalidConfig(
-                f"{header} has an invalid 'worker_type' ({the_config['worker_type']})"
-            )
-    else:
-        remote = False
-
-    # local/remote configuration data
-    if not remote:
-        if "cb_server_url" in the_config and the_config["cb_server_url"].strip() != "":
-            globals.g_cb_server_url = the_config["cb_server_url"]
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
-        if (
-            "cb_server_token" in the_config
-            and the_config["cb_server_token"].strip() != ""
-        ):
-            globals.g_cb_server_token = the_config["cb_server_token"]
-        else:
-            raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_token'")
-
-    if "broker_url" in the_config and the_config["broker_url"].strip() != "":
-        app.conf.update(broker_url=the_config["broker_url"], results_backend=the_config['broker_url'])
-    elif remote:
-        raise CbInvalidConfig(f"{header} is 'remote' and missing 'broker_url'")
 
 
 def add_worker_arguments(parser):
