@@ -54,63 +54,6 @@ celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
 
 
-def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
-    try:
-        while not (exit_event.is_set()):
-            if not (scanning_promise_queue.empty()):
-                try:
-                    promise = scanning_promise_queue.get(timeout=1.0)
-                    result = promise.get(disable_sync_subtasks=False)
-                    scanning_results_queue.put(result)
-                except Empty:
-                    exit_event.wait(1)
-            else:
-                exit_event.wait(1)
-    finally:
-        exit_event.set()            
-
-    logger.debug("PROMISE WORKING EXITING")
-
-
-""" Sqlite is not meant to be thread-safe 
-
-This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and seen binaries/results from scans
-"""
-
-
-def results_worker(exit_event, results_queue):
-    try:
-        while not (exit_event.is_set()):
-            if not (results_queue.empty()):
-                try:
-                    result = results_queue.get()
-                    save_results_with_logging(result)
-                except Empty:
-                    exit_event.wait(1)
-            else:
-                exit_event.wait(1)
-    finally:
-        exit_event.set()
-
-    logger.debug("Results worker thread exiting")
-
-
-def results_worker_chunked(exit_event, results_queue):
-    try:
-        while not (exit_event.is_set()):
-            if not (results_queue.empty()):
-                try:
-                    results = results_queue.get()
-                    save_results(results)
-                except Empty:
-                    exit_event.wait(1)
-            else:
-                exit_event.wait(1)
-    finally:
-        exit_event.set()
-
-    logger.debug("Results worker thread exiting")
-
 
 def generate_feed_from_db() -> None:
     """
@@ -373,6 +316,9 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
 
 def _check_hash_against_feed(md5_hash):
+    """
+    Check if a hash has already been scanned succesfully
+    """
 
     query = BinaryDetonationResult.select().where(
         BinaryDetonationResult.md5 == md5_hash
@@ -385,6 +331,7 @@ def _check_hash_against_feed(md5_hash):
 
 
 def save_results_with_logging(analysis_results):
+    """ Save a result and log if debug is set """
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
@@ -802,10 +749,9 @@ def handle_sig(exit_event, sig, frame):
         logger.debug("Sig handler set exit event")
 
 
-#
-# wait until the exit_event has been set by the signal handler
-#
+
 def run_to_exit_signal(exit_event):
+    """ Wait forever for exit signal """
     exit_event.wait()
     logger.debug("Begin graceful shutdown...")
 
@@ -846,14 +792,12 @@ def wait_all_worker_exit():
         )
         logger.debug(f"Live threads (excluding daemons): {threads}")
         time.sleep(0.1)
-        pass
 
     logger.debug("Main thread going to exit...")
 
 
-# starts worker-threads (not celery workers)
-# worker threads do work until they get the exit_event signal
 def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
+    """ Start workers that will go until exit event """
     logger.debug("Starting perf thread")
 
     perf_thread = DatabaseScanningThread(
@@ -898,6 +842,8 @@ class DatabaseScanningThread(Thread):
 
     def scan_until_exit(self):
         # TODO DRIFT
+        # TODO account for time spent scanning
+        # TODO: make perform() honour the exit event?
         self.do_db_scan()
         while not self.exit_event.is_set():
             self.exit_event.wait(timeout=self._interval)
@@ -932,17 +878,70 @@ class DatabaseScanningThread(Thread):
             logger.debug("Database scanning Thread Exiting gracefully")
             self.exit_event.set()
 
+"""
 
-# Start celery worker in a daemon-thread
-# TODO - Aggresive autoscaling config options
+A worker thread for awaiting the resolution of celery.Results
+
+"""
+def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
+    try:
+        while not (exit_event.is_set()):
+            if not (scanning_promise_queue.empty()):
+                try:
+                    promise = scanning_promise_queue.get(timeout=1.0)
+                    #blocks until the result is retrieved from celery
+                    result = promise.get(disable_sync_subtasks=False)
+                    if result.Succesful():
+                        scanning_results_queue.put(result)
+                except Empty:
+                    exit_event.wait(1)
+            else:
+                exit_event.wait(1)
+    finally:
+        """ Trigger shutdown 
+        if this thread fails unexpectedly"""
+        exit_event.set()            
+
+    logger.debug("PROMISE WORKING EXITING")
+
+
+
+
+def results_worker_chunked(exit_event, results_queue):
+    """ Sqlite is not meant to be thread-safe 
+
+    This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and seen binaries/results from scans
+    """
+    try:
+        while not (exit_event.is_set()):
+            if not (results_queue.empty()):
+                try:
+                    results = results_queue.get()
+                    save_results(results)
+                except Empty:
+                    exit_event.wait(1)
+            else:
+                exit_event.wait(1)
+    finally:
+        """ Trigger shutdown if this worker fails unexpectedly """
+        exit_event.set()
+
+    logger.debug("Results worker thread exiting")
+
+
+
 def start_celery_worker_thread(config_file):
+    """ launch a deamon thread to launch celery out of 
+        it's a deamon so we dont ahve to worry about cleaning it up
+    
+    """ 
     t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
     t.daemon = True
     t.start()
 
 
-# launch a celery worker using the imported app context
 def launch_celery_worker(config_file=None):
+    """ Launch a celery worker using the configured configuration file """
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")

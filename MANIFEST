@@ -2,3 +2,4 @@
 %dir /usr/share/cb/integrations/yaraconnector
 %dir /var/log/cb/integrations/yaraconnector
 /etc/init/yaraconnector.conf
+/etc/cb/integrations/yaraconnector/yaraconnector.conf.example
