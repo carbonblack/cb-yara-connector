@@ -12,7 +12,6 @@ import subprocess
 import sys
 import threading
 import time
-import traceback
 from datetime import datetime, timedelta
 from functools import partial
 from queue import Empty, Queue
@@ -257,8 +256,7 @@ def save_result(analysis_result):
         bdr.save()
         globals.g_num_binaries_analyzed += 1
     except Exception as err:
-        logger.error("Error saving to database: {0}".format(err))
-        logger.error(traceback.format_exc())
+        logger.exception("Error saving to database: {0}".format(err))
     else:
         if analysis_result.score > 0:
             generate_feed_from_db()
@@ -594,12 +592,12 @@ class DatabaseScanningThread(Thread):
         try:
             perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
         except Exception as e:
-            logger.error(
-                f"Something went wrong sweeping the CbR module store...{str(e)} \n {traceback.format_exc()}"
+            logger.exception(
+                f"Something went wrong sweeping the CbR module store...{str(e)} "
             )
 
     def run(self):
-        """ Represents the lifetime of the thread """
+        """ Represents the lifetime of the thread  """
 
         try:
             if self._target:
@@ -710,9 +708,7 @@ def main():
             yara.compile(filepaths=yara_rule_map)
             logger.info("All yara rules compiled successfully")
         except Exception as err:
-            logger.error(
-                f"There were errors compiling yara rules: {err}\n{traceback.format_exc()}"
-            )
+            logger.exception(f"There were errors compiling yara rules: {err}")
             sys.exit(5)
     else:
         exit_event = Event()
@@ -772,9 +768,7 @@ def main():
             exit_event.set()
             sys.exit(3)
         except Exception as err:
-            logger.error(
-                f"There were errors executing yara rules: {err}\n{traceback.format_exc()}"
-            )
+            logger.exception(f"There were errors executing yara rules: {err}")
             exit_event.set()
             sys.exit(4)
 
