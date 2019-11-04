@@ -337,45 +337,28 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
     vacuum_window_start = datetime.now()
 
     cur = get_binary_file_cursor(conn, start_date_binaries)
-    rows = cur.fetchmany(2000)
+    rows = cur.fetchall()
     num_total_binaries = len(rows)
 
-    while num_total_binaries > 0:
-        logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
+    logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
-        md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
+    md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
-        # logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
+    # logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
 
-        analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
-
-        """
-            Holding the named-cursor through  a large historical result set
-            will cause storefiles table fragmentation
-            After a configurable amount of time - use the configured 
-            script to vacuum the table by hand before continuing
-        """
-
-        if globals.g_vacuum_interval > 0:
-            seconds_since_start = (datetime.now() - vacuum_window_start).seconds
-            if seconds_since_start >= globals.g_vacuum_interval * 60:
-                # close connection
-                cur.close()
-                conn.commit()
-
-                execute_script()
-                vacuum_window_start = datetime.now()
-
-                # get the connection back
-                cur = get_binary_file_cursor(conn, start_date_binaries)
-
-        rows = cur.fetchmany(2000)
-        num_total_binaries = len(rows)
+    analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
     # Closing since there are no more binaries of interest to scan
     cur.close()
     conn.commit()
 
+    if globals.g_vacuum_interval > 0:
+        seconds_since_start = (datetime.now() - vacuum_window_start).seconds
+        if seconds_since_start >= globals.g_vacuum_interval * 60:
+            # close connection
+            execute_script()
+            vacuum_window_start = datetime.now()
+            
     logger.debug("Exiting database sweep routine")
 
 
@@ -532,7 +515,9 @@ def wait_all_worker_exit():
     logger.debug("Main thread going to exit...")
 
 
-def start_workers(exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue) -> None:
+def start_workers(
+    exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue
+) -> None:
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
     :param exit_event: event signaller
@@ -540,17 +525,23 @@ def start_workers(exit_event: Event, scanning_promises_queue: Queue, scanning_re
     :param scanning_results_queue: results queue
     """
     logger.debug("Starting perf thread")
-    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, scanning_promises_queue, exit_event)
+    perf_thread = DatabaseScanningThread(
+        globals.g_scanning_interval, scanning_promises_queue, exit_event
+    )
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
     for _ in range(2):
-        promise_worker_thread = Thread(target=promise_worker, args=(exit_event, scanning_promises_queue,
-                                                                    scanning_results_queue))
+        promise_worker_thread = Thread(
+            target=promise_worker,
+            args=(exit_event, scanning_promises_queue, scanning_results_queue),
+        )
         promise_worker_thread.start()
 
     logger.debug("Starting results saver thread")
-    results_worker_thread = Thread(target=results_worker_chunked, args=(exit_event, scanning_results_queue))
+    results_worker_thread = Thread(
+        target=results_worker_chunked, args=(exit_event, scanning_results_queue)
+    )
     results_worker_thread.start()
 
 
@@ -561,7 +552,14 @@ class DatabaseScanningThread(Thread):
     by the signal handler
     """
 
-    def __init__(self, interval: int, scanning_promises_queue: Queue, exit_event: Event, *args, **kwargs):
+    def __init__(
+        self,
+        interval: int,
+        scanning_promises_queue: Queue,
+        exit_event: Event,
+        *args,
+        **kwargs,
+    ):
         """
 
         :param interval:
@@ -755,7 +753,9 @@ def main():
                 # only connect to cbr if we're the master
                 if run_as_master:
                     init_local_resources()
-                    start_workers(exit_event, scanning_promise_queue, scanning_results_queue)
+                    start_workers(
+                        exit_event, scanning_promise_queue, scanning_results_queue
+                    )
                     # start local celery if working mode is local
                     if not globals.g_remote:
                         start_celery_worker_thread(args.config_file)
