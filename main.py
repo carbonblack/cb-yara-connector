@@ -135,7 +135,7 @@ def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
             for md5_hash in md5_hashes:
                 results.append(analyze_binary(md5_hash))
         except Exception as err:
-            logger.error("{0}".format(err))
+            logger.exception("{0}".format(err))
             time.sleep(5)
             return None
         else:
@@ -340,7 +340,7 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
             if scanned_hash_list == globals.g_yara_rule_map_hash_list:
                 return False
         except Exception as err:
-            logger.error(f"Unable to decode yara rule map hash from database: {err}")
+            logger.exception(f"Unable to decode yara rule map hash from database: {err}")
             return False
     return True
 
@@ -456,7 +456,7 @@ def main():
     try:
         singleton.SingleInstance()
     except SingleInstanceException as err:
-        logger.error(
+        logger.exception(
             f"Only one instance of this script is allowed to run at a time: {err}"
         )
         sys.exit(1)
@@ -480,7 +480,7 @@ def main():
     try:
         ConfigurationInit(args.config_file, use_log_file)
     except Exception as err:
-        logger.error(f"Unable to continue due to a configuration problem: {err}")
+        logger.exception(f"Unable to continue due to a configuration problem: {err}")
         sys.exit(2)
 
     if args.validate_yara_rules:
@@ -508,7 +508,7 @@ def main():
             logger.info("\n\n##### Interupted by User!\n")
             sys.exit(3)
         except Exception as err:
-            logger.error(f"There were errors executing yara rules: {err}")
+            logger.exception(f"There were errors executing yara rules: {err}")
             sys.exit(4)
 
 
