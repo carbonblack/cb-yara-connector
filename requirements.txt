@@ -7,7 +7,7 @@ celery==4.3.0                   # Mar 31, 2019
 humanfriendly==4.18             # Feb 21, 2019
 lockfile==0.12.2                # Nov 25, 2015
 peewee==3.11.2                  # Sep 24, 2019
-psycopg2-binary==0.1.1          # Jul 16, 2018
+psycopg2-binary==2.8.4          # Oct 20, 2019
 python-daemon==2.2.4            # Oct 27, 2019
 redis==3.3.11                   # Oct 13, 2019
 requests==2.22.0                # May 16, 2019
