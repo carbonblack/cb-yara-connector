@@ -36,7 +36,8 @@ from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
 from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
-from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
+from tasks import analyze_binary, generate_rule_map, update_yara_rules_remote
+from celery_app import app
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)

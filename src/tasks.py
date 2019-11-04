@@ -20,13 +20,7 @@ import globals
 from analysis_result import AnalysisResult
 from config_handling import ConfigurationInit
 
-app = Celery()
-# noinspection PyUnusedName
-app.conf.task_serializer = "pickle"
-# noinspection PyUnusedName
-app.conf.result_serializer = "pickle"
-# noinspection PyUnusedName
-app.conf.accept_content = {"pickle"}
+from celery_app import app
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

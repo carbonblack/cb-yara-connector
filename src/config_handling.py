@@ -10,12 +10,11 @@ from celery import Celery
 
 import globals
 from exceptions import CbInvalidConfig
-
-from tasks import app
+from celery_app import app
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ConfigurationInit", "app"]
+__all__ = ["ConfigurationInit"]
 
 
 ################################################################################
