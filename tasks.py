@@ -102,8 +102,7 @@ def update_yara_rules_remote(yara_rules: dict) -> None:
             with open(os.path.join(globals.g_yara_rules_dir, key), 'wb') as fp:
                 fp.write(yara_rules[key])
     except Exception as err:
-        logger.error(f"Error writing rule file: {err}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error writing rule file: {err}")
 
 
 @app.task
@@ -168,7 +167,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
         return analysis_result
     except Exception as err:
         error = f"Unexpected error: {err}\n" + traceback.format_exc()
-        logger.error(error)
+        logger.exception(error)
         analysis_result.last_error_msg = error
         return analysis_result
 

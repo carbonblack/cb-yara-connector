@@ -1,6 +1,3 @@
-# coding: utf-8
-# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
-
 import fcntl
 import logging
 import os
@@ -34,7 +31,7 @@ class SingleInstance(object):
         self.initialized = False
 
         # define the lockfile
-        if lockfile is not None:
+        if lockfile:
             self.lockfile = lockfile
         else:
             converted = os.path.splitext(os.path.abspath(sys.argv[0]))[0].replace(
