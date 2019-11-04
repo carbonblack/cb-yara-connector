@@ -9,7 +9,7 @@ g_config = {}
 g_output_file = ""
 
 g_remote = False
-g_mode = ""
+g_mode = "master"
 
 # local info
 g_cb_server_url = "https://127.0.0.1"

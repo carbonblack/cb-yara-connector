@@ -60,6 +60,19 @@ class ConfigurationInit(object):
             raise CbInvalidConfig(f"{self.source} does not have a 'general' section")
         self.the_config = config["general"]
 
+        if "mode" in self.the_config["general"]:
+            operating_mode = self.the_config["mode"].lower()
+            if operating_mode in ["master", "slave"]:
+                globals.g_mode = operating_mode
+            else:
+                raise CbInvalidConfig(
+                    f"{self.source} does not specify a valid operating mode (slave/master)"
+                )
+        else:
+            raise CbInvalidConfig(
+                f"{self.source} does not specify a valid operating mode (slave/master)"
+            )
+
         self._worker_check()
 
         if output_file is not None:
@@ -84,12 +97,11 @@ class ConfigurationInit(object):
         globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, exists=True, is_dir=True)
 
         # local/remote configuration data
-        if not globals.g_remote:
-            globals.g_cb_server_url = self._as_str("cb_server_url", required=True)
-            globals.g_cb_server_token = self._as_str("cb_server_token", required=True)
-        else:
-            value = self._as_str("broker_url", required=True)
-            app.conf.update(broker_url=value, result_backend=value)
+        globals.g_cb_server_url = self._as_str("cb_server_url", required=True)
+        globals.g_cb_server_token = self._as_str("cb_server_token", required=True)
+        
+        value = self._as_str("broker_url", required=True)
+        app.conf.update(broker_url=value, result_backend=value)
 
         globals.g_worker_network_timeout = self._as_int("worker_network_timeout")
 
