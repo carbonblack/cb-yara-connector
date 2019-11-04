@@ -1,5 +1,6 @@
 # coding: utf-8
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+
 import json
 from datetime import datetime
 

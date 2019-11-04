@@ -10,7 +10,7 @@ import os
 __all__ = ["YARAHOME", "placehold"]
 
 # self location for the package; remember to update this if this file is moved!
-YARAHOME = os.path.dirname(__file__)
+YARAHOME = os.path.dirname(os.path.dirname(__file__))
 
 
 def placehold(source: str) -> str:
