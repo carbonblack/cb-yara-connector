@@ -895,8 +895,7 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
                     promise = scanning_promise_queue.get(timeout=1.0)
                     #blocks until the result is retrieved from celery
                     result = promise.get(disable_sync_subtasks=False)
-                    if result.Succesful():
-                        scanning_results_queue.put(result)
+                    scanning_results_queue.put(result)
                 except Empty:
                     exit_event.wait(1)
             else:
@@ -907,7 +906,6 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
         exit_event.set()            
 
     logger.debug("PROMISE WORKING EXITING")
-
 
 
 
@@ -946,6 +944,7 @@ def start_celery_worker_thread(config_file):
 
 def launch_celery_worker(config_file=None):
     """ Launch a celery worker using the configured configuration file """
+    logger.debug("Starting celery worker")
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
