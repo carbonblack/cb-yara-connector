@@ -3,8 +3,6 @@
 
 ################################################################################
 # This module contains global variables used by a single instance.
-#
-# A placeholder of "{YARA}" represents the location of this yara package
 ################################################################################
 
 g_config = {}
@@ -19,7 +17,7 @@ g_cb_server_token = ""
 # remote info
 g_broker_url = ""
 
-g_yara_rules_dir = "{YARA}/local/yara_rules"
+g_yara_rules_dir = "./yara_rules"
 g_yara_rule_map = {}
 g_yara_rule_map_hash_list = []
 
@@ -35,10 +33,10 @@ g_num_binaries_analyzed = 0
 g_disable_rescan = True
 g_num_days_binaries = 365
 
-g_feed_database_path = "./"
+g_feed_database_dir = "./feed_db"
 
 g_scanning_interval = 360
 
 g_worker_network_timeout=5
-g_vacuum_seconds = -1
+g_vacuum_interval = -1
 g_vacuum_script = "./scripts/vacuumscript.sh"

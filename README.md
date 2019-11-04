@@ -20,9 +20,7 @@ to your desired location.
 
 
 > NOTES:
-> 1) The use of `{YARA}` is a placeholder representing the location of the yara package's `main.py` file,
-> allowing for the use of relative paths to the package itself.
-> 2) All paths can use `~` to access your home directory, so you can locate files there as well.
+> 1) All paths can use `~/` to allow the use of the user's home directory.
 
 #### Running Yara Agent Manually
 
@@ -140,7 +138,7 @@ _[TBD]_
 	; Directory for temporary yara rules storage
 	; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
 	;
-	yara_rules_dir={YARA}/local/yara_rules
+	yara_rules_dir=./yara_rules
 	
 * Copy, modify and save to `yara_worker.conf`
 	
@@ -193,7 +191,7 @@ its work.
 ; script to do, and use this option at your own discretion.
 ;
 vacuum_interval=-1
-vacuum_script={YARA}/scripts/vacuumscript.sh
+vacuum_script=./scripts/vacuumscript.sh
 ```
 
 ## Yara Agent Build Instructions (Centos 6)

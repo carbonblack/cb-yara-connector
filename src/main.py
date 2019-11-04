@@ -5,29 +5,25 @@ import json
 import logging
 import logging.handlers
 import os
+import signal
 import subprocess
 import sys
-import time
-import signal
-import traceback
-from daemon import daemon
-import lockfile
-from functools import partial
-from datetime import datetime, timedelta
-from typing import List, Optional
-
 import threading
-from threading import Thread, Event, Barrier
-from queue import Queue, Empty
+import time
+import traceback
+from datetime import datetime, timedelta
+from functools import partial
+from queue import Empty, Queue
+from threading import Event, Thread
+from typing import List
 
 import humanfriendly
+import lockfile
 import psycopg2
-import sched
-
 # noinspection PyPackageRequirements
 import yara
-from celery import group
 from celery.bin import worker
+from daemon import daemon
 from peewee import SqliteDatabase
 
 import globals
@@ -35,14 +31,7 @@ from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
 from exceptions import CbInvalidConfig
 from feed import CbFeed, CbFeedInfo, CbReport
-from tasks import (
-    analyze_binary,
-    app,
-    generate_rule_map,
-    update_yara_rules_remote,
-    analyze_bins,
-)
-from utilities import placehold
+from tasks import analyze_binary, app, generate_rule_map, update_yara_rules_remote
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)
@@ -67,18 +56,17 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
             else:
                 exit_event.wait(1)
     finally:
-        exit_event.set()            
+        exit_event.set()
 
     logger.debug("PROMISE WORKING EXITING")
 
 
-""" Sqlite is not meant to be thread-safe 
-
-This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and seen binaries/results from scans
-"""
-
-
 def results_worker(exit_event, results_queue):
+    """
+    Sqlite is not meant to be thread-safe.
+
+    This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and seen binaries/results from scans
+    """
     try:
         while not (exit_event.is_set()):
             if not (results_queue.empty()):
@@ -145,7 +133,7 @@ def generate_feed_from_db() -> None:
     feed = CbFeed(feedinfo, reports)
 
     logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data["name"]))
-    with open(globals.output_file, "w") as fp:
+    with open(globals.g_output_file, "w") as fp:
         fp.write(feed.dump())
 
 
@@ -165,13 +153,10 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
                 continue
             with open(os.path.join(yara_rule_path, fn), "rb") as fp:
                 data = fp.read()
-                # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
                 md5 = hashlib.md5()
                 md5.update(data)
                 temp_list.append(str(md5.hexdigest()))
 
-    # FUTURE: Would this be better served as a map keyed by md5, with the value being the rule text, as for the
-    #  following method?
     globals.g_yara_rule_map_hash_list = temp_list
     globals.g_yara_rule_map_hash_list.sort()
 
@@ -214,7 +199,7 @@ def analyze_binaries_and_queue_chunked(scanning_promise_queue, md5_hashes):
         Attempts to do work in parrallelized chunks of MAX_HASHES grouped
     """
     promise = analyze_binary.chunks(
-        [(mh,) for mh in md5_hashes], globals.MAX_HASHES
+        [(mh,) for mh in md5_hashes], globals.g_max_hashes
     ).apply_async()
     for prom in promise.children:
         scanning_promise_queue.put(prom)
@@ -347,7 +332,7 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
             script to vacuum the table by hand before continuing
         """
 
-        if elapsed_time > globals.g_vacuum_seconds and globals.g_vacuum_seconds > 0:
+        if elapsed_time > globals.g_vacuum_interval and globals.g_vacuum_seconds > 0:
             # Make sure the cursor is closed, and we are commited()
             # to release SHARED access to the table
             cur.close()
@@ -373,7 +358,6 @@ def perform(yara_rule_dir, conn, scanning_promises_queue):
 
 
 def _check_hash_against_feed(md5_hash):
-
     query = BinaryDetonationResult.select().where(
         BinaryDetonationResult.md5 == md5_hash
     )
@@ -400,9 +384,8 @@ def save_results_with_logging(analysis_results):
 
 
 def save_and_log(
-    analysis_results, start_time, num_binaries_skipped, num_total_binaries
+        analysis_results, start_time, num_binaries_skipped, num_total_binaries
 ):
-
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
@@ -420,7 +403,7 @@ def save_and_log(
 
 
 def _rule_logging(
-    start_time: float, num_binaries_skipped: int, num_total_binaries: int
+        start_time: float, num_binaries_skipped: int, num_total_binaries: int
 ) -> None:
     """
     Simple method to log yara work.
@@ -502,8 +485,8 @@ def verify_config(config_file: str, output_file: str = None) -> None:
 
     if "worker_type" in the_config:
         if (
-            the_config["worker_type"] == "local"
-            or the_config["worker_type"].strip() == ""
+                the_config["worker_type"] == "local"
+                or the_config["worker_type"].strip() == ""
         ):
             globals.g_remote = False  # 'local' or empty definition
         elif the_config["worker_type"] == "remote":
@@ -523,8 +506,8 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         else:
             raise CbInvalidConfig(f"{header} is 'local' and missing 'cb_server_url'")
         if (
-            "cb_server_token" in the_config
-            and the_config["cb_server_token"].strip() != ""
+                "cb_server_token" in the_config
+                and the_config["cb_server_token"].strip() != ""
         ):
             globals.g_cb_server_token = the_config["cb_server_token"]
         else:
@@ -566,8 +549,8 @@ def verify_config(config_file: str, output_file: str = None) -> None:
 
     # NOTE: postgres_username has a default value in globals; use and warn if not defined
     if (
-        "postgres_username" in the_config
-        and the_config["postgres_username"].strip() != ""
+            "postgres_username" in the_config
+            and the_config["postgres_username"].strip() != ""
     ):
         globals.g_postgres_username = the_config["postgres_username"]
     else:
@@ -576,8 +559,8 @@ def verify_config(config_file: str, output_file: str = None) -> None:
         )
 
     if (
-        "postgres_password" in the_config
-        and the_config["postgres_password"].strip() != ""
+            "postgres_password" in the_config
+            and the_config["postgres_password"].strip() != ""
     ):
         globals.g_postgres_password = the_config["postgres_password"]
     else:
@@ -879,7 +862,6 @@ def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
 
 
 class DatabaseScanningThread(Thread):
-
     """
         A worker thread that scans over the database for new hashes ever INTERVAL seconds 
         Pushes work to scanning_promises_queue , exits when the event is triggered

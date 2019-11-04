@@ -7,7 +7,6 @@ from unittest import TestCase
 import globals
 from config_handling import ConfigurationInit
 from exceptions import CbInvalidConfig
-from utilities import placehold
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 
@@ -21,7 +20,7 @@ class TestConfigurationInit(TestCase):
         globals.g_cb_server_url = 'https://127.0.0.1'
         globals.g_cb_server_token = ''
         globals.g_broker_url = ''
-        globals.g_yara_rules_dir = '{YARA}/local/yara_rules'
+        globals.g_yara_rules_dir = './yara_rules'
         globals.g_yara_rule_map = {}
         globals.g_yara_rule_map_hash_list = []
         globals.g_postgres_host = '127.0.0.1'
@@ -35,8 +34,8 @@ class TestConfigurationInit(TestCase):
         globals.g_disable_rescan = True
         globals.g_num_days_binaries = 365
         globals.g_vacuum_interval = -1
-        globals.g_vacuum_script = '{YARA}/scripts/vacuumscript.sh'
-        globals.g_feed_database_dir = "{YARA}/local"
+        globals.g_vacuum_script = './scripts/vacuumscript.sh'
+        globals.g_feed_database_dir = "./feed_db"
 
     def test_01_missing_config(self):
         """
@@ -388,13 +387,15 @@ class TestConfigurationInit(TestCase):
         """
         Ensure that config with feed database directory that does not exist will create that directory.
         """
-        path = os.path.abspath(placehold("{YARA}/local/no-such-directory"))
-        self.assertFalse(os.path.exists(path))
+        path = os.path.abspath("./no-such-directory")
+        if os.path.exists(path):
+            os.rmdir(path)
         try:
             ConfigurationInit(os.path.join(TESTS, "config", "missing_feed_database_dir.conf"), "sample.json")
             self.assertTrue(os.path.exists(path))
         finally:
-            os.rmdir(path)
+            if os.path.exists(path):
+                os.rmdir(path)
 
     def test_20b_config_feed_database_dir_not_directory(self):
         """

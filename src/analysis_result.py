@@ -1,9 +1,6 @@
 # coding: utf-8
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
-import json
-from datetime import datetime
-
 
 class AnalysisResult(object):
     """
@@ -23,11 +20,3 @@ class AnalysisResult(object):
         self.stop_future_scans = stop_future_scans
         self.binary_not_available = binary_not_available
         self.misc = misc
-
-    def toJSON(self):
-        dict_rep = self.__dict__
-        for key, value in dict_rep.items():
-            if isinstance(value, datetime):
-                dict_rep[key] = value.timetuple()
-
-        return json.dumps(dict_rep)
