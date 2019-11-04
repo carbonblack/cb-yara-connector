@@ -40,7 +40,7 @@ nosetests.xml
 config.ini
 
 # created local DB
-binary.db
+feed_db
 
-# local storage not to be pushed up
-# local
+# created local rules
+yara_rules
