@@ -95,7 +95,13 @@ def results_worker(exit_event, results_queue):
     logger.debug("Results worker thread exiting")
 
 
-def results_worker_chunked(exit_event, results_queue):
+def results_worker_chunked(exit_event, results_queue: Queue):
+    """
+
+    :param exit_event:
+    :param results_queue:
+    :return:
+    """
     try:
         while not (exit_event.is_set()):
             if not (results_queue.empty()):
@@ -511,42 +517,46 @@ def wait_all_worker_exit():
     logger.debug("Main thread going to exit...")
 
 
-# starts worker-threads (not celery workers)
-# worker threads do work until they get the exit_event signal
-def start_workers(exit_event, scanning_promises_queue, scanning_results_queue):
+def start_workers(exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue) -> None:
+    """
+    Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
+    :param exit_event: event signaller
+    :param scanning_promises_queue: promises queue
+    :param scanning_results_queue: results queue
+    """
     logger.debug("Starting perf thread")
-
-    perf_thread = DatabaseScanningThread(
-        globals.g_scanning_interval, scanning_promises_queue, exit_event
-    )
+    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, scanning_promises_queue, exit_event)
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
-
     for _ in range(2):
-        promise_worker_thread = Thread(
-            target=promise_worker,
-            args=(exit_event, scanning_promises_queue, scanning_results_queue),
-        )
+        promise_worker_thread = Thread(target=promise_worker, args=(exit_event, scanning_promises_queue,
+                                                                    scanning_results_queue))
         promise_worker_thread.start()
 
     logger.debug("Starting results saver thread")
-    results_worker_thread = Thread(
-        target=results_worker_chunked, args=(exit_event, scanning_results_queue)
-    )
-
+    results_worker_thread = Thread(target=results_worker_chunked, args=(exit_event, scanning_results_queue))
     results_worker_thread.start()
 
 
 class DatabaseScanningThread(Thread):
     """
-        A worker thread that scans over the database for new hashes ever INTERVAL seconds 
-        Pushes work to scanning_promises_queue , exits when the event is triggered
-        by the signal handler
+    A worker thread that scans over the database for new hashes ever INTERVAL seconds
+    Pushes work to scanning_promises_queue , exits when the event is triggered
+    by the signal handler
     """
 
-    def __init__(self, interval, scanning_promises_queue, exit_event, *args, **kwargs):
+    def __init__(self, interval: int, scanning_promises_queue: Queue, exit_event: Event, *args, **kwargs):
+        """
+
+        :param interval:
+        :param scanning_promises_queue: promises queue
+        :param exit_event: event signaller
+        :param args: optional arguments
+        :param kwargs: optional keyword arguments
+        """
         super().__init__(*args, **kwargs)
+
         self._args = args
         self._kwargs = kwargs
         self.exit_event = exit_event
@@ -556,7 +566,7 @@ class DatabaseScanningThread(Thread):
         self._target = self.scan_until_exit
 
     def scan_until_exit(self):
-        # TODO DRIFT
+        # TODO: DRIFT
         self.do_db_scan()
         while not self.exit_event.is_set():
             self.exit_event.wait(timeout=self._interval)
@@ -702,9 +712,7 @@ def main():
                 # only connect to cbr if we're the master
                 if run_as_master:
                     init_local_resources()
-                    start_workers(
-                        exit_event, scanning_promise_queue, scanning_results_queue
-                    )
+                    start_workers(exit_event, scanning_promise_queue, scanning_results_queue)
                     # start local celery if working mode is local
                     if not globals.g_remote:
                         start_celery_worker_thread(args.config_file)
