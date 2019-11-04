@@ -3,6 +3,7 @@
 # All versions are latest viable at date of package version release
 ################################################################################
 
+cbapi==1.5.4                    # Oct 24, 2019
 celery==4.3.0                   # Mar 31, 2019
 humanfriendly==4.18             # Feb 21, 2019
 lockfile==0.12.2                # Nov 25, 2015

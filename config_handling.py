@@ -10,7 +10,6 @@ from celery import Celery
 
 import globals
 from exceptions import CbInvalidConfig
-from utilities import placehold
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class ConfigurationInit(object):
         :param config_file: The config file to validate
         :param output_file: the output file; if not specified assume we are a task worker (simplified validation)
         """
-        self.abs_config = os.path.abspath(os.path.expanduser(placehold(config_file)))
+        self.abs_config = os.path.abspath(os.path.expanduser(config_file))
         self.source = f"Config file '{self.abs_config}'"
 
         config = configparser.ConfigParser()
@@ -64,7 +63,7 @@ class ConfigurationInit(object):
         self._worker_check()
 
         if output_file is not None:
-            globals.g_output_file = os.path.abspath(os.path.expanduser(placehold(output_file)))
+            globals.g_output_file = os.path.abspath(os.path.expanduser(output_file))
             logger.debug(f"NOTE: output file will be '{globals.g_output_file}'")
             self._extended_check()
 
@@ -156,9 +155,9 @@ class ConfigurationInit(object):
     def _as_path(self, param: str, required: bool = False, exists: bool = True, is_dir: bool = False,
                  default: str = None, create_if_needed: bool = False) -> Optional[str]:
         """
-        Get an string parameter from the configuration and treat it as a path, performing normalization
-        to produce an absolute path.  a "~" at the beginning will be treated as the current user's home
-        directory; the placeholder "{YARA}" will be treated as the location of your yara package directory.
+        Get a string parameter from the configuration and treat it as a path, performing normalization
+        to produce an absolute path.  a "~/" at the beginning will be treated as the current user's home
+        directory.
 
         :param param: Name of the configuration parameter
         :param required: True if this must be specified in the configuration
@@ -173,7 +172,7 @@ class ConfigurationInit(object):
         if value is None:
             return value
 
-        value = os.path.abspath(os.path.expanduser(placehold(value)))
+        value = os.path.abspath(os.path.expanduser(value))
         if exists:
             if not os.path.exists(value):
                 if create_if_needed and is_dir:

@@ -3,8 +3,6 @@
 
 ################################################################################
 # This module contains global variables used by a single instance.
-#
-# A placeholder of "{YARA}" represents the location of this yara package
 ################################################################################
 
 g_config = {}
@@ -19,7 +17,7 @@ g_cb_server_token = ""
 # remote info
 g_broker_url = ""
 
-g_yara_rules_dir = "{YARA}/local/yara_rules"
+g_yara_rules_dir = "./yara_rules"
 g_yara_rule_map = {}
 g_yara_rule_map_hash_list = []
 
@@ -38,6 +36,6 @@ g_num_days_binaries = 365
 # the vacuum interval, if 1 or greater, is the number of minutes between invocations of the
 # configured vacuum script
 g_vacuum_interval = -1
-g_vacuum_script = "{YARA}/scripts/vacuumscript.sh"
+g_vacuum_script = "../scripts/vacuumscript.sh"
 
-g_feed_database_dir = "{YARA}/local/feed_db"
+g_feed_database_dir = "./feed_db"
