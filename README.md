@@ -1,12 +1,6 @@
 # Installing Yara Agent (Centos/RHEL 6)
 
 The Yara agent must be installed on the same system as Cb Response.
-
-* Create directories
-
-	```
-	mkdir -p /usr/share/cb/integrations/yara/yara_rules
-	```
 	
 * Download Yara Agent
 
@@ -20,70 +14,57 @@ The Yara agent must be installed on the same system as Cb Response.
 	wget -O /usr/share/cb/integrations/yara/yara-logo.png https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.1/yara-logo.png
 	```
 	
-* Create Yara Agent Config File
+## Create Yara Agent Config
+Copy and modify either `sample_local.conf` or `sample_remote.conf` from the `samples` folder
+to your desired location.
 
-
-#### Sample Yara Agent Config
-Copy and modify the following config to `/etc/cb/integrations/yara/yara_agent.conf`
-
-```ini
-[general]
-; either run a single worker locally or remotely
-; valid types are 'local' or 'remote'
-worker_type=local
-
-; ONLY used for worker_type of local
-; Cb Response Server settings for scanning locally.
-; For remote scanning please set these parameters in the yara worker config file
-; Default: https://127.0.0.1
-cb_server_url=
-cb_server_token=
-
-; ONLY used for worker_type of remote
-; IP Address of workers if worker_type is remote
-;broker_url=redis://
-
-; path to directory containing yara rules
-yara_rules_dir=yara_rules
-
-; Cb Response postgres Database settings
-postgres_host=
-postgres_username=
-postgres_password=
-postgres_db=
-postgres_port=
-
-; os nice value used for this script
-niceness=1
-
-; Number of hashes to send to the workers concurrently.  Defaults to 8.
-; Recommend setting to the number of workers on the remote system.
-concurrent_hashes=8
-
-; If you don't want binaries to be rescanned more than once, regardless of the rules used, set this to True
-disable_rescan=True
-
-; The agent will pull binaries up to the configured number of days.  For exmaple, 365 will pull all binaries with
-; a timestamp within the last year
-; Default: 365
-num_days_binaries=365
-
-; ADVANCED: A vacuum script can be enabled to "clean" the database and prevent fragmentation
-; This can be disabled if the seconds value is 0 or less
-vacuum_seconds=0
-vacuum_script={HERE}/scripts/vacuumscript.sh
-```
 
 > NOTES:
-> 1) The use of `{HERE}` is a placeholder representing the location of this package's `main.py` file,
+> 1) The use of `{YARA}` is a placeholder representing the location of the yara package's `main.py` file,
 > allowing for the use of relative paths to the package itself.
-> 2) Paths can use `~` to access your home directory, so you locate files there as well.
+> 2) All paths can use `~` to access your home directory, so you can locate files there as well.
 
 #### Running Yara Agent Manually
 
-	./yara_agent --config-file=/etc/cb/integrations/yara/yara_agent.conf
+```shell script
+./yara_agent --config-file=<config file location>
+```
+
+##### Command-line Options
+```text
+usage: main.py [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
+               [--output-file OUTPUT_FILE] [--validate-yara-rules] [--debug]
+
+Yara Agent for Yara Connector
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --config-file CONFIG_FILE
+                        Location of the config file
+  --log-file LOG_FILE   Log file output (defaults to `local` folder)
+  --output-file OUTPUT_FILE
+                        output feed file (defaults to `local` folder)
+  --validate-yara-rules
+                        ONLY validate yara rules in a specified directory
+  --debug               Provide additional logging
+
+```
+###### --config-file
+Provides the path of the configuration file to be used _**(REQUIRED)**_
+
+###### --log-file
+Provides the path of the yara log file.  If not supplied, defaults to `local/yara_agent.log`
+within the current yara package.
+
+###### --output-file
+Provides the path containing the feed description file.  If not supplied, defaults to
+`/local/yara_feed.json` within the current yara package.
+
+###### --validate-yara-rules
+If supplied, yara rules will be validated and the script will exit.
 
 #### Example Cron Entry
+_[TBD]_
 
 # Remote Worker Installation (Centos/RHEL 7)
 
@@ -133,7 +114,6 @@ vacuum_script={HERE}/scripts/vacuumscript.sh
 	source ./venv/bin/activate
 	pip install -r requirements.txt
 	deactivate
-	mkdir yara_rules
 	```
 	
 	
@@ -160,7 +140,7 @@ vacuum_script={HERE}/scripts/vacuumscript.sh
 	; Directory for temporary yara rules storage
 	; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
 	;
-	yara_rules_dir=yara_rules
+	yara_rules_dir={YARA}/local/yara_rules
 	
 * Copy, modify and save to `yara_worker.conf`
 	
@@ -193,6 +173,28 @@ vacuum_script={HERE}/scripts/vacuumscript.sh
 	systemctl restart supervisord
 	```
 # Development Notes	
+
+## Vacuum Script
+Included with this version is a feature for discretionary use by advanced users and
+should be used with caution.
+
+When `vacuum_interval` is defined with a value greater than 0, it represents the interval
+in minutes at which the yara agent will pause its work and execute an external
+shell script, defined by default as `vacuumscript.sh`  within the `scripts` folder
+of the current Yara connector installation. After execution, the Yara agent continues with
+its work.
+
+```ini
+;
+; The use of the vacuum script is an ADVANCED FEATURE and should be used with caution!
+;
+; If "vacuum_interval" is greater than 0 it represents the interval in minutes after which the yara connector will
+; pause to execute a shell script for database maintenance. This can present risks. Be careful what you allow the
+; script to do, and use this option at your own discretion.
+;
+vacuum_interval=-1
+vacuum_script={YARA}/scripts/vacuumscript.sh
+```
 
 ## Yara Agent Build Instructions (Centos 6)
 

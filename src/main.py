@@ -650,7 +650,7 @@ def verify_config(config_file: str, output_file: str = None) -> None:
             raise CbInvalidConfig("Invalid database path specified")
 
     if "database_sweep_interval" in the_config:
-        globals.g_scanning_interval = the_config["database_sweep_interval"]
+        globals.g_scanning_interval = int(the_config["database_sweep_interval"])
 
 
 def main():

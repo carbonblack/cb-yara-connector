@@ -1,18 +1,17 @@
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 import json
 from datetime import datetime
 
+
 class AnalysisResult(object):
-    def __init__(self,
-                 md5,
-                 score=0,
-                 short_result='',
-                 long_result='',
-                 last_scan_date=None,
-                 last_error_msg='',
-                 last_error_date=None,
-                 stop_future_scans=False,
-                 binary_not_available=False,
-                 misc=''):
+    """
+    This class holds binary analysis results information.
+    """
+
+    def __init__(self, md5: str, score: int = 0, short_result: str = '', long_result: str = '', last_scan_date=None,
+                 last_error_msg: str = '', last_error_date=None, stop_future_scans: bool = False,
+                 binary_not_available: bool = False, misc: str = ''):
         self.md5 = md5
         self.short_result = short_result
         self.long_result = long_result

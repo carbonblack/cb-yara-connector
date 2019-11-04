@@ -42,6 +42,5 @@ config.ini
 # created local DB
 binary.db
 
-# local rules
-yara_rules/*.yara
-yara_rules/*.yar
+# local storage not to be pushed up
+local

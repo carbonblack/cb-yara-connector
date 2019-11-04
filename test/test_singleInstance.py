@@ -1,10 +1,14 @@
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+
 import logging
 import os
 import sys
 from multiprocessing import Process
 from unittest import TestCase
 
-from singleton import SingleInstance, SingleInstanceException
+from exceptions import SingleInstanceException
+from singleton import SingleInstance
 
 logger = logging.getLogger(__name__)
 
