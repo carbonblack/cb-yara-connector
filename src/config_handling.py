@@ -60,7 +60,7 @@ class ConfigurationInit(object):
             raise CbInvalidConfig(f"{self.source} does not have a 'general' section")
         self.the_config = config["general"]
 
-        if "mode" in self.the_config["general"]:
+        if "mode" in self.the_config:
             operating_mode = self.the_config["mode"].lower()
             if operating_mode in ["master", "slave"]:
                 globals.g_mode = operating_mode
