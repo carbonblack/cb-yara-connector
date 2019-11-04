@@ -22,9 +22,11 @@ from typing import List
 import humanfriendly
 import lockfile
 import psycopg2
+
 # noinspection PyPackageRequirements
 import yara
 from celery.bin import worker
+
 # noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
@@ -280,8 +282,10 @@ def get_binary_file_cursor(conn, start_date_binaries):
     cur = conn.cursor(name="yara_agent")
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
-    query = "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND " + \
-            "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+    query = (
+        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
+        + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+    )
 
     logger.debug(query)
 
@@ -294,8 +298,12 @@ def execute_script() -> None:
     """
     Execute a external maintenence script (vacuum script).
     """
-    logger.info("----- Executing vacuum script ----------------------------------------")
-    prog = subprocess.Popen(globals.g_vacuum_script, shell=True, universal_newlines=True)
+    logger.info(
+        "----- Executing vacuum script ----------------------------------------"
+    )
+    prog = subprocess.Popen(
+        globals.g_vacuum_script, shell=True, universal_newlines=True
+    )
     stdout, stderr = prog.communicate()
     if stdout is not None and len(stdout.strip()) > 0:
         logger.info(stdout)
@@ -303,7 +311,9 @@ def execute_script() -> None:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
-    logger.info("---------------------------------------- Vacuum script completed -----\n")
+    logger.info(
+        "---------------------------------------- Vacuum script completed -----\n"
+    )
 
 
 def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
@@ -395,7 +405,9 @@ def save_results_with_logging(analysis_results):
 
 
 # noinspection PyUnusedFunction
-def save_and_log(analysis_results, start_time, num_binaries_skipped, num_total_binaries):
+def save_and_log(
+    analysis_results, start_time, num_binaries_skipped, num_total_binaries
+):
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
@@ -412,7 +424,9 @@ def save_and_log(analysis_results, start_time, num_binaries_skipped, num_total_b
     _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
 
 
-def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
+def _rule_logging(
+    start_time: float, num_binaries_skipped: int, num_total_binaries: int
+) -> None:
     """
     Simple method to log yara work.
     :param start_time: start time for the work
@@ -622,6 +636,7 @@ def launch_celery_worker(config_file=None):
 # Main entrypoint
 ################################################################################
 
+
 def handle_arguments():
     """
     Setup the main program options.
@@ -630,13 +645,29 @@ def handle_arguments():
     """
     parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
 
-    parser.add_argument("--config-file", required=True, default="yaraconnector.conf",
-                        help="Location of the config file")
-    parser.add_argument("--log-file", default="yaraconnector.log", help="Log file output")
-    parser.add_argument("--output-file", default="yara_feed.json", help="output feed file")
-    parser.add_argument("--working-dir", default=".", help="working directory", required=False)
-    parser.add_argument("--lock-file", default="./yaraconnector", help="lock file", required=False)
-    parser.add_argument("--validate-yara-rules", action="store_true", help="Only validate yara rules, then exit")
+    parser.add_argument(
+        "--config-file",
+        required=True,
+        default="yaraconnector.conf",
+        help="Location of the config file",
+    )
+    parser.add_argument(
+        "--log-file", default="yaraconnector.log", help="Log file output"
+    )
+    parser.add_argument(
+        "--output-file", default="yara_feed.json", help="output feed file"
+    )
+    parser.add_argument(
+        "--working-dir", default=".", help="working directory", required=False
+    )
+    parser.add_argument(
+        "--lock-file", default="./yaraconnector", help="lock file", required=False
+    )
+    parser.add_argument(
+        "--validate-yara-rules",
+        action="store_true",
+        help="Only validate yara rules, then exit",
+    )
     parser.add_argument("--debug", action="store_true")
 
     return parser.parse_args()
@@ -659,7 +690,9 @@ def main():
     if args.log_file:
         use_log_file = os.path.abspath(os.path.expanduser(args.log_file))
         formatter = logging.Formatter(logging_format)
-        handler = logging.handlers.RotatingFileHandler(use_log_file, maxBytes=10 * 1000000, backupCount=10)
+        handler = logging.handlers.RotatingFileHandler(
+            use_log_file, maxBytes=10 * 1000000, backupCount=10
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     else:
@@ -679,7 +712,9 @@ def main():
             yara.compile(filepaths=yara_rule_map)
             logger.info("All yara rules compiled successfully")
         except Exception as err:
-            logger.error(f"There were errors compiling yara rules: {err}\n{traceback.format_exc()}")
+            logger.error(
+                f"There were errors compiling yara rules: {err}\n{traceback.format_exc()}"
+            )
             sys.exit(5)
     else:
         exit_event = Event()
@@ -693,8 +728,15 @@ def main():
             files_preserve.extend([args.lock_file, args.log_file, args.output_file])
 
             # defauls to piping to /dev/null
-            context = daemon.DaemonContext(working_directory=working_dir, pidfile=lock_file,
-                                           files_preserve=files_preserve)
+
+            deamon_kwargs = {
+                "working_directory": working_dir,
+                "pidfile": lock_file,
+                "files_preserve": files_preserve,
+            }
+            if args.debug:
+                deamon_kwargs.update({"stdout": sys.stdout, "stderr": sys.stderr})
+            context = daemon.DaemonContext(**deamon_kwargs)
 
             run_as_master = globals.g_mode == "master"
 
@@ -730,7 +772,9 @@ def main():
             exit_event.set()
             sys.exit(3)
         except Exception as err:
-            logger.error(f"There were errors executing yara rules: {err}\n{traceback.format_exc()}")
+            logger.error(
+                f"There were errors executing yara rules: {err}\n{traceback.format_exc()}"
+            )
             exit_event.set()
             sys.exit(4)
 
