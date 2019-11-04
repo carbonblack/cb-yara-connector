@@ -113,15 +113,15 @@ class ConfigurationInit(object):
         globals.g_num_days_binaries = self._as_int("num_days_binaries", default=globals.g_num_days_binaries,
                                                    min_value=1)
 
-        globals.g_vacuum_interval = self._as_int("vacuum_interval", default=globals.g_vacuum_interval, min_value=0)
-        if globals.g_vacuum_interval > 0:
-            globals.g_vacuum_script = self._as_path("vacuum_script", required=True, is_dir=False,
-                                                    default=globals.g_vacuum_script)
-            logger.warning(f"Vacuum Script '{globals.g_vacuum_script}' is enabled; " +
+        globals.g_utility_interval = self._as_int("utility_interval", default=globals.g_utility_interval, min_value=0)
+        if globals.g_utility_interval > 0:
+            globals.g_utility_script = self._as_path("utility_script", required=True, is_dir=False,
+                                                    default=globals.g_utility_script)
+            logger.warning(f" Script '{globals.g_utility_script}' is enabled; " +
                            "use this advanced feature at your own discretion!")
         else:
-            if self._as_path("vacuum_script", required=False, default=globals.g_vacuum_script):
-                logger.debug(f"{self.source} has 'vacuum_script' defined, but it is disabled")
+            if self._as_path("utility_script", required=False, default=globals.g_utility_script):
+                logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
 
         globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, is_dir=True,
                                                     default=globals.g_feed_database_dir, create_if_needed=True)

@@ -35,7 +35,7 @@ g_num_days_binaries = 365
 
 # the vacuum interval, if 1 or greater, is the number of minutes between invocations of the
 # configured vacuum script
-g_vacuum_interval = -1
-g_vacuum_script = "../scripts/vacuumscript.sh"
+g_utility_interval = -1
+g_utility_script = "../scripts/vacuumscript.sh"
 
 g_feed_database_dir = "./feed_db"

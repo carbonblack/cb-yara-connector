@@ -10,12 +10,12 @@ import os
 import subprocess
 import sys
 import time
-import traceback
 from datetime import datetime, timedelta
 from typing import List, Optional
 
 import humanfriendly
 import psycopg2
+
 # noinspection PyPackageRequirements
 import yara
 from celery import group
@@ -156,8 +156,7 @@ def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
                 else:
                     time.sleep(0.1)
         except Exception as err:
-            logger.error("Error when analyzing: {0}".format(err))
-            logger.error(traceback.format_exc())
+            logger.exception("Error when analyzing: {0}".format(err))
             time.sleep(5)
             return None
         else:
@@ -190,8 +189,7 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
             bdr.save()
             globals.g_num_binaries_analyzed += 1
         except Exception as err:
-            logger.error("Error saving to database: {0}".format(err))
-            logger.error(traceback.format_exc())
+            logger.exception("Error saving to database: {0}".format(err))
         else:
             if analysis_result.score > 0:
                 generate_feed_from_db()
@@ -236,10 +234,14 @@ def get_cursor(conn, start_date_binaries: datetime):
 
 def execute_script() -> None:
     """
-    Execute a external maintenence script (vacuum script).
+    Execute a external maintenence script (utility script).
     """
-    logger.info("----- Executing vacuum script ----------------------------------------")
-    prog = subprocess.Popen(globals.g_vacuum_script, shell=True, universal_newlines=True)
+    logger.info(
+        "----- Executing utility script ----------------------------------------"
+    )
+    prog = subprocess.Popen(
+        globals.g_utility_script, shell=True, universal_newlines=True
+    )
     stdout, stderr = prog.communicate()
     if stdout is not None and len(stdout.strip()) > 0:
         logger.info(stdout)
@@ -247,7 +249,9 @@ def execute_script() -> None:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
-    logger.info("---------------------------------------- Vacuum script completed -----\n")
+    logger.info(
+        "---------------------------------------- utility script completed -----\n"
+    )
 
 
 def perform(yara_rule_dir: str) -> None:
@@ -270,8 +274,8 @@ def perform(yara_rule_dir: str) -> None:
     # Determine our binaries window (date forward)
     start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
 
-    # vacuum script window start
-    vacuum_window_start = datetime.now()
+    # utility script window start
+    utility_window_start = datetime.now()
 
     # make the connection, get the info, get out
     conn = get_database_conn()
@@ -282,11 +286,11 @@ def perform(yara_rule_dir: str) -> None:
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
     for row in rows:
-        if globals.g_vacuum_interval > 0:
-            seconds_since_start = (datetime.now() - vacuum_window_start).seconds
-            if seconds_since_start >= globals.g_vacuum_interval * 60:
+        if globals.g_utility_interval > 0:
+            seconds_since_start = (datetime.now() - utility_window_start).seconds
+            if seconds_since_start >= globals.g_utility_interval * 60:
                 execute_script()
-                vacuum_window_start = datetime.now()
+                utility_window_start = datetime.now()
 
         num_total_binaries += 1
         md5_hash = row[0].hex()
@@ -300,12 +304,16 @@ def perform(yara_rule_dir: str) -> None:
 
         # if we hit our hash chunking limit, save and reset
         if len(md5_hashes) >= globals.g_max_hashes:
-            _analyze_save_and_log(md5_hashes, start_time, num_binaries_skipped, num_total_binaries)
+            _analyze_save_and_log(
+                md5_hashes, start_time, num_binaries_skipped, num_total_binaries
+            )
             md5_hashes = []
 
     # any finishup work
     if len(md5_hashes) > 0:
-        _analyze_save_and_log(md5_hashes, start_time, num_binaries_skipped, num_total_binaries)
+        _analyze_save_and_log(
+            md5_hashes, start_time, num_binaries_skipped, num_total_binaries
+        )
 
     generate_feed_from_db()
 
@@ -317,7 +325,9 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     :param md5_hash: hash to be checked
     :return: True if the binary does not exist
     """
-    query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
+    query = BinaryDetonationResult.select().where(
+        BinaryDetonationResult.md5 == md5_hash
+    )
 
     if query.exists():
         try:
@@ -335,8 +345,12 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     return True
 
 
-def _analyze_save_and_log(hashes: List[str], start_time: float, num_binaries_skipped: int,
-                          num_total_binaries: int) -> None:
+def _analyze_save_and_log(
+    hashes: List[str],
+    start_time: float,
+    num_binaries_skipped: int,
+    num_total_binaries: int,
+) -> None:
     """
     Analyise and save any found binaries.
 
@@ -348,8 +362,12 @@ def _analyze_save_and_log(hashes: List[str], start_time: float, num_binaries_ski
     analysis_results = analyze_binaries(hashes, local=(not globals.g_remote))
     if analysis_results:
         for analysis_result in analysis_results:
-            logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                          f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
+            logger.debug(
+                (
+                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
+                )
+            )
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
@@ -357,7 +375,9 @@ def _analyze_save_and_log(hashes: List[str], start_time: float, num_binaries_ski
     _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
 
 
-def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
+def _rule_logging(
+    start_time: float, num_binaries_skipped: int, num_total_binaries: int
+) -> None:
     """
     Simple method to log yara work.
 
@@ -369,16 +389,25 @@ def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binari
     logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
     logger.debug(f"   number binaries scanned: {globals.g_num_binaries_analyzed}")
     logger.debug(f"   number binaries already scanned: {num_binaries_skipped}")
-    logger.debug(f"   number binaries unavailable: {globals.g_num_binaries_not_available}")
+    logger.debug(
+        f"   number binaries unavailable: {globals.g_num_binaries_not_available}"
+    )
     logger.info(f"total binaries from db: {num_total_binaries}")
-    logger.debug("   binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
-    overzero = len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))
+    logger.debug(
+        "   binaries per second: {0}:".format(
+            round(num_total_binaries / elapsed_time, 2)
+        )
+    )
+    overzero = len(
+        BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0)
+    )
     logger.info(f"num binaries score greater than zero: {overzero}\n")
 
 
 ################################################################################
 # Main entrypoint
 ################################################################################
+
 
 def handle_arguments():
     """
@@ -396,12 +425,12 @@ def handle_arguments():
     parser.add_argument(
         "--log-file",
         default="./yara_agent.log",
-        help="Log file output (defaults to `local` folder)"
+        help="Log file output (defaults to `local` folder)",
     )
     parser.add_argument(
         "--output-file",
         default="./yara_feed.json",
-        help="output feed file (defaults to `local` folder)"
+        help="output feed file (defaults to `local` folder)",
     )
     parser.add_argument(
         "--validate-yara-rules",
@@ -409,9 +438,7 @@ def handle_arguments():
         help="ONLY validate yara rules in a specified directory",
     )
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Provide additional logging"
+        "--debug", action="store_true", help="Provide additional logging"
     )
 
     return parser.parse_args()
@@ -429,7 +456,9 @@ def main():
     try:
         singleton.SingleInstance()
     except SingleInstanceException as err:
-        logger.error(f"Only one instance of this script is allowed to run at a time: {err}")
+        logger.error(
+            f"Only one instance of this script is allowed to run at a time: {err}"
+        )
         sys.exit(1)
 
     args = handle_arguments()
@@ -439,7 +468,9 @@ def main():
     if args.log_file:
         use_log_file = os.path.abspath(os.path.expanduser(args.log_file))
         formatter = logging.Formatter(logging_format)
-        handler = logging.handlers.RotatingFileHandler(use_log_file, maxBytes=10 * 1000000, backupCount=10)
+        handler = logging.handlers.RotatingFileHandler(
+            use_log_file, maxBytes=10 * 1000000, backupCount=10
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     else:
@@ -459,13 +490,15 @@ def main():
             yara.compile(filepaths=yara_rule_map)
             logger.info("All yara rules compiled successfully")
         except Exception as err:
-            logger.error(f"There were errors compiling yara rules: {err}\n{traceback.format_exc()}")
+            logger.exception(f"There were errors compiling yara rules: {err}")
             sys.exit(5)
     else:
         try:
             globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
             generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-            database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
+            database = SqliteDatabase(
+                os.path.join(globals.g_feed_database_dir, "binary.db")
+            )
             db.initialize(database)
             db.connect()
             db.create_tables([BinaryDetonationResult])
@@ -475,7 +508,7 @@ def main():
             logger.info("\n\n##### Interupted by User!\n")
             sys.exit(3)
         except Exception as err:
-            logger.error(f"There were errors executing yara rules: {err}\n{traceback.format_exc()}")
+            logger.error(f"There were errors executing yara rules: {err}")
             sys.exit(4)
 
 
