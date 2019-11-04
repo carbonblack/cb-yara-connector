@@ -35,10 +35,3 @@ class CbInvalidReport(CbException):
     Excepion raised if supplied Report data is invalid.
     """
     pass
-
-
-class SingleInstanceException(BaseException):
-    """
-    Excepion raised if you attempt to run more than one instance..
-    """
-    pass

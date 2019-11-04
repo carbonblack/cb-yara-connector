@@ -1,3 +1,6 @@
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+
 import datetime
 import hashlib
 import io
@@ -15,6 +18,7 @@ from celery import bootsteps, Celery, group
 
 import globals
 from analysis_result import AnalysisResult
+from config_handling import ConfigurationInit
 
 app = Celery()
 # noinspection PyUnusedName
@@ -71,7 +75,6 @@ compiled_yara_rules = None
 compiled_rules_lock = ReadWriteLock()
 
 
-
 def add_worker_arguments(parser):
     parser.add_argument(
         "--config-file", default="yara_worker.conf", help="Yara Worker Config"
@@ -82,14 +85,14 @@ app.user_options["worker"].add(add_worker_arguments)
 
 
 class MyBootstep(bootsteps.Step):
+    """
+    Define the bootstrap task.
+    """
 
     # noinspection PyUnusedLocal
-    def __init__(self, worker, config_file="yara_worker.conf", **options):
+    def __init__(self, worker, config_file='yara_worker.conf', **options):
         super().__init__(self)
-        print(options)
-        verify_config(config_file)
-
-        # g_yara_rules_dir = yara_rules_dir
+        ConfigurationInit(config_file, None)
 
 
 app.steps["worker"].add(MyBootstep)
@@ -186,18 +189,20 @@ def get_binary_by_hash(url, hsum, token):
     """
     headers = {"X-Auth-Token": token}
     request_url = f"{url}/api/v1/binary/{hsum}"
-    response = requests.get(request_url, headers=headers, stream=True, verify=False, timeout=globals.g_worker_network_timeout)
+    response = requests.get(request_url, headers=headers, stream=True, verify=False,
+                            timeout=globals.g_worker_network_timeout)
     if response:
         with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
-            #the response contains the file ziped in 'filedata'
+            # the response contains the file ziped in 'filedata'
             fp = the_binary_zip.open("filedata")
             the_binary_zip.close()
             return fp
     else:
-        #otherwise return None which will be interpreted correctly in analyze_binary as haven failed to lookup the hash
+        # otherwise return None which will be interpreted correctly in analyze_binary as haven failed to lookup the hash
         return None
 
 
+# noinspection PyUnusedFunction
 @app.task
 def analyze_bins(hashes):
     return group(analyze_binary.s(h) for h in hashes).apply_async()
@@ -255,8 +260,8 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             analysis_result.last_error_msg = f"Yara exception: {err}"
         except Exception as err:
             analysis_result.last_error_msg = (
-                f"Other exception while matching rules: {err}\n"
-                + traceback.format_exc()
+                    f"Other exception while matching rules: {err}\n"
+                    + traceback.format_exc()
             )
         finally:
             compiled_rules_lock.release_read()
@@ -273,10 +278,13 @@ def get_high_score(matches) -> int:
     """
     Find the higest match score.
 
-    NOTE: if str(matches) == "debug", return 100
     :param matches: List of rule matches.
     :return:
     """
+    # NOTE: if str(matches) == "debug", return 100
+    if matches == "debug":
+        return 100
+
     score = 0
     for match in matches:
         if match.meta.get("score", 0) > score:

@@ -1,3 +1,6 @@
+# coding: utf-8
+# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+
 import argparse
 import hashlib
 import json
@@ -22,6 +25,7 @@ import psycopg2
 # noinspection PyPackageRequirements
 import yara
 from celery.bin import worker
+# noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
 
@@ -43,6 +47,13 @@ celery_logger.setLevel(logging.ERROR)
 
 
 def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
+    """
+
+    :param exit_event:
+    :param scanning_promise_queue:
+    :param scanning_results_queue:
+    :return:
+    """
     try:
         while not (exit_event.is_set()):
             if not (scanning_promise_queue.empty()):
@@ -60,11 +71,13 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
     logger.debug("PROMISE WORKING EXITING")
 
 
+# noinspection PyUnusedFunction
 def results_worker(exit_event, results_queue):
     """
     Sqlite is not meant to be thread-safe.
 
-    This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and seen binaries/results from scans
+    This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and
+    seen binaries/results from scans
     """
     try:
         while not (exit_event.is_set()):
@@ -187,6 +200,7 @@ def analyze_binary_and_queue(scanning_promise_queue, md5sum):
     scanning_promise_queue.put(promise)
 
 
+# noinspection PyUnusedFunction
 def analyze_binaries_and_queue(scanning_promise_queue, md5_hashes):
     """ Analyze each binary and enqueue """
     for h in md5_hashes:
@@ -260,9 +274,8 @@ def get_binary_file_cursor(conn, start_date_binaries):
     cur = conn.cursor(name="yara_agent")
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
-    query = "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND timestamp >= '{0}' ORDER BY timestamp DESC".format(
-        start_date_binaries
-    )
+    query = "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND " + \
+            "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
 
     logger.debug(query)
 
@@ -299,13 +312,6 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
         generate_rule_map_remote(yara_rule_dir)
-
-    num_total_binaries = 0
-    num_binaries_skipped = 0
-    num_binaries_queued = 0
-    md5_hashes = []
-
-    start_time = time.time()
 
     # Determine our binaries window (date forward)
     start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
@@ -433,18 +439,19 @@ def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binari
     logger.info("")
 
 
-def get_log_file_handles(logger):
+def get_log_file_handles(use_logger):
     """ Get a list of filehandle numbers from logger
         to be handed to DaemonContext.files_preserve
     """
     handles = []
-    for handler in logger.handlers:
+    for handler in use_logger.handlers:
         handles.append(handler.stream.fileno())
-    if logger.parent:
-        handles += get_log_file_handles(logger.parent)
+    if use_logger.parent:
+        handles += get_log_file_handles(use_logger.parent)
     return handles
 
 
+# noinspection PyUnusedLocal
 def handle_sig(exit_event, sig, frame):
     """
       Signal handler - handle the signal and mark exit if its an exiting signal
@@ -474,7 +481,7 @@ def init_local_resources():
     """
     globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
     generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-    database = SqliteDatabase(os.path.join(globals.g_feed_database_path, "binary.db"))
+    database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
     db.initialize(database)
     db.connect()
     db.create_tables([BinaryDetonationResult])

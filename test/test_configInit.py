@@ -413,6 +413,24 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(os.path.join(TESTS, "config", "malformed_param.conf"), "sample.json")
         assert "cannot be parsed" in "{0}".format(err.exception.args[0])
 
+    def test_22a_config_missing_worker_network_timeout(self):
+        """
+        Ensure that config with missing worker_network_timeout reverts to default
+        """
+        check = globals.g_worker_network_timeout
+
+        # defined as "num_days_binaries="
+        ConfigurationInit(os.path.join(TESTS, "config", "missing_worker_network_timeout.conf"), "sample.json")
+        self.assertEqual(check, globals.g_worker_network_timeout)
+
+    def test_22b_config_bogus_worker_network_timeout(self):
+        """
+        Ensure that config with bogus (non-int) worker_network_timeout is detected.
+        """
+        with self.assertRaises(ValueError) as err:
+            ConfigurationInit(os.path.join(TESTS, "config", "bogus_worker_network_timeout.conf"), "sample.json")
+        assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+
     # ----- Minimal validation (worker)
 
     def test_90_minimal_validation_effects(self):
