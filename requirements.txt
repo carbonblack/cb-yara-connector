@@ -1,9 +1,15 @@
-celery
-redis
-humanfriendly
-lockfile
-peewee
-psycopg2-binary
-python-daemon
-requests
-yara-python
+################################################################################
+# Package requirements
+# All versions are latest viable at date of package version release
+################################################################################
+
+celery==4.3.0                   # Mar 31, 2019
+humanfriendly==4.18             # Feb 21, 2019
+lockfile==0.12.2                # Nov 25, 2015
+peewee==3.11.2                  # Sep 24, 2019
+psycopg2-binary==2.8.4          # Oct 20, 2019
+python-daemon==2.2.4            # Oct 27, 2019
+redis==3.3.11                   # Oct 13, 2019
+requests==2.22.0                # May 16, 2019
+simplejson==3.16.0              # Jun 28, 2018
+yara-python==3.11.0             # Oct 10, 2019
