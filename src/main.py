@@ -345,7 +345,7 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
 
     md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
-    logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
+    #logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
 
     analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
