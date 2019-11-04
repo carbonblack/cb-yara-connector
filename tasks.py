@@ -82,7 +82,6 @@ def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
                 continue
             with open(os.path.join(yara_rule_path, fn), 'rb') as fp:
                 data = fp.read()
-                # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
                 md5 = hashlib.md5()
                 md5.update(data)
                 temp_list.append(str(md5.hexdigest()))
