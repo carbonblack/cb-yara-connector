@@ -679,11 +679,15 @@ def main():
             files_preserve.extend([args.lock_file, args.log_file, args.output_file])
 
             # defauls to piping to /dev/null
-            context = daemon.DaemonContext(
-                working_directory=working_dir,
-                pidfile=lock_file,
-                files_preserve=files_preserve,
-            )
+
+            deamon_kwargs = {
+                "working_directory": working_dir,
+                "pidfile": lock_file,
+                "files_preserve": files_preserve,
+            }
+            if args.debug:
+                deamon_kwargs.update({"stdout": sys.stdout, "stderr": sys.stderr})
+            context = daemon.DaemonContext(**deamon_kwargs)
 
             run_as_master = globals.g_mode == "master"
 
