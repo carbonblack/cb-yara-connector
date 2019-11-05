@@ -5,22 +5,21 @@
 # This module contains global variables used by a single instance.
 ################################################################################
 
+# used by the agent
 g_config = {}
 g_output_file = ""
+g_yara_rule_map = {}
+g_yara_rule_map_hash_list = []
 
+# configuiration
 g_remote = False
-g_mode = "master"
+g_mode = ""
 
-# local info
-g_cb_server_url = "https://127.0.0.1"
+g_cb_server_url = ""
 g_cb_server_token = ""
-
-# remote info
 g_broker_url = ""
 
 g_yara_rules_dir = "./yara_rules"
-g_yara_rule_map = {}
-g_yara_rule_map_hash_list = []
 
 g_postgres_host = "127.0.0.1"
 g_postgres_db = "cb"
@@ -38,7 +37,7 @@ g_feed_database_dir = "./feed_db"
 
 g_scanning_interval = 360
 
-g_vacuum_interval = -1
-g_vacuum_script = "./scripts/vacuumscript.sh"
+g_utility_interval = 0
+g_utility_script = ""
 
 g_worker_network_timeout = 5

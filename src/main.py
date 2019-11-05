@@ -21,11 +21,9 @@ from typing import List
 import humanfriendly
 import lockfile
 import psycopg2
-
 # noinspection PyPackageRequirements
 import yara
 from celery.bin import worker
-
 # noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
@@ -33,10 +31,10 @@ from peewee import SqliteDatabase
 import globals
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
+from celery_app import app
 from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
 from tasks import analyze_binary, generate_rule_map, update_yara_rules_remote
-from celery_app import app
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)
@@ -301,7 +299,7 @@ def execute_script() -> None:
         "----- Executing vacuum script ----------------------------------------"
     )
     prog = subprocess.Popen(
-        globals.g_vacuum_script, shell=True, universal_newlines=True
+        globals.g_utility_script, shell=True, universal_newlines=True
     )
     stdout, stderr = prog.communicate()
     if stdout is not None and len(stdout.strip()) > 0:
@@ -331,8 +329,8 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
     # Determine our binaries window (date forward)
     start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
 
-    # vacuum script window start
-    vacuum_window_start = datetime.now()
+    # utility script window start
+    utility_window_start = datetime.now()
 
     cur = get_binary_file_cursor(conn, start_date_binaries)
     rows = cur.fetchall()
@@ -349,12 +347,12 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
 
     analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
-    if globals.g_vacuum_interval > 0:
-        seconds_since_start = (datetime.now() - vacuum_window_start).seconds
-        if seconds_since_start >= globals.g_vacuum_interval * 60:
+    if globals.g_utility_interval > 0:
+        seconds_since_start = (datetime.now() - utility_window_start).seconds
+        if seconds_since_start >= globals.g_utility_interval * 60:
             # close connection
             execute_script()
-            vacuum_window_start = datetime.now()
+            utility_window_start = datetime.now()
 
     logger.debug("Exiting database sweep routine")
 
@@ -708,7 +706,7 @@ def main():
             yara.compile(filepaths=yara_rule_map)
             logger.info("All yara rules compiled successfully")
         except Exception as err:
-            logger.exception(f"There were errors compiling yara rules: {err}")
+            logger.error(f"There were errors compiling yara rules: {err}")
             sys.exit(5)
     else:
         exit_event = Event()
@@ -768,7 +766,7 @@ def main():
             exit_event.set()
             sys.exit(3)
         except Exception as err:
-            logger.exception(f"There were errors executing yara rules: {err}")
+            logger.error(f"There were errors executing yara rules: {err}")
             exit_event.set()
             sys.exit(4)
 

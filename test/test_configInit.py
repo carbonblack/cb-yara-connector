@@ -2,6 +2,7 @@
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import os
+from typing import List
 from unittest import TestCase
 
 import globals
@@ -10,15 +11,50 @@ from exceptions import CbInvalidConfig
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 
+TESTCONF = os.path.join(TESTS, "conf-testing.conf")
+BASE = """[general]
+mode=master
+worker_type=local
+
+cb_server_url=https://127.0.0.1:443
+cb_server_token=abcdefghijklmnopqrstuvwxyz012345
+broker_url=redis://
+
+yara_rules_dir=./rules
+
+postgres_host=localhost
+postgres_username=cb
+postgres_password=abcdefghijklmnop
+postgres_db=cb
+postgres_port=5002
+
+niceness=1
+concurrent_hashes=8
+disable_rescan=False
+num_days_binaries=365
+
+utility_interval=360
+utility_script=../scripts/vacuumscript.sh
+
+feed_database_dir=./feed_db
+
+worker_network_timeout=5
+"""
+
 
 class TestConfigurationInit(TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
+        """
+        Reset globals and recreate a base configuration.
+        :return:
+        """
         globals.g_config = {}
-        globals.g_output_file = './yara_feed.json'
+        globals.g_output_file = ""
         globals.g_remote = False
-        globals.g_cb_server_url = 'https://127.0.0.1'
-        globals.g_cb_server_token = ''
+        globals.g_mode = ""
+        globals.g_cb_server_url = ""
+        globals.g_cb_server_token = ""
         globals.g_broker_url = ''
         globals.g_yara_rules_dir = './yara_rules'
         globals.g_yara_rule_map = {}
@@ -33,11 +69,77 @@ class TestConfigurationInit(TestCase):
         globals.g_num_binaries_analyzed = 0
         globals.g_disable_rescan = True
         globals.g_num_days_binaries = 365
-        globals.g_vacuum_interval = -1
-        globals.g_vacuum_script = './scripts/vacuumscript.sh'
+        globals.g_utility_interval = 0
+        globals.g_utility_script = ""
         globals.g_feed_database_dir = "./feed_db"
+        globals.g_worker_network_timeout = 5
 
-    def test_01_missing_config(self):
+        with open(TESTCONF, "w") as fp:
+            fp.write(BASE)
+
+    def tearDown(self) -> None:
+        """
+        Cleanup after testing.
+        """
+        if os.path.exists(TESTCONF):
+            os.remove(TESTCONF)
+
+        if os.path.exists(globals.g_feed_database_dir):
+            os.rmdir(globals.g_feed_database_dir)
+
+    @staticmethod
+    def mangle(header: str = None, add: List[str] = None, change: dict = None):
+        """
+        Mangle the base configuration file to produce the testing situation
+        :param header: mangle header entry, if specified
+        :param add: list of string entries to add to the end
+        :param change: dictionary of changes, keyed by parameter; a value of None removes the line
+        :return:
+        """
+        with open(TESTCONF, "r") as fp:
+            original = fp.readlines()
+
+        replace = []
+        for line in original:
+            if header is not None and line.strip().startswith("[") and line.strip().endswith("]"):
+                line = header + "\n"
+            if change is not None:
+                for key, value in change.items():
+                    if line.startswith(key):
+                        if value is None:
+                            line = None
+                        else:
+                            line = f"{key}={value}\n"
+                        break
+            if line is not None:
+                replace.append(line)
+
+        if add is not None:
+            for item in add:
+                replace.append(item + "\n")
+
+        with open(TESTCONF, "w") as fp:
+            fp.writelines(replace)
+
+    # ----- Begin Tests ----------------------------------------------------------------------
+
+    def test_00a_validate_config(self):
+        """
+        Ensure our base configuration is valid.
+        """
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertTrue(globals.g_output_file.endswith("sample.json"))
+        self.assertFalse(globals.g_remote)
+
+    def test_00b_validate_config_worker(self):
+        """
+        Ensure our base configuration is valid for worker types.
+        """
+        ConfigurationInit(TESTCONF)
+        self.assertEquals("", globals.g_output_file)
+        self.assertFalse(globals.g_remote)
+
+    def test_01a_missing_config(self):
         """
         Ensure a missing config file is detected.
         """
@@ -45,391 +147,633 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(os.path.join(TESTS, "config", "no-such-config.conf"))
         assert "does not exist!" in "{0}".format(err.exception.args[0])
 
-    # ----- Full validation (main)
-
-    def test_02_validate_config(self):
-        # valid local
-        globals.g_output_file = None
-        globals.g_remote = None
-        ConfigurationInit(os.path.join(TESTS, "config", "valid.conf"), "sample.json")
-        self.assertTrue(globals.g_output_file.endswith("sample.json"))
-        self.assertFalse(globals.g_remote)
-
-        # valid remote
-        globals.g_remote = None
-        ConfigurationInit(os.path.join(TESTS, "config", "valid2.conf"), "sample2.json")
-        self.assertTrue(globals.g_output_file.endswith("sample2.json"))
-        self.assertTrue(globals.g_remote)
-
-    def test_03a_config_missing_header(self):
+    def test_01b_config_is_dir(self):
         """
-        Ensure we detect a configuration file with no section header.
+        Ensure a config path leading to a directory is detected.
         """
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_header.conf"), "sample.json")
+            ConfigurationInit(os.path.join(TESTS))
+        assert "is a directory!" in "{0}".format(err.exception.args[0])
+
+    def test_02a_section_header_missing(self):
+        """
+        Ensure we detect a configuration file without a "[general]" section header.
+        """
+        self.mangle(change={"[general]": None})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
         assert "File contains no section headers" in "{0}".format(err.exception.args[0])
 
-    def test_03b_config_invalid_header(self):
+    def test_02b_section_header_invalid(self):
         """
-        Ensure we detect a configuration file with no "[general]" section header.
+        Ensure we detect a configuration file with a different section header than "[general]".
         """
+        self.mangle(header="[foobar]")
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "invalid_header.conf"), "sample.json")
+            ConfigurationInit(TESTCONF)
         assert "does not have a 'general' section" in "{0}".format(err.exception.args[0])
 
-    def test_04a_config_missing_worker(self):
+    def test_03a_mode_missing(self):
         """
-        Ensure that config lacking worker information defaults to local.
+        Ensure we detect a configuration file without a required 'mode' definition.
         """
-        # not defined in file
-        globals.g_remote = None
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_worker.conf"), "sample.json")
+        self.mangle(change={"mode": None})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
+        assert "has no 'mode' definition" in "{0}".format(err.exception.args[0])
+
+    def test_03b_mode_invalid(self):
+        """
+        Ensure we detect a configuration file with an invalid 'mode' definition.
+        """
+        self.mangle(change={"mode": "bogus"})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
+        assert "does not specify an allowed value: ['master', 'slave']" in "{0}".format(err.exception.args[0])
+
+    def test_03c_mode_duplicated(self):
+        """
+        Ensure we detect a configuration file with a duplicate 'mode' defintion (same logic applies
+        to all parameter duplicates).
+        """
+        self.mangle(add=["mode=bogus"])
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
+        assert "option 'mode' in section 'general' already exists" in "{0}".format(err.exception.args[0])
+
+    def test_04a_worker_missing(self):
+        """
+        Ensure that lacking 'worker_type' information defaults to local.
+        """
+        self.mangle(change={"worker_type": None})
+        ConfigurationInit(TESTCONF)
         self.assertFalse(globals.g_remote)
 
-        # defined as "worker_type="
-        globals.g_remote = None
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_worker2.conf"), "sample.json")
+    def test_04b_worker_empty(self):
+        """
+        Ensure that empty 'worker_type' information defaults to local.
+        """
+        self.mangle(change={"worker_type": ""})
+        ConfigurationInit(TESTCONF)
         self.assertFalse(globals.g_remote)
 
-    def test_04b_config_bogus_worker(self):
+    def test_04c_config_bogus_worker(self):
         """
-        Ensure that config with bogus worker is detected.
+        Ensure that with bogus 'worker_type' is detected.
         """
+        self.mangle(change={"worker_type": "BOGUS"})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_worker.conf"), "sample.json")
-        assert "invalid 'worker_type'" in "{0}".format(err.exception.args[0])
+            ConfigurationInit(TESTCONF)
+        assert "does not specify an allowed value: ['local', 'remote']" in "{0}".format(err.exception.args[0])
 
-    def test_05a_config_local_worker_missing_server_url(self):
+    def test_05a_cb_server_url_missing_for_master_and_remote(self):
         """
-        Ensure that local worker config with missing server url is detected.
+        Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
         """
-        # not defined in file
+        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_url": None})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("", globals.g_cb_server_url)
+
+    def test_05b_cb_server_url_empty_for_master_and_remote(self):
+        """
+        Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
+        """
+        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_url": ""})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("", globals.g_cb_server_url)
+
+    def test_05c_cb_server_url_missing_for_slave(self):
+        """
+        Ensure that 'cb_server_url' is required and detected if mode=slave.
+        """
+        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_url": None})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_url.conf"), "sample.json")
+            ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-        # defined as "cb_server_url="
+    def test_05d_cb_server_url_empty_for_slave(self):
+        """
+        Ensure that 'cb_server_url' is required and detected if mode=slave.
+        """
+        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_url": ""})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_url2.conf"), "sample.json")
+            ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_05b_config_local_worker_missing_server_token(self):
+    def test_05e_cb_server_url_missing_for_local(self):
         """
-        Ensure that local worker config with missing server token is detected.
+        Ensure that 'cb_server_url' is required and detected if worker_type=local.
         """
-        # not defined in file
+        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_url": None})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_token.conf"), "sample.json")
+            ConfigurationInit(TESTCONF)
+        assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
+
+    def test_05f_cb_server_url_empty_for_local(self):
+        """
+        Ensure that 'cb_server_url' is required and detected if worker_type=local.
+        """
+        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_url": ""})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
+        assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
+
+    def test_06a_cb_server_token_missing_for_master_and_remote(self):
+        """
+        Ensure that 'cb_server_token' is not required if mode==slave and worker_type==remote
+        """
+        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_token": None})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("", globals.g_cb_server_token)
+
+    def test_06b_cb_server_token_empty_for_master_and_remote(self):
+        """
+        Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
+        """
+        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_token": ""})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("", globals.g_cb_server_token)
+
+    def test_06c_cb_server_url_missing_for_slave(self):
+        """
+        Ensure that 'cb_server_token' is required and detected if mode=slave.
+        """
+        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_token": None})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
 
-        # defined as "cb_server_token="
+    def test_06d_cb_server_token_empty_for_slave(self):
+        """
+        Ensure that 'cb_server_token' is required and detected if mode=slave.
+        """
+        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_token": ""})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "local_worker_no_server_token2.conf"), "sample.json")
+            ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
 
-    def test_06_config_remote_worker_missing_broker_url(self):
+    def test_06e_cb_server_token_missing_for_local(self):
         """
-        Ensure that remote worker config with missing broker url is detected.
+        Ensure that 'cb_server_token' is required and detected if worker_type=local.
         """
-        # not defined in file
+        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_token": None})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "remote_worker_no_broker_url.conf"), "sample.json")
+            ConfigurationInit(TESTCONF)
+        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
+
+    def test_06f_cb_server_token_empty_for_local(self):
+        """
+        Ensure that 'cb_server_token' is required and detected if worker_type=local.
+        """
+        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_token": ""})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
+        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
+
+    def test_06a_broker_url_missing(self):
+        """
+        Ensure that  missing broker_url is detected.
+        """
+        self.mangle(change={"broker_url": None})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
         assert "has no 'broker_url' definition" in "{0}".format(err.exception.args[0])
 
-        # defined as "broker_url="
+    def test_06b_broker_url_empty(self):
+        """
+        Ensure that empty broker_url is detected.
+        """
+        self.mangle(change={"broker_url": ""})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "remote_worker_no_broker_url2.conf"), "sample.json")
+            ConfigurationInit(TESTCONF)
         assert "has no 'broker_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_07a_config_missing_yara_rules_dir(self):
+    def test_07a_yara_rules_dir_missing(self):
         """
         Ensure that config with missing yara rules directory is detected.
         """
-        # not defined in file
+        self.mangle(change={"yara_rules_dir": None})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "no_rules_dir.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "has no 'yara_rules_dir' definition" in "{0}".format(err.exception.args[0])
 
-        # defined as "yara_rules_dir="
+    def test_07b_yara_rules_dir_empty(self):
+        """
+        Ensure that config with empty yara rules directory is detected.
+        """
+        self.mangle(change={"yara_rules_dir": ""})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "no_rules_dir2.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "has no 'yara_rules_dir' definition" in "{0}".format(err.exception.args[0])
 
-    def test_07b_config_yara_rules_dir_not_exists(self):
+    def test_07c_yara_rules_dir_not_exists(self):
         """
         Ensure that config with yara rules directory that does not exist is detected.
         """
+        self.mangle(change={"yara_rules_dir": "no-such-dir"})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_rules_dir.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "does not exist" in "{0}".format(err.exception.args[0])
 
-    def test_07c_config_yara_rules_dir_not_directory(self):
+    def test_07d_yara_rules_dir_not_directory(self):
         """
         Ensure that config with yara rules directory that is not a directory is detected.
         """
+        self.mangle(change={"yara_rules_dir": TESTCONF})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_rules_dir.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "is not a directory" in "{0}".format(err.exception.args[0])
 
-    def test_08a_config_missing_postgres_host(self):
+    # ----- extended config, requires output_file with value ------------------------------
+
+    def test_08a_postgres_host_missing(self):
         """
         Ensure that config with missing postgres_host uses defaults.
         """
         check = globals.g_postgres_host
 
-        # undefined, use default in globals
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_host.conf"), "sample.json")
+        self.mangle(change={"postgres_host": None})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_host)
 
-        # defined as "postgres_host="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_host2.conf"), "sample.json")
+    def test_08b_postgres_host_empty(self):
+        """
+        Ensure that config with empty postgres_host uses defaults.
+        """
+        check = globals.g_postgres_host
+
+        self.mangle(change={"postgres_host": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_host)
 
-    # TODO: test_08b_config_invalid_postgres_host
-
-    def test_09a_config_missing_postgres_username(self):
+    def test_09a_postgres_username_missing(self):
         """
         Ensure that config with missing postgres_username uses defaults.
         """
         check = globals.g_postgres_username
 
-        # undefined, use default in globals
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_username.conf"), "sample.json")
+        self.mangle(change={"postgres_host": None})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_username)
 
-        # defined as "postgres_username="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_username2.conf"), "sample.json")
+    def test_09b_postgres_username_empty(self):
+        """
+        Ensure that config with empty postgres_username uses defaults.
+        """
+        check = globals.g_postgres_username
+
+        self.mangle(change={"postgres_host": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_username)
 
-    # TODO: test_09b_config_invalid_postgres_username
-
-    def test_10a_config_missing_postgres_password(self):
+    def test_10a_postgres_password_missing(self):
         """
         Ensure that config with missing postgres_password is detected.
         """
-        # undefined
+        self.mangle(change={"postgres_password": None})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_password.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "has no 'postgres_password' definition" in "{0}".format(err.exception.args[0])
 
-        # defined as "postgres_password="
+    def test_10b_postgres_password_empty(self):
+        """
+        Ensure that config with empty postgres_password is detected.
+        """
+        self.mangle(change={"postgres_password": ""})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_password2.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "has no 'postgres_password' definition" in "{0}".format(err.exception.args[0])
 
-    # TODO: test_10a_config_invalid_postgres_password
-
-    def test_11a_config_missing_postgres_db(self):
+    def test_11a_postgres_db_missing(self):
         """
         Ensure that config with missing postgres_db is detected.
         """
         check = globals.g_postgres_db
 
-        # undefined, use default in globals
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_db.conf"), "sample.json")
+        self.mangle(change={"postgres_db": None})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_db)
 
-        # defined as "postgres_db="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_db2.conf"), "sample.json")
+    def test_11b_postgres_db_empty(self):
+        """
+        Ensure that config with empty postgres_db is detected.
+        """
+        check = globals.g_postgres_db
+
+        self.mangle(change={"postgres_db": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_db)
 
-    # TODO: test_11b_config_invalid_postgres_db
-
-    def test_12a_config_missing_postgres_port(self):
+    def test_12a_postgres_port_missing(self):
         """
         Ensure that config with missing postgres_port is detected.
         """
         check = globals.g_postgres_port
 
-        # undefined, use default in globals
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_port.conf"), "sample.json")
+        self.mangle(change={"postgres_port": None})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_port)
 
-        # defined as "postgres_port="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_postgres_port2.conf"), "sample.json")
+    def test_12b_postgres_port_empty(self):
+        """
+        Ensure that config with empty postgres_port is detected.
+        """
+        check = globals.g_postgres_port
+
+        self.mangle(change={"postgres_port": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_postgres_port)
 
-    def test_12b_config_bogus_postgres_port(self):
+    def test_12c_postgres_port_bogus(self):
         """
         Ensure that config with bogus (non-int) postgres_port is detected.
         """
+        self.mangle(change={"postgres_port": "BOGUS"})
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_postgres_port.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    # TODO: test_12c_config_invalid_postgres_port
-
-    def test_13a_config_missing_niceness(self):
+    def test_13a_niceness_missing(self):
         """
         Ensure that config with missing niceness is not a problem.
         """
-        # defined as "niceness="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_niceness.conf"), "sample.json")
+        self.mangle(change={"niceness": None})
+        ConfigurationInit(TESTCONF, "sample.json")
 
-    def test_13b_config_bogus_niceness(self):
+    def test_13b_niceness_empty(self):
+        """
+        Ensure that config with missing niceness is not a problem.
+        """
+        self.mangle(change={"niceness": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+
+    def test_13c_niceness_bogus(self):
         """
         Ensure that config with bogus (non-int) niceness is detected.
         """
+        self.mangle(change={"niceness": "BOGUS"})
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_niceness.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_14a_config_missing_concurrent_hashes(self):
+    def test_13d_niceness_negative(self):
+        """
+        Ensure that config with bogus (non-int) niceness is detected.
+        """
+        self.mangle(change={"niceness": "-1"})
+        with self.assertRaises(Exception) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "'niceness' must be greater or equal to 0" in "{0}".format(err.exception.args[0])
+
+    def test_14a_concurrent_hashes_missing(self):
         """
         Ensure that config with missing concurrent_hashes uses default.
         """
         check = globals.g_max_hashes
 
-        # defined as "concurrent_hashes="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_concurrent_hashes.conf"), "sample.json")
+        self.mangle(change={"concurrent_hashes": None})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_max_hashes)
 
-    def test_14b_config_bogus_concurrent_hashes(self):
+    def test_14b_concurrent_hashes_empty(self):
+        """
+        Ensure that config with missing concurrent_hashes uses default.
+        """
+        check = globals.g_max_hashes
+
+        self.mangle(change={"concurrent_hashes": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_max_hashes)
+
+    def test_14c_concurrent_hashes_bogus(self):
         """
         Ensure that config with bogus (non-int) concurrent_hashes is detected.
         """
+        self.mangle(change={"concurrent_hashes": "BOGUS"})
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_concurrent_hashes.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_15a_config_missing_disable_rescan(self):
+    def test_15a_disable_rescan_missing(self):
         """
-        Ensure that config with missing disable_rescan is detected.
+        Ensure that config with missing disable_rescan is replaced with default
         """
-        globals.g_disable_rescan = None
+        check = globals.g_disable_rescan
 
-        # defined as "disable_rescan="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_disable_rescan.conf"), "sample.json")
-        self.assertFalse(globals.g_disable_rescan)
+        self.mangle(change={"disable_rescan": None})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_disable_rescan)
 
-    def test_15b_config_bogus_disable_rescan(self):
+    def test_15b_disable_rescan_empty(self):
+        """
+        Ensure that config with missing disable_rescan is replaced with default
+        """
+        check = globals.g_disable_rescan
+
+        self.mangle(change={"disable_rescan": None})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_disable_rescan)
+
+    def test_15c_disable_rescan_bogus(self):
         """
         Ensure that config with bogus (non-bool) disable_rescan is detected.
         """
-        globals.g_disable_rescan = None
-
-        # Not true, false, yes, no
+        self.mangle(change={"disable_rescan": "BOGUS"})
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_disable_rescan.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "is not a valid boolean value" in "{0}".format(err.exception.args[0])
 
-    def test_16a_config_missing_num_days_binaries(self):
+    def test_16a_num_days_binaries_missing(self):
         """
         Ensure that config with missing num_days_binaries reverts to default
         """
         check = globals.g_num_days_binaries
 
-        # defined as "num_days_binaries="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_num_days_binaries.conf"), "sample.json")
+        self.mangle(change={"num_days_binaries": None})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_num_days_binaries)
 
-    def test_16b_config_bogus_num_days_binaries(self):
+    def test_16b_num_days_binaries_empty(self):
+        """
+        Ensure that config with empty num_days_binaries reverts to default
+        """
+        check = globals.g_num_days_binaries
+
+        self.mangle(change={"num_days_binaries": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_num_days_binaries)
+
+    def test_16c_num_days_binaries_bogus(self):
         """
         Ensure that config with bogus (non-int) num_days_binaries is detected.
         """
+        self.mangle(change={"num_days_binaries": "BOGUS"})
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_num_days_binaries.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_17a_config_bogus_vacuum_interval(self):
+    def test_17a_utility_interval_missing(self):
         """
-        Ensure that config with bogus (non-int) vacuum_interval is detected.
+        Ensure that missing utility_interval uses the default.
         """
+        check = globals.g_utility_interval
+
+        self.mangle(change={"utility_interval": None})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_utility_interval)
+
+    def test_17b_utility_interval_empty(self):
+        """
+        Ensure that empty utility_interval uses the default.
+        """
+        check = globals.g_utility_interval
+
+        self.mangle(change={"utility_interval": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_utility_interval)
+
+    def test_17c_utility_interval_bogus(self):
+        """
+        Ensure that config with bogus (non-int) utility_interval is detected.
+        """
+        self.mangle(change={"utility_interval": "BOGUS"})
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_vacuum_interval.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_17b_config_negative_vacuum_interval(self):
+    def test_17d_utility_interval_negative(self):
         """
-        Ensure that config with bogus (non-int) vacuum_interval is detected.
+        Ensure that config with negative utility_interval is detected.
         """
-        globals.g_vacuum_interval = None
-        ConfigurationInit(os.path.join(TESTS, "config", "negative_vacuum_interval.conf"), "sample.json")
-        self.assertEqual(0, globals.g_vacuum_interval)
-
-    def test_18a_config_missing_vacuum_script(self):
-        """
-        Ensure that config with missing vacuum_script is detected.
-        """
+        self.mangle(change={"utility_interval": "-10"})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "no_such_vacuum_script.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "'utility_interval' must be greater or equal to 0" in "{0}".format(err.exception.args[0])
+
+    def test_18a_utility_script_not_exist(self):
+        """
+        Ensure that config with non-existing utility_script is detected.
+        """
+        self.mangle(change={"utility_script": "no-such-script.sh", "utility_interval": "10"})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "does not exist" in "{0}".format(err.exception.args[0])
 
-    def test_18b_config_bogus_vacuum_script_is_dir(self):
+    def test_18b_utility_script_is_dir(self):
         """
-        Ensure that config with vacuum_script as directory is detected.
+        Ensure that config with utility_script as directory is detected.
         """
+        self.mangle(change={"utility_script": TESTS, "utility_interval": "10"})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_dir.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "is a directory" in "{0}".format(err.exception.args[0])
 
-    def test_19a_config_vacuum_script_enabled(self):
+    def test_18c_utility_script_missing(self):
         """
-        Ensure that config with vacuum_script and vacuum_interval is ready to go.
+        Ensure that config with missing utility_script with positive interval is nullified.
         """
-        globals.g_vacuum_interval = None
-        globals.g_vacuum_script = None
-        ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_enabled.conf"), "sample.json")
-        self.assertEqual(360, globals.g_vacuum_interval)
-        self.assertTrue(globals.g_vacuum_script.endswith("/scripts/vacuumscript.sh"))
+        self.mangle(change={"utility_script": None, "utility_interval": "10"})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(0, globals.g_utility_interval)
+        self.assertEqual("", globals.g_utility_script)
 
-    def test_19a_config_vacuum_script_and_no_vacuum_interval(self):
+    def test_18d_utility_script_empty(self):
         """
-        Ensure that config with vacuum_script but vacuum_interval == 0 has it disabled.
+        Ensure that config with empty utility_script with positive interval is nullified.
         """
-        globals.g_vacuum_interval = None
-        globals.g_vacuum_script = None
-        ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_no_interval.conf"), "sample.json")
-        self.assertEqual(0, globals.g_vacuum_interval)
-        self.assertIsNone(globals.g_vacuum_script)
+        self.mangle(change={"utility_script": "", "utility_interval": "10"})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(0, globals.g_utility_interval)
+        self.assertEqual("", globals.g_utility_script)
 
-    def test_20a_config_feed_database_dir_not_exists(self):
+    def test_19a_utility_script_enabled(self):
+        """
+        Ensure that config with utility_script and utility_interval is ready to go.
+        """
+        self.mangle(change={"utility_script": "../scripts/vacuumscript.sh", "utility_interval": "10"})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(10, globals.g_utility_interval)
+        self.assertTrue(globals.g_utility_script.endswith("/scripts/vacuumscript.sh"))
+
+    def test_19b_utility_script_and_no_utility_interval(self):
+        """
+        Ensure that config with utility_script but utility_interval == 0 has it disabled.
+        """
+        self.mangle(change={"utility_script": "../scripts/vacuumscript.sh", "utility_interval": "0"})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(0, globals.g_utility_interval)
+        self.assertEqual("", globals.g_utility_script)
+
+    def test_20a_feed_database_dir_not_exists(self):
         """
         Ensure that config with feed database directory that does not exist will create that directory.
         """
-        path = os.path.abspath("./no-such-directory")
+        path = os.path.abspath("./no-such-feed-directory")
         if os.path.exists(path):
             os.rmdir(path)
         try:
-            ConfigurationInit(os.path.join(TESTS, "config", "missing_feed_database_dir.conf"), "sample.json")
+            self.mangle(change={"feed_database_dir": path})
+            ConfigurationInit(TESTCONF, "sample.json")
             self.assertTrue(os.path.exists(path))
         finally:
             if os.path.exists(path):
                 os.rmdir(path)
 
-    def test_20b_config_feed_database_dir_not_directory(self):
+    def test_20b_feed_database_dir_not_directory(self):
         """
-        Ensure that config with eed database directory that is not a directory is detected.
+        Ensure that config with feed database directory that is not a directory is detected.
         """
+        self.mangle(change={"feed_database_dir": TESTCONF})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_feed_database_dir.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "is not a directory" in "{0}".format(err.exception.args[0])
 
     def test_21_config_malformed_parameter(self):
         """
         Ensure that config with malformed parameter is detected
         """
+        self.mangle(change={"utility_interval": "1%"})
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "malformed_param.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "cannot be parsed" in "{0}".format(err.exception.args[0])
 
-    def test_22a_config_missing_worker_network_timeout(self):
+    def test_22a_worker_network_timeout_missing(self):
         """
         Ensure that config with missing worker_network_timeout reverts to default
         """
         check = globals.g_worker_network_timeout
 
-        # defined as "num_days_binaries="
-        ConfigurationInit(os.path.join(TESTS, "config", "missing_worker_network_timeout.conf"), "sample.json")
+        self.mangle(change={"worker_network_timeout": None})
+        ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_worker_network_timeout)
 
-    def test_22b_config_bogus_worker_network_timeout(self):
+    def test_22b_worker_network_timeout_empty(self):
+        """
+        Ensure that config with empty worker_network_timeout reverts to default
+        """
+        check = globals.g_worker_network_timeout
+
+        self.mangle(change={"worker_network_timeout": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_worker_network_timeout)
+
+    def test_22c_worker_network_timeout_bogus(self):
         """
         Ensure that config with bogus (non-int) worker_network_timeout is detected.
         """
+        self.mangle(change={"worker_network_timeout": "BOGUS"})
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_worker_network_timeout.conf"), "sample.json")
+            ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+
+    def test_23_config_unexpected_parameter(self):
+        """
+        Ensure that config with unexpected parameter (typo?) is flagged
+        """
+        self.mangle(add=["cb_server=https://localhost"])  # should be "cb_server_url"
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "has unknown parameters: ['cb_server']" in "{0}".format(err.exception.args[0])
 
     # ----- Minimal validation (worker)
 
@@ -438,5 +782,5 @@ class TestConfigurationInit(TestCase):
         Ensure that minimal caonfiguration does not set extra globals
         """
         globals.g_postgres_host = None
-        ConfigurationInit(os.path.join(TESTS, "config", "valid.conf"))
+        ConfigurationInit(TESTCONF)
         self.assertIsNone(globals.g_postgres_host)

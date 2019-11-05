@@ -172,26 +172,29 @@ _[TBD]_
 	```
 # Development Notes	
 
-## Vacuum Script
+## Utility Script
 Included with this version is a feature for discretionary use by advanced users and
 should be used with caution.
 
-When `vacuum_interval` is defined with a value greater than 0, it represents the interval
-in minutes at which the yara agent will pause its work and execute an external
-shell script, defined by default as `vacuumscript.sh`  within the `scripts` folder
-of the current Yara connector installation. After execution, the Yara agent continues with
+When `utility_interval` is defined with a value greater than 0, it represents the interval
+in minutes at which the yara connector will pause its work and execute an external
+shell script.  A sample script, `vacuumscript.sh`  is provided within the `scripts` folder
+of the current Yara connector installation. After execution, the Yara connector continues with
 its work.
+
+> _**NOTE:** As a safety for this feature, if an interval is defined but no script is defined, nothing is done.
+> By default, no script is defined._
 
 ```ini
 ;
-; The use of the vacuum script is an ADVANCED FEATURE and should be used with caution!
+; The use of the utility script is an ADVANCED FEATURE and should be used with caution!
 ;
-; If "vacuum_interval" is greater than 0 it represents the interval in minutes after which the yara connector will
-; pause to execute a shell script for database maintenance. This can present risks. Be careful what you allow the
+; If "utility_interval" is greater than 0 it represents the interval in minutes after which the yara connector will
+; pause to execute a shell script for general maintenance. This can present risks. Be careful what you allow the
 ; script to do, and use this option at your own discretion.
 ;
-vacuum_interval=-1
-vacuum_script=./scripts/vacuumscript.sh
+utility_interval=-1
+utility_script=./scripts/vacuumscript.sh
 ```
 
 ## Yara Agent Build Instructions (Centos 6)
