@@ -280,8 +280,8 @@ def get_binary_file_cursor(conn, start_date_binaries):
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
     query = (
-        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
-        + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+            "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
+            + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
     )
 
     logger.debug(query)
@@ -331,20 +331,18 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
     # Closing since there are no more binaries of interest to scan
     cur.close()
     conn.commit()
-    num_total_binaries = len(rows)
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
     md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
 
-    #logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
+    # logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
 
     analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
     if globals.g_utility_interval > 0:
         seconds_since_start = (datetime.now() - utility_window_start).seconds
         if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
-            # close connection
             execute_script()
             utility_window_start = datetime.now()
 
@@ -379,7 +377,7 @@ def save_results_with_logging(analysis_results):
 
 # noinspection PyUnusedFunction
 def save_and_log(
-    analysis_results, start_time, num_binaries_skipped, num_total_binaries
+        analysis_results, start_time, num_binaries_skipped, num_total_binaries
 ):
     logger.debug(analysis_results)
     if analysis_results:
@@ -398,7 +396,7 @@ def save_and_log(
 
 
 def _rule_logging(
-    start_time: float, num_binaries_skipped: int, num_total_binaries: int
+        start_time: float, num_binaries_skipped: int, num_total_binaries: int
 ) -> None:
     """
     Simple method to log yara work.
@@ -505,7 +503,7 @@ def wait_all_worker_exit():
 
 
 def start_workers(
-    exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue
+        exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue
 ) -> None:
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
@@ -542,12 +540,12 @@ class DatabaseScanningThread(Thread):
     """
 
     def __init__(
-        self,
-        interval: int,
-        scanning_promises_queue: Queue,
-        exit_event: Event,
-        *args,
-        **kwargs,
+            self,
+            interval: int,
+            scanning_promises_queue: Queue,
+            exit_event: Event,
+            *args,
+            **kwargs,
     ):
         """
 

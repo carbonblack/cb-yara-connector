@@ -14,13 +14,12 @@ from typing import List
 import requests
 # noinspection PyPackageRequirements
 import yara
-from celery import bootsteps, Celery, group
+from celery import bootsteps, group
 
 import globals
 from analysis_result import AnalysisResult
-from config_handling import ConfigurationInit
-
 from celery_app import app
+from config_handling import ConfigurationInit
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -41,6 +41,3 @@ config.ini
 
 # created local DB
 binary.db
-
-# local storage not to be pushed up
-#local
