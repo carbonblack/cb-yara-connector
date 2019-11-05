@@ -15,7 +15,6 @@ from typing import List, Optional
 
 import humanfriendly
 import psycopg2
-
 # noinspection PyPackageRequirements
 import yara
 from celery import group
@@ -119,11 +118,9 @@ def generate_rule_map_remote(yara_rule_path: str) -> None:
         time.sleep(0.1)
 
 
-def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional:
+def analyze_binaries(md5_hashes: List[str], local: bool) -> Optional[List[AnalysisResult]]:
     """
     Analyze binaries.
-
-    TODO: determine return typing!
 
     :param md5_hashes: list of  hashes to check.
     :param local: True if local
@@ -428,7 +425,7 @@ def main():
     try:
         singleton.SingleInstance()
     except SingleInstanceException as err:
-        logger.exception(f"Only one instance of this script is allowed to run at a time: {err}")
+        logger.error(f"Only one instance of this script is allowed to run at a time: {err}")
         sys.exit(1)
 
     args = handle_arguments()
@@ -448,7 +445,7 @@ def main():
     try:
         ConfigurationInit(args.config_file, use_log_file)
     except Exception as err:
-        logger.exception(f"Unable to continue due to a configuration problem: {err}")
+        logger.error(f"Unable to continue due to a configuration problem: {err}")
         sys.exit(2)
 
     if args.validate_yara_rules:
@@ -458,7 +455,7 @@ def main():
             yara.compile(filepaths=yara_rule_map)
             logger.info("All yara rules compiled successfully")
         except Exception as err:
-            logger.exception(f"There were errors compiling yara rules: {err}")
+            logger.error(f"There were errors compiling yara rules: {err}")
             sys.exit(5)
     else:
         try:
@@ -474,7 +471,7 @@ def main():
             logger.info("\n\n##### Interupted by User!\n")
             sys.exit(3)
         except Exception as err:
-            logger.exception(f"There were errors executing yara rules: {err}")
+            logger.error(f"There were errors executing yara rules: {err}")
             sys.exit(4)
 
 
