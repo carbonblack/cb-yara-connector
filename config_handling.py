@@ -113,18 +113,17 @@ class ConfigurationInit(object):
         globals.g_num_days_binaries = self._as_int("num_days_binaries", default=globals.g_num_days_binaries,
                                                    min_value=1)
 
-        globals.g_maintenance_interval = self._as_int("maintenance_interval", default=globals.g_maintenance_interval,
-                                                      min_value=0, quiet=True)
-        if globals.g_maintenance_interval > 0:
-            if self._as_str("maintenance_script", default=globals.g_maintenance_script) == "":
-                logger.warning(
-                    f"{self.source} 'maintenance_interval' supplied but no script defined -- feature disabled")
-                globals.g_maintenance_interval = 0
-                globals.g_maintenance_script = ""
+        globals.g_utility_interval = self._as_int("utility_interval", default=globals.g_utility_interval,
+                                                  min_value=0, quiet=True)
+        if globals.g_utility_interval > 0:
+            if self._as_str("utility_script", default=globals.g_utility_script) == "":
+                logger.warning(f"{self.source} 'utility_interval' supplied but no script defined -- feature disabled")
+                globals.g_utility_interval = 0
+                globals.g_utility_script = ""
             else:
-                globals.g_maintenance_script = self._as_path("maintenance_script", required=False, is_dir=False,
-                                                             default=globals.g_maintenance_script)
-                logger.warning(f"{self.source} maintenance Script '{globals.g_maintenance_script}' is enabled; " +
+                globals.g_utility_script = self._as_path("utility_script", required=True, is_dir=False,
+                                                         default=globals.g_utility_script)
+                logger.warning(f"{self.source} utility script '{globals.g_utility_script}' is enabled; " +
                                "use this advanced feature at your own discretion!")
         else:
             if self._as_path("utility_script", required=False, default=globals.g_utility_script):
