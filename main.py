@@ -279,7 +279,7 @@ def perform(yara_rule_dir: str) -> None:
     for row in rows:
         if globals.g_utility_interval > 0:
             seconds_since_start = (datetime.now() - utility_window_start).seconds
-            if seconds_since_start >= globals.g_utility_interval * 60:
+            if seconds_since_start >= globals.g_utility_interval:
                 execute_script()
                 utility_window_start = datetime.now()
 
