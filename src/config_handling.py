@@ -34,7 +34,7 @@ KNOWN = [
     "postgres_password",
     "postgres_port",
     "postgres_username",
-    "utility_debug",  # dev use only!
+    "utility_debug",  # developer use only!
     "utility_interval",
     "utility_script",
     "worker_network_timeout",
@@ -156,6 +156,9 @@ class ConfigurationInit(object):
         else:
             if self._as_path("utility_script", required=False, default=globals.g_utility_script):
                 logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
+
+        # developer use only
+        globals.g_utility_debug = self._as_bool("utility_debug", default=False)
 
         globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, is_dir=True,
                                                     default=globals.g_feed_database_dir, create_if_needed=True)

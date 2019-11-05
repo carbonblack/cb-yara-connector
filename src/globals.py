@@ -39,5 +39,6 @@ g_scanning_interval = 360
 
 g_utility_interval = 0
 g_utility_script = ""
+g_utility_debug = False  # dev use only, reduces interval from minutes to seconds!
 
 g_worker_network_timeout = 5

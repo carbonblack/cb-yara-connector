@@ -43,4 +43,4 @@ config.ini
 binary.db
 
 # local storage not to be pushed up
-local
+#local

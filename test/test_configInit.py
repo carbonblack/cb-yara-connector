@@ -35,6 +35,7 @@ num_days_binaries=365
 
 utility_interval=360
 utility_script=../scripts/vacuumscript.sh
+utility_debug=false
 
 feed_database_dir=./feed_db
 
@@ -71,6 +72,7 @@ class TestConfigurationInit(TestCase):
         globals.g_num_days_binaries = 365
         globals.g_utility_interval = 0
         globals.g_utility_script = ""
+        globals.g_utility_debug = False
         globals.g_feed_database_dir = "./feed_db"
         globals.g_worker_network_timeout = 5
 
@@ -774,6 +776,42 @@ class TestConfigurationInit(TestCase):
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF, "sample.json")
         assert "has unknown parameters: ['cb_server']" in "{0}".format(err.exception.args[0])
+
+    def test_24a_utility_debug_missing(self):
+        """
+        Ensure that config with missing utility_debug is always false.
+        """
+        self.mangle(change={"utility_debug": None})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertFalse(globals.g_utility_debug)
+
+    def test_24b_utility_debug_empty(self):
+        """
+        Ensure that config with empty utility_debug is always false.
+        """
+        self.mangle(change={"utility_debug": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertFalse(globals.g_utility_debug)
+
+    def test_24c_utility_debug_bogus(self):
+        """
+        Ensure that config with bogus (non-bool) utility_debug is detected.
+        """
+        self.mangle(change={"utility_debug": "BOGUS"})
+        with self.assertRaises(ValueError) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "is not a valid boolean value" in "{0}".format(err.exception.args[0])
+
+    def test_24d_utility_debug_empty_global_changed(self):
+        """
+        Ensure that config with empty utility_debug is always false, even if the globals are altered!
+        """
+        globals.g_utility_debug = True
+
+        self.mangle(change={"utility_debug": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertFalse(globals.g_utility_debug)
+
 
     # ----- Minimal validation (worker)
 

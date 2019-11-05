@@ -293,14 +293,10 @@ def get_binary_file_cursor(conn, start_date_binaries):
 
 def execute_script() -> None:
     """
-    Execute a external maintenence script (vacuum script).
+    Execute a external utility script.
     """
-    logger.info(
-        "----- Executing vacuum script ----------------------------------------"
-    )
-    prog = subprocess.Popen(
-        globals.g_utility_script, shell=True, universal_newlines=True
-    )
+    logger.info("----- Executing utility script ----------------------------------------")
+    prog = subprocess.Popen(globals.g_utility_script, shell=True, universal_newlines=True)
     stdout, stderr = prog.communicate()
     if stdout is not None and len(stdout.strip()) > 0:
         logger.info(stdout)
@@ -308,9 +304,7 @@ def execute_script() -> None:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
-    logger.info(
-        "---------------------------------------- Vacuum script completed -----\n"
-    )
+    logger.info("---------------------------------------- Utility script completed -----\n")
 
 
 def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
@@ -349,7 +343,7 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
 
     if globals.g_utility_interval > 0:
         seconds_since_start = (datetime.now() - utility_window_start).seconds
-        if seconds_since_start >= globals.g_utility_interval * 60:
+        if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
             # close connection
             execute_script()
             utility_window_start = datetime.now()
