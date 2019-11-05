@@ -33,8 +33,8 @@ class TestConfigurationInit(TestCase):
         globals.g_num_binaries_analyzed = 0
         globals.g_disable_rescan = True
         globals.g_num_days_binaries = 365
-        globals.g_vacuum_interval = -1
-        globals.g_vacuum_script = './scripts/vacuumscript.sh'
+        globals.g_maintenance_interval = -1
+        globals.g_maintenance_script = None
         globals.g_feed_database_dir = "./feed_db"
 
     def test_01_missing_config(self):
@@ -331,57 +331,65 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(os.path.join(TESTS, "config", "bogus_num_days_binaries.conf"), "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_17a_config_bogus_vacuum_interval(self):
+    def test_17a_config_bogus_maintenance_interval(self):
         """
-        Ensure that config with bogus (non-int) vacuum_interval is detected.
+        Ensure that config with bogus (non-int) maintenance_interval is detected.
         """
         with self.assertRaises(ValueError) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "bogus_vacuum_interval.conf"), "sample.json")
+            ConfigurationInit(os.path.join(TESTS, "config", "bogus_maintenance_interval.conf"), "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_17b_config_negative_vacuum_interval(self):
+    def test_17b_config_negative_maintenance_interval(self):
         """
-        Ensure that config with bogus (non-int) vacuum_interval is detected.
+        Ensure that config with bogus (non-int) maintenance_interval is detected.
         """
-        globals.g_vacuum_interval = None
-        ConfigurationInit(os.path.join(TESTS, "config", "negative_vacuum_interval.conf"), "sample.json")
-        self.assertEqual(0, globals.g_vacuum_interval)
+        globals.g_maintenance_interval = None
+        ConfigurationInit(os.path.join(TESTS, "config", "negative_maintenance_interval.conf"), "sample.json")
+        self.assertEqual(0, globals.g_maintenance_interval)
 
-    def test_18a_config_missing_vacuum_script(self):
+    def test_18a_config_missing_maintenance_script(self):
         """
-        Ensure that config with missing vacuum_script is detected.
+        Ensure that config with non-existing maintenance_script is detected.
         """
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "no_such_vacuum_script.conf"), "sample.json")
+            ConfigurationInit(os.path.join(TESTS, "config", "no_such_maintenance_script.conf"), "sample.json")
         assert "does not exist" in "{0}".format(err.exception.args[0])
 
-    def test_18b_config_bogus_vacuum_script_is_dir(self):
+    def test_18b_config_bogus_maintenance_script_is_dir(self):
         """
-        Ensure that config with vacuum_script as directory is detected.
+        Ensure that config with maintenance_script as directory is detected.
         """
         with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_dir.conf"), "sample.json")
+            ConfigurationInit(os.path.join(TESTS, "config", "maintenance_script_dir.conf"), "sample.json")
         assert "is a directory" in "{0}".format(err.exception.args[0])
 
-    def test_19a_config_vacuum_script_enabled(self):
+    def test_18c_config_empty_maintenance_script(self):
         """
-        Ensure that config with vacuum_script and vacuum_interval is ready to go.
+        Ensure that config with missing maintenance_script is detected.
         """
-        globals.g_vacuum_interval = None
-        globals.g_vacuum_script = None
-        ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_enabled.conf"), "sample.json")
-        self.assertEqual(360, globals.g_vacuum_interval)
-        self.assertTrue(globals.g_vacuum_script.endswith("/scripts/vacuumscript.sh"))
+        ConfigurationInit(os.path.join(TESTS, "config", "empty_maintenance_script.conf"), "sample.json")
+        self.assertEqual(0, globals.g_maintenance_interval)
+        self.assertEqual("", globals.g_maintenance_script)
 
-    def test_19a_config_vacuum_script_and_no_vacuum_interval(self):
+    def test_19a_config_maintenance_script_enabled(self):
         """
-        Ensure that config with vacuum_script but vacuum_interval == 0 has it disabled.
+        Ensure that config with maintenance_script and maintenance_interval is ready to go.
         """
-        globals.g_vacuum_interval = None
-        globals.g_vacuum_script = None
-        ConfigurationInit(os.path.join(TESTS, "config", "vacuum_script_no_interval.conf"), "sample.json")
-        self.assertEqual(0, globals.g_vacuum_interval)
-        self.assertIsNone(globals.g_vacuum_script)
+        globals.g_maintenance_interval = None
+        globals.g_maintenance_script = None
+        ConfigurationInit(os.path.join(TESTS, "config", "maintenance_script_enabled.conf"), "sample.json")
+        self.assertEqual(360, globals.g_maintenance_interval)
+        self.assertTrue(globals.g_maintenance_script.endswith("/scripts/vacuumscript.sh"))
+
+    def test_19a_config_maintenance_script_and_no_maintenance_interval(self):
+        """
+        Ensure that config with maintenance_script but maintenance_interval == 0 has it disabled.
+        """
+        globals.g_maintenance_interval = None
+        globals.g_maintenance_script = None
+        ConfigurationInit(os.path.join(TESTS, "config", "maintenance_script_no_interval.conf"), "sample.json")
+        self.assertEqual(0, globals.g_maintenance_interval)
+        self.assertIsNone(globals.g_maintenance_script)
 
     def test_20a_config_feed_database_dir_not_exists(self):
         """

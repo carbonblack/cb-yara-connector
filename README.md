@@ -177,10 +177,13 @@ Included with this version is a feature for discretionary use by advanced users 
 should be used with caution.
 
 When `utility_interval` is defined with a value greater than 0, it represents the interval
-in minutes at which the yara agent will pause its work and execute an external
-shell script, defined by default as `vacuumscript.sh`  within the `scripts` folder
-of the current Yara connector installation. After execution, the Yara agent continues with
+in minutes at which the yara connector will pause its work and execute an external
+shell script.  A sample script, `vacuumscript.sh`  is provided within the `scripts` folder
+of the current Yara connector installation. After execution, the Yara connector continues with
 its work.
+
+> _**NOTE:** As a safety for this feature, if an interval is defined but no script is defined, nothing is done.
+> By default, no script is defined._
 
 ```ini
 ;

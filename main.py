@@ -236,9 +236,7 @@ def execute_script() -> None:
     """
     Execute a external maintenence script (utility script).
     """
-    logger.info(
-        "----- Executing utility script ----------------------------------------"
-    )
+    logger.info("----- Executing utility script ----------------------------------------")
     prog = subprocess.Popen(globals.g_utility_script, shell=True, universal_newlines=True)
     stdout, stderr = prog.communicate()
     if stdout is not None and len(stdout.strip()) > 0:

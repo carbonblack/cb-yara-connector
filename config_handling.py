@@ -113,12 +113,19 @@ class ConfigurationInit(object):
         globals.g_num_days_binaries = self._as_int("num_days_binaries", default=globals.g_num_days_binaries,
                                                    min_value=1)
 
-        globals.g_utility_interval = self._as_int("utility_interval", default=globals.g_utility_interval, min_value=0)
-        if globals.g_utility_interval > 0:
-            globals.g_utility_script = self._as_path("utility_script", required=True, is_dir=False,
-                                                    default=globals.g_utility_script)
-            logger.warning(f" Script '{globals.g_utility_script}' is enabled; " +
-                           "use this advanced feature at your own discretion!")
+        globals.g_maintenance_interval = self._as_int("maintenance_interval", default=globals.g_maintenance_interval,
+                                                      min_value=0, quiet=True)
+        if globals.g_maintenance_interval > 0:
+            if self._as_str("maintenance_script", default=globals.g_maintenance_script) == "":
+                logger.warning(
+                    f"{self.source} 'maintenance_interval' supplied but no script defined -- feature disabled")
+                globals.g_maintenance_interval = 0
+                globals.g_maintenance_script = ""
+            else:
+                globals.g_maintenance_script = self._as_path("maintenance_script", required=False, is_dir=False,
+                                                             default=globals.g_maintenance_script)
+                logger.warning(f"{self.source} maintenance Script '{globals.g_maintenance_script}' is enabled; " +
+                               "use this advanced feature at your own discretion!")
         else:
             if self._as_path("utility_script", required=False, default=globals.g_utility_script):
                 logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
@@ -191,7 +198,8 @@ class ConfigurationInit(object):
 
         return value
 
-    def _as_int(self, param: str, required: bool = False, default: int = None, min_value: int = -1) -> Optional[int]:
+    def _as_int(self, param: str, required: bool = False, default: int = None, min_value: int = -1,
+                quiet: bool = False) -> Optional[int]:
         """
         Get an integer configuration parameter from the configuration.  A parameter that cannot be converted
         to an int will return a ValueError.
@@ -200,6 +208,7 @@ class ConfigurationInit(object):
         :param required: True if this must be specified in the configuration
         :param default: If not required, default value if not supplied
         :param min_value: minumum value allowed
+        :param quiet: if True, don't give warning about using default
         :return: the integer value, or None/default if not required and no exception
         :raises CbInvalidConfig:
         :raises ValueError:
@@ -207,7 +216,8 @@ class ConfigurationInit(object):
         value = self._as_str(param, required)
         use_default = default if default is None else max(default, min_value)
         if (value is None or value == "") and use_default is not None:
-            logger.warning(f"{self.source} has no defined '{param}'; using default of '{use_default}'")
+            if not quiet:
+                logger.warning(f"{self.source} has no defined '{param}'; using default of '{use_default}'")
             return use_default
         else:
             return None if (value is None or value == "") else max(int(value), min_value)
