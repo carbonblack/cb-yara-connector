@@ -12,7 +12,7 @@ rpm:
 	mkdir -p ${BUILDDIR}/init-scripts
 	cp -rp src/* ${SOURCEDIR}/src
 	cp -rp init-scripts/* ${BUILDDIR}/init-scripts
-	cp yara.conf ${BUILDDIR}
+	cp example-conf/yara.conf ${BUILDDIR}
 	cp MANIFEST ${BUILDDIR}
 	cp cb-yara-connector.spec ${SOURCEDIR}/cb-yara-connector.spec
 	ls ${SOURCEDIR}
