@@ -57,7 +57,7 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
     :return:
     """
     try:
-        while not (exit_event.is_set()) and not (scanning_promise_queue.empty()):
+        while not (exit_event.is_set()) or not (scanning_promise_queue.empty()):
             if not (scanning_promise_queue.empty()):
                 try:
                     promise = scanning_promise_queue.get(timeout=1.0)
@@ -82,7 +82,7 @@ def results_worker(exit_event, results_queue):
     seen binaries/results from scans
     """
     try:
-        while not (exit_event.is_set()) and not (results_queue.empty()):
+        while not (exit_event.is_set()) or not (results_queue.empty()):
             if not (results_queue.empty()):
                 try:
                     result = results_queue.get()
@@ -105,7 +105,7 @@ def results_worker_chunked(exit_event, results_queue: Queue):
     :return:
     """
     try:
-        while not (exit_event.is_set()) and not (results_queue.empty()):
+        while not (exit_event.is_set()) or not (results_queue.empty()):
             if not (results_queue.empty()):
                 try:
                     results = results_queue.get()
