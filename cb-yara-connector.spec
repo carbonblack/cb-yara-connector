@@ -6,7 +6,7 @@ block_cipher = None
 
 
 a = Analysis(['src/main.py'],
-             pathex=['.'],
+             pathex=['./src'],
              binaries=[],
              hiddenimports=['celery.fixups', 'celery.fixups.django', 'celery.loaders.app',
              				'celery.app.amqp', 'kombu.transport.redis', 'redis', 'celery.backends',
