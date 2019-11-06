@@ -24,6 +24,7 @@ KNOWN = [
     "cb_server_token",
     "cb_server_url",
     "concurrent_hashes",
+    "database_scanning_interval",
     "disable_rescan",
     "feed_database_dir",
     "mode",
@@ -40,7 +41,6 @@ KNOWN = [
     "worker_network_timeout",
     "worker_type",
     "yara_rules_dir",
-    "database_scanning_interval",
 ]
 
 
@@ -84,9 +84,6 @@ class ConfigurationInit(object):
                 raise CbInvalidConfig(f"{self.source} has unknown parameters: {extras}")
         except configparser.InterpolationSyntaxError as err:
             raise CbInvalidConfig(f"{self.source} cannot be parsed: {err}")
-
-        if 'database_scanning_interval' in self.the_config:
-            globals.g_scanning_interval = max(int(self.the_config['database_scanning_interval']), globals.g_scanning_interval)
 
         # do the config checks
         self._worker_check()
@@ -166,6 +163,9 @@ class ConfigurationInit(object):
 
         globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, is_dir=True,
                                                     default=globals.g_feed_database_dir, create_if_needed=True)
+
+        globals.g_scanning_interval = self._as_int('database_scanning_interval', default=globals.g_scanning_interval,
+                                                   min_value=360)
 
     # ----- Type Handlers ------------------------------------------------------------
 

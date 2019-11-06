@@ -40,6 +40,7 @@ utility_debug=false
 feed_database_dir=./feed_db
 
 worker_network_timeout=5
+database_scanning_interval=360
 """
 
 
@@ -75,6 +76,7 @@ class TestConfigurationInit(TestCase):
         globals.g_utility_debug = False
         globals.g_feed_database_dir = "./feed_db"
         globals.g_worker_network_timeout = 5
+        globals.g_scanning_interval = 360
 
         with open(TESTCONF, "w") as fp:
             fp.write(BASE)
@@ -812,6 +814,45 @@ class TestConfigurationInit(TestCase):
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertFalse(globals.g_utility_debug)
 
+    def test_25a_database_scanning_interval_missing(self):
+        """
+        Ensure that config with missing database_scanning_interval reverts to default
+        """
+        check = globals.g_scanning_interval
+
+        self.mangle(change={"database_scanning_interval": None})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_scanning_interval)
+
+    def test_25b_database_scanning_interval_empty(self):
+        """
+        Ensure that config with empty database_scanning_interval reverts to default
+        """
+        check = globals.g_scanning_interval
+
+        self.mangle(change={"database_scanning_interval": ""})
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(check, globals.g_scanning_interval)
+
+    def test_25c_database_scanning_interval_bogus(self):
+        """
+        Ensure that config with bogus (non-int) database_scanning_interval is detected.
+        """
+        self.mangle(change={"database_scanning_interval": "BOGUS"})
+        with self.assertRaises(ValueError) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "invalid literal for int" in "{0}".format(err.exception.args[0])
+
+    def test_25d_database_scanning_interval_below_minimum(self):
+        """
+        Ensure that config with missing database_scanning_interval reverts to default
+        """
+        check = globals.g_scanning_interval
+
+        self.mangle(change={"database_scanning_interval": "18"})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "'database_scanning_interval' must be greater or equal to 360" in "{0}".format(err.exception.args[0])
 
     # ----- Minimal validation (worker)
 
