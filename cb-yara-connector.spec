@@ -8,7 +8,7 @@ block_cipher = None
 a = Analysis(['src/main.py'],
              pathex=['./src'],
              binaries=[],
-             hiddenimports=['celery.apps','celery.apps.worker','celery.fixups', 'celery.fixups.django', 'celery.loaders.app',
+             hiddenimports=['celery.apps','celery.apps.worker','celery.app.log','celery.fixups', 'celery.fixups.django', 'celery.loaders.app',
                                         'celery.app.amqp', 'kombu.transport.redis', 'redis', 'celery.backends',
                                         'celery.backends.redis', 'celery.app.events', 'celery.events','celery.redis',
                                         'kombu.transport.pyamqp'],
