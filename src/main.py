@@ -727,6 +727,8 @@ def main():
             sys.exit(5)
     else:
         exit_event = Event()
+        scanning_promise_queue = Queue()
+        scanning_results_queue = Queue()
 
         try:
             if not args.run_once:
@@ -750,8 +752,7 @@ def main():
 
                 run_as_master = globals.g_mode == "master"
 
-                scanning_promise_queue = Queue()
-                scanning_results_queue = Queue()
+                
 
                 sig_handler = partial(handle_sig, exit_event)
 
