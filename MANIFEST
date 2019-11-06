@@ -1,5 +1,5 @@
-/usr/share/cb/integrations/yaraconnector/yaraconnector
-%dir /usr/share/cb/integrations/yaraconnector
-%dir /var/log/cb/integrations/yaraconnector
+/usr/share/cb/integrations/cb-yara-connector/yaraconnector
+%dir /usr/share/cb/integrations/cb-yara-connector
+%dir /var/log/cb/integrations/cb-yara-connector
 /etc/init/yaraconnector.conf
-/etc/cb/integrations/yaraconnector/yaraconnector.conf.example
+/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example

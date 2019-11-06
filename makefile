@@ -13,8 +13,7 @@ rpm:
 	mkdir -p ${BUILDDIR}/example-conf
 	cp -rp src/* ${SOURCEDIR}/src
 	cp -rp init-scripts/* ${BUILDDIR}/init-scripts
-	cp example-conf/yara.conf ${BUILDDIR}/example-conf/yara.conf.example
+	cp example-conf/yara.conf ${BUILDDIR}/example-conf/yara.conf
 	cp MANIFEST ${BUILDDIR}
 	cp cb-yara-connector.spec ${SOURCEDIR}/cb-yara-connector.spec
-	ls ${SOURCEDIR}
 	rpmbuild -ba cb-yara-connector.rpm.spec
