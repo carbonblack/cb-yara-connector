@@ -681,12 +681,10 @@ def main():
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-    else:
-        use_log_file = None
 
     # Verify the configuration file and load up important global variables
     try:
-        ConfigurationInit(args.config_file, use_log_file)
+        ConfigurationInit(args.config_file, args.output_file)
     except Exception as err:
         logger.error(f"Unable to continue due to a configuration problem: {err}")
         sys.exit(2)
