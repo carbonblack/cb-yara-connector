@@ -21,9 +21,11 @@ from typing import List
 import humanfriendly
 import lockfile
 import psycopg2
+
 # noinspection PyPackageRequirements
 import yara
 from celery.bin import worker
+
 # noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
@@ -55,7 +57,7 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
     :return:
     """
     try:
-        while not (exit_event.is_set()):
+        while not (exit_event.is_set()) and not (scanning_promise_queue.empty()):
             if not (scanning_promise_queue.empty()):
                 try:
                     promise = scanning_promise_queue.get(timeout=1.0)
@@ -80,7 +82,7 @@ def results_worker(exit_event, results_queue):
     seen binaries/results from scans
     """
     try:
-        while not (exit_event.is_set()):
+        while not (exit_event.is_set()) and not (results_queue.empty()):
             if not (results_queue.empty()):
                 try:
                     result = results_queue.get()
@@ -103,7 +105,7 @@ def results_worker_chunked(exit_event, results_queue: Queue):
     :return:
     """
     try:
-        while not (exit_event.is_set()):
+        while not (exit_event.is_set()) and not (results_queue.empty()):
             if not (results_queue.empty()):
                 try:
                     results = results_queue.get()
@@ -280,8 +282,8 @@ def get_binary_file_cursor(conn, start_date_binaries):
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
     query = (
-            "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
-            + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
+        + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
     )
 
     logger.debug(query)
@@ -295,8 +297,12 @@ def execute_script() -> None:
     """
     Execute a external utility script.
     """
-    logger.info("----- Executing utility script ----------------------------------------")
-    prog = subprocess.Popen(globals.g_utility_script, shell=True, universal_newlines=True)
+    logger.info(
+        "----- Executing utility script ----------------------------------------"
+    )
+    prog = subprocess.Popen(
+        globals.g_utility_script, shell=True, universal_newlines=True
+    )
     stdout, stderr = prog.communicate()
     if stdout is not None and len(stdout.strip()) > 0:
         logger.info(stdout)
@@ -304,7 +310,9 @@ def execute_script() -> None:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
-    logger.info("---------------------------------------- Utility script completed -----\n")
+    logger.info(
+        "---------------------------------------- Utility script completed -----\n"
+    )
 
 
 def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
@@ -342,7 +350,11 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
 
     if globals.g_utility_interval > 0:
         seconds_since_start = (datetime.now() - utility_window_start).seconds
-        if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
+        if (
+            seconds_since_start >= globals.g_utility_interval * 60
+            if not globals.g_utility_debug
+            else 1
+        ):
             execute_script()
             utility_window_start = datetime.now()
 
@@ -377,7 +389,7 @@ def save_results_with_logging(analysis_results):
 
 # noinspection PyUnusedFunction
 def save_and_log(
-        analysis_results, start_time, num_binaries_skipped, num_total_binaries
+    analysis_results, start_time, num_binaries_skipped, num_total_binaries
 ):
     logger.debug(analysis_results)
     if analysis_results:
@@ -396,7 +408,7 @@ def save_and_log(
 
 
 def _rule_logging(
-        start_time: float, num_binaries_skipped: int, num_total_binaries: int
+    start_time: float, num_binaries_skipped: int, num_total_binaries: int
 ) -> None:
     """
     Simple method to log yara work.
@@ -503,7 +515,10 @@ def wait_all_worker_exit():
 
 
 def start_workers(
-        exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue
+    exit_event: Event,
+    scanning_promises_queue: Queue,
+    scanning_results_queue: Queue,
+    run_only_once=False,
 ) -> None:
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
@@ -513,7 +528,7 @@ def start_workers(
     """
     logger.debug("Starting perf thread")
     perf_thread = DatabaseScanningThread(
-        globals.g_scanning_interval, scanning_promises_queue, exit_event
+        globals.g_scanning_interval, scanning_promises_queue, exit_event, run_only_once
     )
     perf_thread.start()
 
@@ -540,12 +555,13 @@ class DatabaseScanningThread(Thread):
     """
 
     def __init__(
-            self,
-            interval: int,
-            scanning_promises_queue: Queue,
-            exit_event: Event,
-            *args,
-            **kwargs,
+        self,
+        interval: int,
+        scanning_promises_queue: Queue,
+        exit_event: Event,
+        run_only_once,
+        *args,
+        **kwargs,
     ):
         """
 
@@ -563,7 +579,15 @@ class DatabaseScanningThread(Thread):
         self._conn = get_database_conn()
         self._interval = interval
         self._scanning_promises_queue = scanning_promises_queue
-        self._target = self.scan_until_exit
+        self._run_only_once = run_only_once
+        if not (self._run_only_once):
+            self._target = self.scan_until_exit
+        else:
+            self._target = self.scan_once_and_exit
+
+    def scan_once_and_exit(self):
+        self.do_db_scan()
+        self.exit_event.set()
 
     def scan_until_exit(self):
         # TODO: DRIFT
@@ -650,6 +674,9 @@ def handle_arguments():
         "--lock-file", default="./yaraconnector", help="lock file", required=False
     )
     parser.add_argument(
+        "--run-once", default=False, help="Run as batch mode or no", required=False
+    )
+    parser.add_argument(
         "--validate-yara-rules",
         action="store_true",
         help="Only validate yara rules, then exit",
@@ -702,54 +729,67 @@ def main():
         exit_event = Event()
 
         try:
-            working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
+            if not args.run_once:
+                working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
 
-            lock_file = lockfile.FileLock(args.lock_file)
+                lock_file = lockfile.FileLock(args.lock_file)
 
-            files_preserve = get_log_file_handles(logger)
-            files_preserve.extend([args.lock_file, args.log_file, args.output_file])
+                files_preserve = get_log_file_handles(logger)
+                files_preserve.extend([args.lock_file, args.log_file, args.output_file])
 
-            # defauls to piping to /dev/null
+                # defauls to piping to /dev/null
 
-            deamon_kwargs = {
-                "working_directory": working_dir,
-                "pidfile": lock_file,
-                "files_preserve": files_preserve,
-            }
-            if args.debug:
-                deamon_kwargs.update({"stdout": sys.stdout, "stderr": sys.stderr})
-            context = daemon.DaemonContext(**deamon_kwargs)
+                deamon_kwargs = {
+                    "working_directory": working_dir,
+                    "pidfile": lock_file,
+                    "files_preserve": files_preserve,
+                }
+                if args.debug:
+                    deamon_kwargs.update({"stdout": sys.stdout, "stderr": sys.stderr})
+                context = daemon.DaemonContext(**deamon_kwargs)
 
-            run_as_master = globals.g_mode == "master"
+                run_as_master = globals.g_mode == "master"
 
-            scanning_promise_queue = Queue()
-            scanning_results_queue = Queue()
+                scanning_promise_queue = Queue()
+                scanning_results_queue = Queue()
 
-            sig_handler = partial(handle_sig, exit_event)
+                sig_handler = partial(handle_sig, exit_event)
 
-            context.signal_map = {
-                signal.SIGTERM: sig_handler,
-                signal.SIGQUIT: sig_handler,
-            }
+                context.signal_map = {
+                    signal.SIGTERM: sig_handler,
+                    signal.SIGQUIT: sig_handler,
+                }
 
-            with context:
-                # only connect to cbr if we're the master
-                if run_as_master:
-                    init_local_resources()
-                    start_workers(
-                        exit_event, scanning_promise_queue, scanning_results_queue
-                    )
-                    # start local celery if working mode is local
-                    if not globals.g_remote:
+                with context:
+                    # only connect to cbr if we're the master
+                    if run_as_master:
+                        init_local_resources()
+                        start_workers(
+                            exit_event, scanning_promise_queue, scanning_results_queue
+                        )
+                        # start local celery if working mode is local
+                        if not globals.g_remote:
+                            start_celery_worker_thread(args.config_file)
+                    else:
+                        # otherwise, we must start a worker since we are not the master
                         start_celery_worker_thread(args.config_file)
-                else:
-                    # otherwise, we must start a worker since we are not the master
-                    start_celery_worker_thread(args.config_file)
 
-                # run until the service/daemon gets a quitting sig
+                    # run until the service/daemon gets a quitting sig
+                    run_to_exit_signal(exit_event)
+                    wait_all_worker_exit()
+                    logger.info("Yara connector shutdown OK")
+            else:  # Just do one batch
+                init_local_resources()
+                start_workers(
+                    exit_event,
+                    scanning_promise_queue,
+                    scanning_results_queue,
+                    run_only_once=True,
+                )
+                if not globals.g_remote:
+                    start_celery_worker_thread(args.config_file)
                 run_to_exit_signal(exit_event)
                 wait_all_worker_exit()
-                logger.info("Yara connector shutdown OK")
 
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
