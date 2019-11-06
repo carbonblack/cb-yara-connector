@@ -438,8 +438,6 @@ def main():
         handler = logging.handlers.RotatingFileHandler(use_log_file, maxBytes=10 * 1000000, backupCount=10)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-    else:
-        use_log_file = None
 
     # Verify the configuration file and load up important global variables
     try:
