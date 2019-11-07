@@ -1,3 +1,7 @@
+################################################################################
+## Set of file patterns to prevent being checked into the repo
+################################################################################
+
 *.py[cod]
 
 # C extensions
@@ -41,3 +45,6 @@ config.ini
 
 # created local DB
 binary.db
+
+# incase inadvertantly left by unit testing
+conf-testing.conf

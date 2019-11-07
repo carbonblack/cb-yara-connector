@@ -2,7 +2,6 @@
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import datetime
-import hashlib
 import io
 import logging
 import multiprocessing
@@ -20,30 +19,38 @@ import globals
 from analysis_result import AnalysisResult
 from celery_app import app
 from config_handling import ConfigurationInit
+from rule_handling import generate_yara_rule_map_hash
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+# ----- Lock Object Class ------------------------------------------------------------
+
 class ReadWriteLock:
-    """ A lock object that allows many simultaneous "read locks", but
-    only one "write lock." """
+    """
+    A lock object that allows many simultaneous "read locks", but
+    only one "write lock."
+    """
 
     def __init__(self):
         self._read_ready = multiprocessing.Condition(multiprocessing.Lock())
         self._readers = 0
 
-    def acquire_read(self):
-        """ Acquire a read lock. Blocks only if a thread has
-        acquired the write lock. """
+    def acquire_read(self) -> None:
+        """
+        Acquire a read lock. Blocks only if a thread has acquired the write lock.
+        """
         self._read_ready.acquire()
         try:
             self._readers += 1
         finally:
             self._read_ready.release()
 
-    def release_read(self):
-        """ Release a read lock. """
+    def release_read(self) -> None:
+        """
+        Release a read lock.
+        """
         self._read_ready.acquire()
         try:
             self._readers -= 1
@@ -52,26 +59,33 @@ class ReadWriteLock:
         finally:
             self._read_ready.release()
 
-    def acquire_write(self):
-        """ Acquire a write lock. Blocks until there are no
+    def acquire_write(self) -> None:
+        """
+        Acquire a write lock. Blocks until there are no
         acquired read or write locks. """
         self._read_ready.acquire()
         while self._readers > 0:
             self._read_ready.wait()
 
-    def release_write(self):
-        """ Release a write lock. """
+    def release_write(self) -> None:
+        """
+        Release a write lock.
+        """
         self._read_ready.release()
 
+
+# ----- Actual task functions ------------------------------------------------------------
 
 compiled_yara_rules = None
 compiled_rules_lock = ReadWriteLock()
 
 
-def add_worker_arguments(parser):
-    parser.add_argument(
-        "--config-file", default="yara_worker.conf", help="Yara Worker Config"
-    )
+def add_worker_arguments(parser) -> None:
+    """
+    Add yara worker configuration option.
+    :param parser: option parser
+    """
+    parser.add_argument("--config-file", default="yara_worker.conf", help="Yara Worker Config")
 
 
 app.user_options["worker"].add(add_worker_arguments)
@@ -95,7 +109,7 @@ def generate_rule_map(yara_rule_path: str) -> dict:
     """
     Create a dictionary keyed by filename containing file paths
     :param yara_rule_path: location of yara rules
-    :return:
+    :return: dict of paths keyed by namespace
     """
     rule_map = {}
     for fn in os.listdir(yara_rule_path):
@@ -114,54 +128,27 @@ def generate_rule_map(yara_rule_path: str) -> dict:
     return rule_map
 
 
-# noinspection DuplicatedCode
-def generate_yara_rule_map_hash(yara_rule_path: str) -> List:
-    """
-    Create a list of md5 hashes based on rule file contents.
-
-    :param yara_rule_path: location of the yara rules
-    :return:
-    """
-    temp_list = []
-    for fn in os.listdir(yara_rule_path):
-        if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
-            fullpath = os.path.join(yara_rule_path, fn)
-            if not os.path.isfile(fullpath):
-                continue
-            with open(os.path.join(yara_rule_path, fn), "rb") as fp:
-                data = fp.read()
-                # NOTE: Original logic resulted in a cumulative hash for each file (linking them)
-                md5 = hashlib.md5()
-                md5.update(data)
-                temp_list.append(str(md5.hexdigest()))
-
-    temp_list.sort()
-    return temp_list
-
-
 @app.task
 def update_yara_rules_remote(yara_rules: dict) -> None:
     """
     Update remote yara rules.
     :param yara_rules: dict of rules, keyed by file name
-    :return:
     """
     try:
         for key in yara_rules:
             with open(os.path.join(globals.g_yara_rules_dir, key), "wb") as fp:
                 fp.write(yara_rules[key])
     except Exception as err:
-        logger.error(f"Error writing rule file: {err}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error writing rule file: {err}")
 
 
 def update_yara_rules():
     global compiled_yara_rules
     global compiled_rules_lock
+
     compiled_rules_lock.acquire_read()
     if compiled_yara_rules:
         logger.debug("Reading the Compiled rules")
-        return
     else:
         logger.debug("Updating yara rules in worker(s)")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
@@ -172,13 +159,11 @@ def update_yara_rules():
         logger.debug("Succesfully updated yara rules")
         compiled_rules_lock.release_write()
         compiled_rules_lock.acquire_read()
-        return
 
 
-def get_binary_by_hash(url, hsum, token):
+def get_binary_by_hash(url: str, hsum: str, token: str):
     """
-        do a binary-retrival-by hash (husm) api call against 
-        the configured server-by (url) using (token)
+    Do a binary-retrival-by hash (husm) api call against the configured server-by (url) using (token).
     """
     headers = {"X-Auth-Token": token}
     request_url = f"{url}/api/v1/binary/{hsum}"
@@ -197,7 +182,12 @@ def get_binary_by_hash(url, hsum, token):
 
 # noinspection PyUnusedFunction
 @app.task
-def analyze_bins(hashes):
+def analyze_bins(hashes: List[str]) -> group:
+    """
+    Analize any returned binaries.
+    :param hashes: list of hashes
+    :return: celery group
+    """
     return group(analyze_binary.s(h) for h in hashes).apply_async()
 
 
@@ -217,9 +207,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     try:
         analysis_result.last_scan_date = datetime.datetime.now()
 
-        binary_data = get_binary_by_hash(
-            globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token
-        )
+        binary_data = get_binary_by_hash(globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token)
 
         if not binary_data:
             logger.debug(f"No binary agailable for {md5sum}")
@@ -227,20 +215,19 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             return analysis_result
 
         try:
-            # matches = "debug"
             update_yara_rules()
             matches = compiled_yara_rules.match(data=binary_data.read(), timeout=30)
+
+            # NOTE: Below is for debugging use only
+            # matches = "debug"
+
             if matches:
                 score = get_high_score(matches)
                 analysis_result.score = score
-                analysis_result.short_result = "Matched yara rules: %s" % ", ".join(
-                    [match.rule for match in matches]
-                )
+                analysis_result.short_result = "Matched yara rules: %s" % ", ".join([match.rule for match in matches])
                 # analysis_result.short_result = "Matched yara rules: debug"
                 analysis_result.long_result = analysis_result.long_result
-                analysis_result.misc = generate_yara_rule_map_hash(
-                    globals.g_yara_rules_dir
-                )
+                analysis_result.misc = generate_yara_rule_map_hash(globals.g_yara_rules_dir, return_list=True)
             else:
                 analysis_result.score = 0
                 analysis_result.short_result = "No Matches"
@@ -272,7 +259,7 @@ def get_high_score(matches) -> int:
     Find the higest match score.
 
     :param matches: List of rule matches.
-    :return:
+    :return: highest score
     """
     # NOTE: if str(matches) == "debug", return 100
     if matches == "debug":

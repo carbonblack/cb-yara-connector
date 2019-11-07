@@ -2,7 +2,6 @@
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import argparse
-import hashlib
 import json
 import logging
 import logging.handlers
@@ -16,16 +15,14 @@ from datetime import datetime, timedelta
 from functools import partial
 from queue import Empty, Queue
 from threading import Event, Thread
-from typing import List
+from typing import Iterator, List
 
 import humanfriendly
 import lockfile
 import psycopg2
-
 # noinspection PyPackageRequirements
 import yara
 from celery.bin import worker
-
 # noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
@@ -36,6 +33,7 @@ from binary_database import BinaryDetonationResult, db
 from celery_app import app
 from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
+from rule_handling import generate_yara_rule_map_hash
 from tasks import analyze_binary, generate_rule_map, update_yara_rules_remote
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
@@ -47,14 +45,17 @@ logger.setLevel(logging.INFO)
 celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.ERROR)
 
+# number of promise worker threads to use
+PROMISE_THREADS = 2
 
-def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
+
+def promise_worker(exit_event: Event, scanning_promise_queue: Queue, scanning_results_queue: Queue) -> None:
     """
+    The promise worker scanning function.
 
-    :param exit_event:
-    :param scanning_promise_queue:
-    :param scanning_results_queue:
-    :return:
+    :param exit_event: event signaller
+    :param scanning_promise_queue: the promises queue
+    :param scanning_results_queue: the results queue
     """
     try:
         while not (exit_event.is_set()) or not (scanning_promise_queue.empty()):
@@ -74,13 +75,17 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
     logger.debug("PROMISE WORKING EXITING")
 
 
+# NOTE: function retained for possible future need.
 # noinspection PyUnusedFunction
-def results_worker(exit_event, results_queue):
+def results_worker(exit_event: Event, results_queue: Queue) -> None:
     """
     Sqlite is not meant to be thread-safe.
 
     This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and
-    seen binaries/results from scans
+    seen binaries/results from scans.
+
+    :param exit_event: event signaller
+    :param results_queue: the results queue
     """
     try:
         while not (exit_event.is_set()) or not (results_queue.empty()):
@@ -99,11 +104,12 @@ def results_worker(exit_event, results_queue):
     logger.debug("Results worker thread exiting")
 
 
-def results_worker_chunked(exit_event, results_queue: Queue):
+def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
     """
+    Prossess entries in the results queue in chunks.
 
-    :param exit_event:
-    :param results_queue:
+    :param exit_event: event signaller
+    :param results_queue: the results queue
     :return:
     """
     try:
@@ -125,8 +131,7 @@ def results_worker_chunked(exit_event, results_queue: Queue):
 
 def generate_feed_from_db() -> None:
     """
-    Creates a feed based on specific database information.
-    :return:
+    Creates a feed based on specific database information and save to our output file.
     """
     query = BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0)
 
@@ -160,35 +165,11 @@ def generate_feed_from_db() -> None:
         fp.write(feed.dump())
 
 
-# noinspection DuplicatedCode
-def generate_yara_rule_map_hash(yara_rule_path: str) -> None:
-    """
-    Create a list of hashes for each yara rule.
-
-    :param yara_rule_path: the path to where the yara rules are stored.
-    :return:
-    """
-    temp_list = []
-    for fn in os.listdir(yara_rule_path):
-        if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
-            fullpath = os.path.join(yara_rule_path, fn)
-            if not os.path.isfile(fullpath):
-                continue
-            with open(os.path.join(yara_rule_path, fn), "rb") as fp:
-                data = fp.read()
-                md5 = hashlib.md5()
-                md5.update(data)
-                temp_list.append(str(md5.hexdigest()))
-
-    globals.g_yara_rule_map_hash_list = temp_list
-    globals.g_yara_rule_map_hash_list.sort()
-
-
-def generate_rule_map_remote(yara_rule_path) -> None:
+def generate_rule_map_remote(yara_rule_path: str) -> None:
     """
     Get remote rules and store into an internal map keyed by file name.
-    :param yara_rule_path: path to wheer thr rules are stored
-    :return:
+
+    :param yara_rule_path: path to where the rules are stored
     """
     ret_dict = {}
     for fn in os.listdir(yara_rule_path):
@@ -205,44 +186,56 @@ def generate_rule_map_remote(yara_rule_path) -> None:
         time.sleep(0.1)
 
 
-def analyze_binary_and_queue(scanning_promise_queue, md5sum):
-    """ Analyze Binary And Queue """
+def analyze_binary_and_queue(scanning_promise_queue: Queue, md5sum: str) -> None:
+    """
+    Analyze Binary for a given md5 and save any promises.
+    :param scanning_promise_queue: the promises queue
+    :param md5sum: md5 hash to look for
+    """
     promise = analyze_binary.delay(md5sum)
     scanning_promise_queue.put(promise)
 
 
+# NOTE: function retained for possible future need.
 # noinspection PyUnusedFunction
-def analyze_binaries_and_queue(scanning_promise_queue, md5_hashes):
-    """ Analyze each binary and enqueue """
-    for h in md5_hashes:
-        analyze_binary_and_queue(scanning_promise_queue, h)
+def analyze_binaries_and_queue(scanning_promise_queue: Queue, md5_hashes: List[str]) -> None:
+    """
+    Analyze each binary and enqueue.
+    :param scanning_promise_queue: the promise queue
+    :param md5_hashes: list of md5 hashes to scan
+    """
+    for md5 in md5_hashes:
+        analyze_binary_and_queue(scanning_promise_queue, md5)
 
 
-def analyze_binaries_and_queue_chunked(scanning_promise_queue, md5_hashes):
+def analyze_binaries_and_queue_chunked(scanning_promise_queue: Queue, md5_hashes: Iterator) -> None:
     """
-        Attempts to do work in parrallelized chunks of MAX_HASHES grouped
+    Attempts to do work in parrallelized chunks of MAX_HASHES grouped.
+
+    :param scanning_promise_queue: the promise queue
+    :param md5_hashes: list of md5 hases
     """
-    promise = analyze_binary.chunks(
-        [(mh,) for mh in md5_hashes], globals.g_max_hashes
-    ).apply_async()
+    promise = analyze_binary.chunks([(mh,) for mh in md5_hashes], globals.g_max_hashes).apply_async()
     for prom in promise.children:
         scanning_promise_queue.put(prom)
 
 
 def save_results(analysis_results: List[AnalysisResult]) -> None:
     """
-    Save the current analysis results.
+    Save the current set of analysis results.
 
-    TODO: figure out typing!
-
-    :param analysis_results:
-    :return:
+    :param analysis_results: list of current analysis results
     """
     for analysis_result in analysis_results:
         save_result(analysis_result)
 
 
-def save_result(analysis_result):
+def save_result(analysis_result: AnalysisResult) -> None:
+    """
+    Save an individual analysis result.
+
+    :param analysis_result: result to be saved
+    """
     if analysis_result.binary_not_available:
         globals.g_num_binaries_not_available += 1
         return
@@ -266,6 +259,11 @@ def save_result(analysis_result):
 
 
 def get_database_conn():
+    """
+    Get a postgres database connection.
+
+    :return: the connection
+    """
     logger.info("Connecting to Postgres database...")
     conn = psycopg2.connect(
         host=globals.g_postgres_host,
@@ -274,23 +272,28 @@ def get_database_conn():
         password=globals.g_postgres_password,
         port=globals.g_postgres_port,
     )
-
     return conn
 
 
-def get_binary_file_cursor(conn, start_date_binaries):
+def get_binary_file_cursor(conn, start_date_binaries: datetime):
+    """
+    Get the cursor index to the binaries.
+
+    :param conn: the postgres connection
+    :param start_date_binaries: earliest start time for the search window (up to now)
+    :return: the results cursor
+    """
     logger.debug("Getting database cursor...")
 
     cur = conn.cursor(name="yara_agent")
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
     query = (
-        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
-        + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+            "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
+            + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
     )
 
     logger.debug(query)
-
     cur.execute(query)
 
     return cur
@@ -298,11 +301,9 @@ def get_binary_file_cursor(conn, start_date_binaries):
 
 def execute_script() -> None:
     """
-    Execute a external utility script.
+    Execute an external utility script.
     """
-    logger.info(
-        "----- Executing utility script ----------------------------------------"
-    )
+    logger.info("----- Executing utility script ----------------------------------------")
     prog = subprocess.Popen(
         globals.g_utility_script, shell=True, universal_newlines=True
     )
@@ -313,19 +314,17 @@ def execute_script() -> None:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
-    logger.info(
-        "---------------------------------------- Utility script completed -----\n"
-    )
+    logger.info("---------------------------------------- Utility script completed -----\n")
 
 
-def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
+def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue) -> None:
     """
     Main routine - checks the cbr modulestore/storfiles table for new hashes by comparing the sliding-window
     with the contents of the feed database on disk.
 
     :param yara_rule_dir: location of the rules directory
-    :param conn: The connection (TODO: type)
-    :param scanning_promises_queue:
+    :param conn: The postgres connection
+    :param scanning_promises_queue: the promises queue
     """
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
@@ -346,63 +345,63 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue):
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
     md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
-
-    # logger.debug(f"After filtering...found new {len(md5_hashes)} hashes to scan")
-
     analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
+    # if gathering and analysis took longer than out utility script interval windo, kick it off
     if globals.g_utility_interval > 0:
         seconds_since_start = (datetime.now() - utility_window_start).seconds
-        if (
-            seconds_since_start >= globals.g_utility_interval * 60
-            if not globals.g_utility_debug
-            else 1
-        ):
+        if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
             execute_script()
-            utility_window_start = datetime.now()
 
     logger.debug("Exiting database sweep routine")
 
 
-def _check_hash_against_feed(md5_hash):
-    query = BinaryDetonationResult.select().where(
-        BinaryDetonationResult.md5 == md5_hash
-    )
+def _check_hash_against_feed(md5_hash: str) -> bool:
+    """
+    Check discovered hash against the current feed.
+    :param md5_hash: md5 hash
+    :return: True if the hash needs to be added
+    """
+    query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
 
-    if query.exists():
-        return False
-
-    return True
+    return not query.exists()
 
 
-def save_results_with_logging(analysis_results):
+def save_results_with_logging(analysis_results: List[AnalysisResult]) -> None:
+    """
+    Save all analysis results, with extended logging.
+
+    :param analysis_results: list of analysis results
+    """
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
-            logger.debug(
-                (
-                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
-                )
-            )
+            logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                          f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
 
 
+# NOTE: function retained for possible future need.
 # noinspection PyUnusedFunction
-def save_and_log(
-    analysis_results, start_time, num_binaries_skipped, num_total_binaries
-):
+def save_and_log(analysis_results: List[AnalysisResult], start_time: float, num_binaries_skipped: int,
+                 num_total_binaries: int) -> None:
+    """
+    Save and log analysis results.
+
+    :param analysis_results: list of analysis results
+    :param start_time: starting time (seconds)
+    :param num_binaries_skipped: number of skipped binaries
+    :param num_total_binaries: total binary count
+    """
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
-            logger.debug(
-                (
-                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
-                )
-            )
+            logger.debug((
+                f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
+
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
@@ -410,44 +409,31 @@ def save_and_log(
     _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
 
 
-def _rule_logging(
-    start_time: float, num_binaries_skipped: int, num_total_binaries: int
-) -> None:
+def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
     """
     Simple method to log yara work.
-    :param start_time: start time for the work
-    :param num_binaries_skipped:
-    :param num_total_binaries:
-    :return:
+
+    :param start_time: starting time (seconds)
+    :param num_binaries_skipped: number of skipped binaries
+    :param num_total_binaries: total binary count
     """
     elapsed_time = time.time() - start_time
     logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
-    logger.debug(
-        "   number binaries scanned: {0}".format(globals.g_num_binaries_analyzed)
-    )
+    logger.debug("   number binaries scanned: {0}".format(globals.g_num_binaries_analyzed))
     logger.debug("   number binaries already scanned: {0}".format(num_binaries_skipped))
-    logger.debug(
-        "   number binaries unavailable: {0}".format(
-            globals.g_num_binaries_not_available
-        )
-    )
+    logger.debug("   number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
     logger.info("total binaries from db: {0}".format(num_total_binaries))
-    logger.debug(
-        "   binaries per second: {0}:".format(
-            round(num_total_binaries / elapsed_time, 2)
-        )
-    )
-    logger.info(
-        "num binaries score greater than zero: {0}".format(
-            len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))
-        )
-    )
-    logger.info("")
+    logger.debug("   binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
+    logger.info("num binaries score greater than zero: {0}\n".format(
+        len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))))
 
 
-def get_log_file_handles(use_logger):
-    """ Get a list of filehandle numbers from logger
-        to be handed to DaemonContext.files_preserve
+def get_log_file_handles(use_logger) -> List:
+    """
+    Get a list of filehandle numbers from logger to be handed to DaemonContext.files_preserve.
+
+    :param use_logger: logger to check
+    :return: List of file handlers
     """
     handles = []
     for handler in use_logger.handlers:
@@ -457,10 +443,12 @@ def get_log_file_handles(use_logger):
     return handles
 
 
-# noinspection PyUnusedLocal
-def handle_sig(exit_event, sig, frame):
+def handle_sig(exit_event: Event, sig: int) -> None:
     """
-      Signal handler - handle the signal and mark exit if its an exiting signal
+    Signal handler - handle the signal and mark exit if its an exiting signal type.
+
+    :param exit_event: the event handler
+    :param sig: the signal seen
     """
     exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL)
     if sig in exit_sigs:
@@ -471,22 +459,27 @@ def handle_sig(exit_event, sig, frame):
 #
 # wait until the exit_event has been set by the signal handler
 #
-def run_to_exit_signal(exit_event):
+def run_to_exit_signal(exit_event: Event) -> None:
+    """
+    Wait-until-exit polling loop function.
+    :param exit_event: the event handler
+    """
     exit_event.wait()
     logger.debug("Begin graceful shutdown...")
 
 
-def init_local_resources():
+def init_local_resources() -> None:
     """
-        Initialize the local resources required to get module information
-        from cbr module store as well as local storage of module and scanning
-        metadata in sqlite 'binary.db' - generate an initial fead from the 
-        database
+    Initialize the local resources required to get module information
+    from cbr module store as well as local storage of module and scanning
+    metadata in sqlite 'binary.db' - generate an initial fead from the
+    database.
 
-        generate yara_rule_set metadata
+    generate yara_rule_set metadata
     """
     globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-    generate_yara_rule_map_hash(globals.g_yara_rules_dir)
+    generate_yara_rule_map_hash(globals.g_yara_rules_dir, return_list=False)  # save to globals
+
     database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
     db.initialize(database)
     db.connect()
@@ -494,9 +487,11 @@ def init_local_resources():
     generate_feed_from_db()
 
 
-def wait_all_worker_exit():
-    """ Await the exit of our worker threads """
-    threadcount = 2
+def wait_all_worker_exit() -> None:
+    """
+    Await the exit of our worker threads.
+    """
+    threadcount = PROMISE_THREADS
     while threadcount > 1:
         threads = list(
             filter(
@@ -507,46 +502,35 @@ def wait_all_worker_exit():
             )
         )
         threadcount = len(threads)
-        logger.debug(
-            f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)..."
-        )
+        logger.debug(f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)...")
         logger.debug(f"Live threads (excluding daemons): {threads}")
         time.sleep(0.1)
-        pass
 
     logger.debug("Main thread going to exit...")
 
 
-def start_workers(
-    exit_event: Event,
-    scanning_promises_queue: Queue,
-    scanning_results_queue: Queue,
-    run_only_once=False,
-) -> None:
+def start_workers(exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue,
+                  run_only_once=False) -> None:
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
     :param exit_event: event signaller
     :param scanning_promises_queue: promises queue
     :param scanning_results_queue: results queue
+    :param run_only_once: if True, run once an exit (default False)
     """
     logger.debug("Starting perf thread")
-    perf_thread = DatabaseScanningThread(
-        globals.g_scanning_interval, scanning_promises_queue, scanning_results_queue, exit_event, run_only_once
-    )
+    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, scanning_promises_queue, scanning_results_queue,
+                                         exit_event, run_only_once)
     perf_thread.start()
 
     logger.debug("Starting promise thread(s)")
-    for _ in range(2):
-        promise_worker_thread = Thread(
-            target=promise_worker,
-            args=(exit_event, scanning_promises_queue, scanning_results_queue),
-        )
+    for _ in range(PROMISE_THREADS):
+        promise_worker_thread = Thread(target=promise_worker,
+                                       args=(exit_event, scanning_promises_queue, scanning_results_queue))
         promise_worker_thread.start()
 
     logger.debug("Starting results saver thread")
-    results_worker_thread = Thread(
-        target=results_worker_chunked, args=(exit_event, scanning_results_queue)
-    )
+    results_worker_thread = Thread(target=results_worker_chunked, args=(exit_event, scanning_results_queue))
     results_worker_thread.start()
 
 
@@ -557,21 +541,16 @@ class DatabaseScanningThread(Thread):
     by the signal handler
     """
 
-    def __init__(
-        self,
-        interval: int,
-        scanning_promises_queue: Queue,
-        scanning_results_queue: Queue,
-        exit_event: Event,
-        run_only_once : bool,
-        *args,
-        **kwargs,
-    ):
+    def __init__(self, interval: int, scanning_promises_queue: Queue, scanning_results_queue: Queue, exit_event: Event,
+                 run_only_once: bool, *args, **kwargs):
         """
+        Create a new database scanning object.
 
-        :param interval:
+        :param interval: interval in seconds between scans
         :param scanning_promises_queue: promises queue
+        :param scanning_results_queue: results queue
         :param exit_event: event signaller
+        :param run_only_once: if True, run once and then exit
         :param args: optional arguments
         :param kwargs: optional keyword arguments
         """
@@ -585,18 +564,24 @@ class DatabaseScanningThread(Thread):
         self._scanning_promises_queue = scanning_promises_queue
         self._scanning_results_queue = scanning_results_queue
         self._run_only_once = run_only_once
-        if not (self._run_only_once):
+        if not self._run_only_once:
             self._target = self.scan_until_exit
         else:
             self._target = self.scan_once_and_exit
 
-    def scan_once_and_exit(self):
+    def scan_once_and_exit(self) -> None:
+        """
+        Perform a database scan one, then exit.
+        """
         self.do_db_scan()
         self._scanning_promises_queue.join()
         self._scanning_results_queue.join()
         self.exit_event.set()
 
-    def scan_until_exit(self):
+    def scan_until_exit(self) -> None:
+        """
+        Continually scan the database until instructed to quit.
+        """
         # TODO: DRIFT
         self.do_db_scan()
         while not self.exit_event.is_set():
@@ -609,23 +594,26 @@ class DatabaseScanningThread(Thread):
         return
 
     def do_db_scan(self):
+        """
+        Do the actual database scan, trappig ang problems.
+        """
         logger.debug("START database sweep")
         try:
             perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
-        except Exception as e:
-            logger.exception(
-                f"Something went wrong sweeping the CbR module store...{str(e)} "
-            )
+        except Exception as err:
+            logger.exception(f"Something went wrong sweeping the CbR module store: {err} ")
 
     def run(self):
-        """ Represents the lifetime of the thread  """
+        """
+        Represents the lifetime of the thread.
+        """
 
         try:
             if self._target:
                 # noinspection PyArgumentList
                 self._target(*self._args, **self._kwargs)
         finally:
-            # Avoid a refcycle if the thread is running a function with
+            # Avoid a recycle if the thread is running a function with
             # an argument that has a member that points to the thread.
             # shutdown database connection
             self._conn.close()
@@ -634,16 +622,25 @@ class DatabaseScanningThread(Thread):
             self.exit_event.set()
 
 
-# Start celery worker in a daemon-thread
-# TODO - Aggresive autoscaling config options
-def start_celery_worker_thread(config_file):
+#
+def start_celery_worker_thread(config_file: str) -> None:
+    """
+    Start celery worker in a daemon-thread.
+
+    TODO: - Aggresive autoscaling config options
+    :param config_file: path to the yara configuration file
+    :return:
+    """
     t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
     t.daemon = True
     t.start()
 
 
-# launch a celery worker using the imported app context
-def launch_celery_worker(config_file=None):
+def launch_celery_worker(config_file: str = None) -> None:
+    """
+    Launch a celery worker using the imported app context
+    :param config_file: optional path to a configuration file
+    """
     localworker = worker.worker(app=app)
     localworker.run(config_file=config_file)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
@@ -662,36 +659,35 @@ def handle_arguments():
     """
     parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
 
-
-    #Controls config file  (ini)
+    # Controls config file  (ini)
     parser.add_argument(
         "--config-file",
         required=True,
         default="yaraconnector.conf",
         help="Location of the config file",
     )
-
-    #Controls log file location+name
+    # Controls log file location+name
     parser.add_argument(
         "--log-file", default="yaraconnector.log", help="Log file output"
     )
-    #Controls the output feed location+name
+    # Controls the output feed location+name
     parser.add_argument(
         "--output-file", default="yara_feed.json", help="output feed file"
     )
-    #Controls the working directory
+    # Controls the working directory
     parser.add_argument(
         "--working-dir", default=".", help="working directory", required=False
     )
-    #Controls the lock File
+    # Controls the lock File
     parser.add_argument(
         "--lock-file", default="./yaraconnector", help="lock file", required=False
     )
-    #Controls batch vs continous mode , defaults to batch processing
+    # Controls batch vs continous mode , defaults to batch processing
     parser.add_argument(
         "--run-once", default=True, help="Run as batch mode or no", required=False
     )
-    #Validates the rules 
+
+    # Validates the rules
     parser.add_argument(
         "--validate-yara-rules",
         action="store_true",
@@ -705,23 +701,22 @@ def handle_arguments():
 def main():
     """
     Main execution function.  Script will exit with a non-zero value based on the following:
-        1: Not the only instance running
-        2: Configuration problem
+        1: Configuration problem
+        2: Yara rule validation problem
         3: User interrupt
         4: Unexpected Yara scan exception
-        5: Yara rule validation problem
     """
     args = handle_arguments()
 
+    # check for extended logging
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
+    # check for additional log file
     if args.log_file:
         use_log_file = os.path.abspath(os.path.expanduser(args.log_file))
         formatter = logging.Formatter(logging_format)
-        handler = logging.handlers.RotatingFileHandler(
-            use_log_file, maxBytes=10 * 1000000, backupCount=10
-        )
+        handler = logging.handlers.RotatingFileHandler(use_log_file, maxBytes=10 * 1000000, backupCount=10)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
@@ -730,7 +725,7 @@ def main():
         ConfigurationInit(args.config_file, args.output_file)
     except Exception as err:
         logger.error(f"Unable to continue due to a configuration problem: {err}")
-        sys.exit(2)
+        sys.exit(1)
 
     if args.validate_yara_rules:
         logger.info(f"Validating yara rules in directory: {globals.g_yara_rules_dir}")
@@ -740,65 +735,50 @@ def main():
             logger.info("All yara rules compiled successfully")
         except Exception as err:
             logger.error(f"There were errors compiling yara rules: {err}")
-            sys.exit(5)
-    else: #Doing a real run
-
-        #Exit condition and queues for doing work
+            sys.exit(2)
+    else:  # Doing a real run
+        # Exit condition and queues for doing work
         exit_event = Event()
         scanning_promise_queue = Queue()
         scanning_results_queue = Queue()
-        #Lock file so this process is a singleton
+        # Lock file so this process is a singleton
         lock_file = lockfile.FileLock(args.lock_file)
 
         try:
-            if not args.run_once:
-
-                #Running as a deamon 
-
-                #Get working dir setting
+            if not args.run_once:  # Running as a deamon
+                # Get working dir setting
                 working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
 
-
-                #Mark files to be preserved
+                # Mark files to be preserved
                 files_preserve = get_log_file_handles(logger)
                 files_preserve.extend([args.lock_file, args.log_file, args.output_file])
 
-                # defauls to piping to /dev/null
+                # defaults to piping to /dev/null
+                deamon_kwargs = {"working_directory": working_dir, "pidfile": lock_file,
+                                 "files_preserve": files_preserve}
 
-                deamon_kwargs = {
-                    "working_directory": working_dir,
-                    "pidfile": lock_file,
-                    "files_preserve": files_preserve,
-                }
-                #If in debug mode, make sure stdout and stderr don't got to /dev/null
+                # If in debug mode, make sure stdout and stderr don't go to /dev/null
                 if args.debug:
                     deamon_kwargs.update({"stdout": sys.stdout, "stderr": sys.stderr})
-
-
                 context = daemon.DaemonContext(**deamon_kwargs)
 
-
-                #Operating mode - are we the master a worker?
+                # Operating mode - are we the master a worker?
                 run_as_master = globals.g_mode == "master"
 
-
-                #Signal handler partial function
+                # Signal handler partial function
                 sig_handler = partial(handle_sig, exit_event)
-                context.signal_map = {
-                    signal.SIGTERM: sig_handler,
-                    signal.SIGQUIT: sig_handler,
-                }
+                context.signal_map = {signal.SIGTERM: sig_handler, signal.SIGQUIT: sig_handler}
 
-                #Make sure we close the deamon context at the end
+                # Make sure we close the deamon context at the end
                 with context:
                     # only connect to cbr if we're the master
                     if run_as_master:
-                        #initialize local resources
+                        # initialize local resources
                         init_local_resources()
-                        #start working threads 
-                        start_workers(
-                            exit_event, scanning_promise_queue, scanning_results_queue
-                        )
+
+                        # start working threads
+                        start_workers(exit_event, scanning_promise_queue, scanning_results_queue)
+
                         # start local celeryD worker if working mode is local
                         if not globals.g_remote:
                             start_celery_worker_thread(args.config_file)
@@ -811,21 +791,17 @@ def main():
                     wait_all_worker_exit()
                     logger.info("Yara connector shutdown OK")
             else:  # Just do one batch
-                #init local resources
+                # init local resources
                 init_local_resources()
-                #start necessary worker threads
-                start_workers(
-                    exit_event,
-                    scanning_promise_queue,
-                    scanning_results_queue,
-                    run_only_once=True,
-                )
-                #Start a celery worker if we need one
+
+                # start necessary worker threads
+                start_workers(exit_event, scanning_promise_queue, scanning_results_queue, run_only_once=True)
+
+                # Start a celery worker if we need one
                 if not globals.g_remote:
                     start_celery_worker_thread(args.config_file)
                 run_to_exit_signal(exit_event)
                 wait_all_worker_exit()
-
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
             exit_event.set()
