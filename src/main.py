@@ -62,6 +62,7 @@ def promise_worker(exit_event, scanning_promise_queue, scanning_results_queue):
                 try:
                     promise = scanning_promise_queue.get(timeout=1.0)
                     result = promise.get(disable_sync_subtasks=False)
+                    scanning_promise_queue.task_done()
                     scanning_results_queue.put(result)
                 except Empty:
                     exit_event.wait(1)
@@ -87,6 +88,7 @@ def results_worker(exit_event, results_queue):
                 try:
                     result = results_queue.get()
                     save_results_with_logging(result)
+                    results_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
             else:
@@ -110,6 +112,7 @@ def results_worker_chunked(exit_event, results_queue: Queue):
                 try:
                     results = results_queue.get()
                     save_results(results)
+                    results_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
             else:
@@ -528,7 +531,7 @@ def start_workers(
     """
     logger.debug("Starting perf thread")
     perf_thread = DatabaseScanningThread(
-        globals.g_scanning_interval, scanning_promises_queue, exit_event, run_only_once
+        globals.g_scanning_interval, scanning_promises_queue, scanning_results_queue, exit_event, run_only_once
     )
     perf_thread.start()
 
@@ -558,8 +561,9 @@ class DatabaseScanningThread(Thread):
         self,
         interval: int,
         scanning_promises_queue: Queue,
+        scanning_results_queue: Queue,
         exit_event: Event,
-        run_only_once,
+        run_only_once : bool,
         *args,
         **kwargs,
     ):
@@ -579,6 +583,7 @@ class DatabaseScanningThread(Thread):
         self._conn = get_database_conn()
         self._interval = interval
         self._scanning_promises_queue = scanning_promises_queue
+        self._scanning_results_queue = scanning_results_queue
         self._run_only_once = run_only_once
         if not (self._run_only_once):
             self._target = self.scan_until_exit
@@ -587,6 +592,8 @@ class DatabaseScanningThread(Thread):
 
     def scan_once_and_exit(self):
         self.do_db_scan()
+        self._scanning_promises_queue.join()
+        self._scanning_results_queue.join()
         self.exit_event.set()
 
     def scan_until_exit(self):
@@ -655,27 +662,36 @@ def handle_arguments():
     """
     parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
 
+
+    #Controls config file  (ini)
     parser.add_argument(
         "--config-file",
         required=True,
         default="yaraconnector.conf",
         help="Location of the config file",
     )
+
+    #Controls log file location+name
     parser.add_argument(
         "--log-file", default="yaraconnector.log", help="Log file output"
     )
+    #Controls the output feed location+name
     parser.add_argument(
         "--output-file", default="yara_feed.json", help="output feed file"
     )
+    #Controls the working directory
     parser.add_argument(
         "--working-dir", default=".", help="working directory", required=False
     )
+    #Controls the lock File
     parser.add_argument(
         "--lock-file", default="./yaraconnector", help="lock file", required=False
     )
+    #Controls batch vs continous mode , defaults to batch processing
     parser.add_argument(
-        "--run-once", default=False, help="Run as batch mode or no", required=False
+        "--run-once", default=True, help="Run as batch mode or no", required=False
     )
+    #Validates the rules 
     parser.add_argument(
         "--validate-yara-rules",
         action="store_true",
@@ -725,17 +741,25 @@ def main():
         except Exception as err:
             logger.error(f"There were errors compiling yara rules: {err}")
             sys.exit(5)
-    else:
+    else: #Doing a real run
+
+        #Exit condition and queues for doing work
         exit_event = Event()
         scanning_promise_queue = Queue()
         scanning_results_queue = Queue()
+        #Lock file so this process is a singleton
+        lock_file = lockfile.FileLock(args.lock_file)
 
         try:
             if not args.run_once:
+
+                #Running as a deamon 
+
+                #Get working dir setting
                 working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
 
-                lock_file = lockfile.FileLock(args.lock_file)
 
+                #Mark files to be preserved
                 files_preserve = get_log_file_handles(logger)
                 files_preserve.extend([args.lock_file, args.log_file, args.output_file])
 
@@ -746,33 +770,40 @@ def main():
                     "pidfile": lock_file,
                     "files_preserve": files_preserve,
                 }
+                #If in debug mode, make sure stdout and stderr don't got to /dev/null
                 if args.debug:
                     deamon_kwargs.update({"stdout": sys.stdout, "stderr": sys.stderr})
+
+
                 context = daemon.DaemonContext(**deamon_kwargs)
 
+
+                #Operating mode - are we the master a worker?
                 run_as_master = globals.g_mode == "master"
 
-                
 
+                #Signal handler partial function
                 sig_handler = partial(handle_sig, exit_event)
-
                 context.signal_map = {
                     signal.SIGTERM: sig_handler,
                     signal.SIGQUIT: sig_handler,
                 }
 
+                #Make sure we close the deamon context at the end
                 with context:
                     # only connect to cbr if we're the master
                     if run_as_master:
+                        #initialize local resources
                         init_local_resources()
+                        #start working threads 
                         start_workers(
                             exit_event, scanning_promise_queue, scanning_results_queue
                         )
-                        # start local celery if working mode is local
+                        # start local celeryD worker if working mode is local
                         if not globals.g_remote:
                             start_celery_worker_thread(args.config_file)
                     else:
-                        # otherwise, we must start a worker since we are not the master
+                        # otherwise, we must start a celeryD worker since we are not the master
                         start_celery_worker_thread(args.config_file)
 
                     # run until the service/daemon gets a quitting sig
@@ -780,13 +811,16 @@ def main():
                     wait_all_worker_exit()
                     logger.info("Yara connector shutdown OK")
             else:  # Just do one batch
+                #init local resources
                 init_local_resources()
+                #start necessary worker threads
                 start_workers(
                     exit_event,
                     scanning_promise_queue,
                     scanning_results_queue,
                     run_only_once=True,
                 )
+                #Start a celery worker if we need one
                 if not globals.g_remote:
                     start_celery_worker_thread(args.config_file)
                 run_to_exit_signal(exit_event)
