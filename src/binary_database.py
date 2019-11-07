@@ -5,8 +5,8 @@ import logging
 
 from peewee import *
 
+# noinspection PyUnusedName
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 #
 # autostart must be False if we intend to dynamically create the database.
