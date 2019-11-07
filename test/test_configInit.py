@@ -770,16 +770,7 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_23_config_unexpected_parameter(self):
-        """
-        Ensure that config with unexpected parameter (typo?) is flagged
-        """
-        self.mangle(add=["cb_server=https://localhost"])  # should be "cb_server_url"
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF, "sample.json")
-        assert "has unknown parameters: ['cb_server']" in "{0}".format(err.exception.args[0])
-
-    def test_24a_utility_debug_missing(self):
+    def test_23a_utility_debug_missing(self):
         """
         Ensure that config with missing utility_debug is always false.
         """
@@ -787,7 +778,7 @@ class TestConfigurationInit(TestCase):
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertFalse(globals.g_utility_debug)
 
-    def test_24b_utility_debug_empty(self):
+    def test_23b_utility_debug_empty(self):
         """
         Ensure that config with empty utility_debug is always false.
         """
@@ -795,7 +786,7 @@ class TestConfigurationInit(TestCase):
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertFalse(globals.g_utility_debug)
 
-    def test_24c_utility_debug_bogus(self):
+    def test_23c_utility_debug_bogus(self):
         """
         Ensure that config with bogus (non-bool) utility_debug is detected.
         """
@@ -804,7 +795,7 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(TESTCONF, "sample.json")
         assert "is not a valid boolean value" in "{0}".format(err.exception.args[0])
 
-    def test_24d_utility_debug_empty_global_changed(self):
+    def test_23d_utility_debug_empty_global_changed(self):
         """
         Ensure that config with empty utility_debug is always false, even if the globals are altered!
         """
@@ -814,7 +805,7 @@ class TestConfigurationInit(TestCase):
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertFalse(globals.g_utility_debug)
 
-    def test_25a_database_scanning_interval_missing(self):
+    def test_24a_database_scanning_interval_missing(self):
         """
         Ensure that config with missing database_scanning_interval reverts to default
         """
@@ -824,7 +815,7 @@ class TestConfigurationInit(TestCase):
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_scanning_interval)
 
-    def test_25b_database_scanning_interval_empty(self):
+    def test_24b_database_scanning_interval_empty(self):
         """
         Ensure that config with empty database_scanning_interval reverts to default
         """
@@ -834,7 +825,7 @@ class TestConfigurationInit(TestCase):
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(check, globals.g_scanning_interval)
 
-    def test_25c_database_scanning_interval_bogus(self):
+    def test_24c_database_scanning_interval_bogus(self):
         """
         Ensure that config with bogus (non-int) database_scanning_interval is detected.
         """
@@ -843,7 +834,7 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
 
-    def test_25d_database_scanning_interval_below_minimum(self):
+    def test_24d_database_scanning_interval_below_minimum(self):
         """
         Ensure that config with missing database_scanning_interval reverts to default
         """
@@ -851,6 +842,17 @@ class TestConfigurationInit(TestCase):
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF, "sample.json")
         assert "'database_scanning_interval' must be greater or equal to 360" in "{0}".format(err.exception.args[0])
+
+    # ----- Unknown configuration (typo detection)
+
+    def test_80_unexpected_parameter(self):
+        """
+        Ensure that config with unexpected parameter (typo?) is flagged
+        """
+        self.mangle(add=["cb_server=https://localhost"])  # should be "cb_server_url"
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "has unknown parameters: ['cb_server']" in "{0}".format(err.exception.args[0])
 
     # ----- Minimal validation (worker)
 
