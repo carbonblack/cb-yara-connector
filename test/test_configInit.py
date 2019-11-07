@@ -847,8 +847,6 @@ class TestConfigurationInit(TestCase):
         """
         Ensure that config with missing database_scanning_interval reverts to default
         """
-        check = globals.g_scanning_interval
-
         self.mangle(change={"database_scanning_interval": "18"})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF, "sample.json")
