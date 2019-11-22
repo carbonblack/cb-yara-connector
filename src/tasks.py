@@ -11,10 +11,12 @@ import zipfile
 from typing import List
 
 import requests
+import json
 # noinspection PyPackageRequirements
 import yara
 from celery import bootsteps, group
 
+from io import StringIO
 import globals
 from analysis_result import AnalysisResult
 from celery_app import app
@@ -77,6 +79,7 @@ class ReadWriteLock:
 # ----- Actual task functions ------------------------------------------------------------
 
 compiled_yara_rules = None
+compiled_rules_hash = None
 compiled_rules_lock = ReadWriteLock()
 
 
@@ -141,9 +144,16 @@ def update_yara_rules_remote(yara_rules: dict) -> None:
     except Exception as err:
         logger.exception(f"Error writing rule file: {err}")
 
-
+# Caller is obliged to compiled_rules_lock.release_read()
 def update_yara_rules():
+    """
+        gets a read-acess on the in-memory set of yara rules , which are locked with multiple possible readers
+        if there is no current in memory reference to the current yara rules
+        this function attemps to read the yara-rules directory on the worker, and a produce a new set of compiled rules
+        the rules are written to disk so that other workers can load them from disk rather than re-compiling them
+    """
     global compiled_yara_rules
+    global compiled_rules_hash
     global compiled_rules_lock
 
     compiled_rules_lock.acquire_read()
@@ -152,18 +162,36 @@ def update_yara_rules():
     else:
         logger.debug("Updating yara rules in worker(s)")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-        new_rules_object = yara.compile(filepaths=yara_rule_map)
-        compiled_rules_lock.release_read()
-        compiled_rules_lock.acquire_write()
-        compiled_yara_rules = new_rules_object
-        logger.debug("Succesfully updated yara rules")
-        compiled_rules_lock.release_write()
+        rules_hash = generate_yara_rule_map_hash(
+                    globals.g_yara_rules_dir
+                )
+        compiled_rules_filepath = os.path.join(globals.g_yara_rules_dir, ".YARA_RULES_{0}".format(rules_hash))
+        if not (os.path.exists(compiled_rules_filepath)):
+            new_rules_object = yara.compile(filepaths=yara_rule_map)
+            new_rules_object.save()
+            compiled_rules_lock.release_read()
+            compiled_rules_lock.acquire_write()
+            compiled_yara_rules = new_rules_object
+            compiled_rules_hash = rules_hash
+            logger.debug("Succesfully updated yara rules")
+            compiled_rules_lock.release_write()
+        else: # Another worker has already written the rules to a file for this rule-hash
+            new_rules_object = yara.load(compiled_rules_filepath)
+            new_rules_object.save()
+            compiled_rules_lock.release_read()
+            compiled_rules_lock.acquire_write()
+            compiled_yara_rules = new_rules_object
+            compiled_rules_hash = rules_hash
+            logger.debug("Succesfully updated yara rules")
+            compiled_rules_lock.release_write()
         compiled_rules_lock.acquire_read()
 
 
 def get_binary_by_hash(url: str, hsum: str, token: str):
     """
-    Do a binary-retrival-by hash (husm) api call against the configured server-by (url) using (token).
+
+        do a binary-retrival-by hash (husm) api call 
+        the configured server-by (url) using (token)
     """
     headers = {"X-Auth-Token": token}
     request_url = f"{url}/api/v1/binary/{hsum}"
@@ -199,6 +227,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     :return: AnalysisResult instance
     """
     global compiled_yara_rules
+    global compiled_rules_hash
     global compiled_rules_lock
 
     logger.debug(f"{md5sum}: in analyze_binary")
@@ -227,7 +256,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 analysis_result.short_result = "Matched yara rules: %s" % ", ".join([match.rule for match in matches])
                 # analysis_result.short_result = "Matched yara rules: debug"
                 analysis_result.long_result = analysis_result.long_result
-                analysis_result.misc = generate_yara_rule_map_hash(globals.g_yara_rules_dir, return_list=True)
+                analysis_result.misc = compiled_rules_hash
             else:
                 analysis_result.score = 0
                 analysis_result.short_result = "No Matches"
