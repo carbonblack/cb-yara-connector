@@ -9,7 +9,7 @@ Requires: redis
 Carbon Black Yara Agent - Scans binaries with configured yara rules
 
 %build
-pyinstaller %{_sourcedir}/cb-yara-connector.spec
+cd {%_sourcedir} ; pyinstaller cb-yara-connector.spec
 
 %install
 mkdir -p ${RPM_BUILD_ROOT}/var/log/cb/integrations/cb-yara-connector
