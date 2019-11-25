@@ -8,6 +8,7 @@ import multiprocessing
 import os
 import traceback
 import zipfile
+import hashlib
 from typing import List
 
 import requests
@@ -162,13 +163,19 @@ def update_yara_rules():
     else:
         logger.debug("Updating yara rules in worker(s)")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-        rules_hash = generate_yara_rule_map_hash(
+        generate_yara_rule_map_hash(
                     globals.g_yara_rules_dir
                 )
+        md5sum = hashlib.md5()
+        for h in globals.g_yara_rule_map_hash_list:
+            md5sum.update(h.encode("utf-8"))
+        rules_hash = md5sum.hexdigest()
+
         compiled_rules_filepath = os.path.join(globals.g_yara_rules_dir, ".YARA_RULES_{0}".format(rules_hash))
+        logger.debug("yara rule path is {0}".format(compiled_rules_filepath))
         if not (os.path.exists(compiled_rules_filepath)):
             new_rules_object = yara.compile(filepaths=yara_rule_map)
-            new_rules_object.save()
+            new_rules_object.save(compiled_rules_filepath)
             compiled_rules_lock.release_read()
             compiled_rules_lock.acquire_write()
             compiled_yara_rules = new_rules_object
@@ -177,7 +184,7 @@ def update_yara_rules():
             compiled_rules_lock.release_write()
         else: # Another worker has already written the rules to a file for this rule-hash
             new_rules_object = yara.load(compiled_rules_filepath)
-            new_rules_object.save()
+            new_rules_object.save(compiled_rules_filepath)
             compiled_rules_lock.release_read()
             compiled_rules_lock.acquire_write()
             compiled_yara_rules = new_rules_object
@@ -236,6 +243,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     try:
         analysis_result.last_scan_date = datetime.datetime.now()
 
+
         binary_data = get_binary_by_hash(globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token)
 
         if not binary_data:
@@ -245,6 +253,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
 
         try:
             update_yara_rules()
+
             matches = compiled_yara_rules.match(data=binary_data.read(), timeout=30)
 
             # NOTE: Below is for debugging use only
