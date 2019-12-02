@@ -2,22 +2,20 @@
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import datetime
+import hashlib
 import io
 import logging
 import multiprocessing
 import os
 import traceback
 import zipfile
-import hashlib
 from typing import List
 
 import requests
-import json
 # noinspection PyPackageRequirements
 import yara
 from celery import bootsteps, group
 
-from io import StringIO
 import globals
 from analysis_result import AnalysisResult
 from celery_app import app
@@ -145,6 +143,7 @@ def update_yara_rules_remote(yara_rules: dict) -> None:
     except Exception as err:
         logger.exception(f"Error writing rule file: {err}")
 
+
 # Caller is obliged to compiled_rules_lock.release_read()
 def update_yara_rules():
     """
@@ -164,8 +163,8 @@ def update_yara_rules():
         logger.debug("Updating yara rules in worker(s)")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         generate_yara_rule_map_hash(
-                    globals.g_yara_rules_dir
-                )
+            globals.g_yara_rules_dir
+        )
         md5sum = hashlib.md5()
         for h in globals.g_yara_rule_map_hash_list:
             md5sum.update(h.encode("utf-8"))
@@ -182,7 +181,7 @@ def update_yara_rules():
             compiled_rules_hash = rules_hash
             logger.debug("Succesfully updated yara rules")
             compiled_rules_lock.release_write()
-        else: # Another worker has already written the rules to a file for this rule-hash
+        else:  # Another worker has already written the rules to a file for this rule-hash
             new_rules_object = yara.load(compiled_rules_filepath)
             new_rules_object.save(compiled_rules_filepath)
             compiled_rules_lock.release_read()
@@ -242,7 +241,6 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
 
     try:
         analysis_result.last_scan_date = datetime.datetime.now()
-
 
         binary_data = get_binary_by_hash(globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token)
 
