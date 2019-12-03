@@ -12,6 +12,7 @@ import zipfile
 from typing import List
 
 import requests
+
 # noinspection PyPackageRequirements
 import yara
 from celery import bootsteps, group
@@ -27,6 +28,7 @@ logger.setLevel(logging.DEBUG)
 
 
 # ----- Lock Object Class ------------------------------------------------------------
+
 
 class ReadWriteLock:
     """
@@ -87,7 +89,9 @@ def add_worker_arguments(parser) -> None:
     Add yara worker configuration option.
     :param parser: option parser
     """
-    parser.add_argument("--config-file", default="yara_worker.conf", help="Yara Worker Config")
+    parser.add_argument(
+        "--config-file", default="yara_worker.conf", help="Yara Worker Config"
+    )
 
 
 app.user_options["worker"].add(add_worker_arguments)
@@ -99,7 +103,7 @@ class MyBootstep(bootsteps.Step):
     """
 
     # noinspection PyUnusedLocal
-    def __init__(self, worker, config_file='yara_worker.conf', **options):
+    def __init__(self, worker, config_file="yara_worker.conf", **options):
         super().__init__(self)
         ConfigurationInit(config_file, None)
 
@@ -162,35 +166,32 @@ def update_yara_rules():
     else:
         logger.debug("Updating yara rules in worker(s)")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-        generate_yara_rule_map_hash(
-            globals.g_yara_rules_dir
-        )
+        generate_yara_rule_map_hash(globals.g_yara_rules_dir)
         md5sum = hashlib.md5()
         for h in globals.g_yara_rule_map_hash_list:
             md5sum.update(h.encode("utf-8"))
         rules_hash = md5sum.hexdigest()
 
-        compiled_rules_filepath = os.path.join(globals.g_yara_rules_dir, ".YARA_RULES_{0}".format(rules_hash))
+        compiled_rules_filepath = os.path.join(
+            globals.g_yara_rules_dir, ".YARA_RULES_{0}".format(rules_hash)
+        )
         logger.debug("yara rule path is {0}".format(compiled_rules_filepath))
-        if not (os.path.exists(compiled_rules_filepath)):
+
+        rules_already_exist = os.path.exists(compiled_rules_filepath)        
+        if not(rules_already_exist):        
             new_rules_object = yara.compile(filepaths=yara_rule_map)
-            new_rules_object.save(compiled_rules_filepath)
-            compiled_rules_lock.release_read()
-            compiled_rules_lock.acquire_write()
-            compiled_yara_rules = new_rules_object
-            compiled_rules_hash = rules_hash
-            logger.debug("Succesfully updated yara rules")
-            compiled_rules_lock.release_write()
-        else:  # Another worker has already written the rules to a file for this rule-hash
+        else:
             new_rules_object = yara.load(compiled_rules_filepath)
+        compiled_rules_lock.release_read()
+        compiled_rules_lock.acquire_write()
+        if not(rules_already_exist):
             new_rules_object.save(compiled_rules_filepath)
-            compiled_rules_lock.release_read()
-            compiled_rules_lock.acquire_write()
-            compiled_yara_rules = new_rules_object
-            compiled_rules_hash = rules_hash
-            logger.debug("Succesfully updated yara rules")
-            compiled_rules_lock.release_write()
+        compiled_yara_rules = new_rules_object
+        compiled_rules_hash = rules_hash
+        logger.debug("Succesfully updated yara rules")
+        compiled_rules_lock.release_write()
         compiled_rules_lock.acquire_read()
+    #logger.debug("Exiting update routine ok")
 
 
 def get_binary_by_hash(url: str, hsum: str, token: str):
@@ -201,8 +202,13 @@ def get_binary_by_hash(url: str, hsum: str, token: str):
     """
     headers = {"X-Auth-Token": token}
     request_url = f"{url}/api/v1/binary/{hsum}"
-    response = requests.get(request_url, headers=headers, stream=True, verify=False,
-                            timeout=globals.g_worker_network_timeout)
+    response = requests.get(
+        request_url,
+        headers=headers,
+        stream=True,
+        verify=False,
+        timeout=globals.g_worker_network_timeout,
+    )
     if response:
         with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
             # the response contains the file ziped in 'filedata'
@@ -242,7 +248,9 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     try:
         analysis_result.last_scan_date = datetime.datetime.now()
 
-        binary_data = get_binary_by_hash(globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token)
+        binary_data = get_binary_by_hash(
+            globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token
+        )
 
         if not binary_data:
             logger.debug(f"No binary agailable for {md5sum}")
@@ -260,7 +268,9 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             if matches:
                 score = get_high_score(matches)
                 analysis_result.score = score
-                analysis_result.short_result = "Matched yara rules: %s" % ", ".join([match.rule for match in matches])
+                analysis_result.short_result = "Matched yara rules: %s" % ", ".join(
+                    [match.rule for match in matches]
+                )
                 # analysis_result.short_result = "Matched yara rules: debug"
                 analysis_result.long_result = analysis_result.long_result
                 analysis_result.misc = compiled_rules_hash
@@ -276,8 +286,8 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             analysis_result.last_error_msg = f"Yara exception: {err}"
         except Exception as err:
             analysis_result.last_error_msg = (
-                    f"Other exception while matching rules: {err}\n"
-                    + traceback.format_exc()
+                f"Other exception while matching rules: {err}\n"
+                + traceback.format_exc()
             )
         finally:
             compiled_rules_lock.release_read()

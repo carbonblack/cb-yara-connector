@@ -160,7 +160,7 @@ def generate_feed_from_db() -> None:
     feedinfo = CbFeedInfo(**feedinfo)
     feed = CbFeed(feedinfo, reports)
 
-    logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data["name"]))
+    #logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data["name"]))
     with open(globals.g_output_file, "w") as fp:
         fp.write(feed.dump())
 
