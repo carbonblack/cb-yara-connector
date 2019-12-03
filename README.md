@@ -1,7 +1,11 @@
 # Installing Yara Agent (Centos/RHEL 6)
 
 The Yara agent must be installed on the same system as Cb Response.
-	
+
+* Create installation area
+    ```shell script
+    mkdir -p /usr/share/cb/integrations/yara
+    ``` 
 * Download Yara Agent
 
 	```
@@ -68,8 +72,8 @@ _[TBD]_
 
 * Make sure openssl-devel is installed
 
-	```
-	sudo yum install openssl-devel
+    ```
+    sudo yum install openssl-devel
     ```
 
 * Install Git and GCC
@@ -119,27 +123,29 @@ _[TBD]_
 
 #### Example Yara Worker Config File
 
-	[general]
+```ini
+[general]
 
-	;
-	; Python Celery Broker Url. Set this full url string for Redis
-	; Example: redis://<ip_address>
-	;
-	broker_url=redis://127.0.0.1
-	
-	;
-	; Cb Response Server Configuration
-	; Used for downloading binaries
-	;
-	cb_server_url=
-	cb_server_token=
-	
-	;
-	; Directory for temporary yara rules storage
-	; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
-	;
-	yara_rules_dir=./yara_rules
-	
+;
+; Python Celery Broker Url. Set this full url string for Redis
+; Example: redis://<ip_address>
+;
+broker_url=redis://127.0.0.1
+
+;
+; Cb Response Server Configuration
+; Used for downloading binaries
+;
+cb_server_url=
+cb_server_token=
+
+;
+; Directory for temporary yara rules storage
+; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
+;
+yara_rules_dir=./yara_rules
+```
+
 * Copy, modify and save to `yara_worker.conf`
 	
 #### Run Yara Worker Manually
