@@ -99,7 +99,7 @@ class ConfigurationInit(object):
 
         :raises CbInvalidConfig:
         """
-        globals.g_mode = self._as_str("mode", required=True, allowed=["master", "slave"])
+        globals.g_mode = self._as_str("mode", required=False, default="master", allowed=["master", "slave"])
 
         value = self._as_str("worker_type", default="local", allowed=["local", "remote"])
         if value == "local":
