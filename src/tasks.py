@@ -191,7 +191,7 @@ def update_yara_rules():
         logger.debug("Succesfully updated yara rules")
         compiled_rules_lock.release_write()
         compiled_rules_lock.acquire_read()
-    logger.debug("Exiting update routine ok")
+    #logger.debug("Exiting update routine ok")
 
 
 def get_binary_by_hash(url: str, hsum: str, token: str):
