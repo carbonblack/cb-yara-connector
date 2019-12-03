@@ -19,7 +19,7 @@ The Yara agent must be installed on the same system as Cb Response.
 	```
 	
 ## Create Yara Agent Config
-Copy and modify either `sample_local.conf` or `sample_remote.conf` from the `samples` folder
+Copy and modify `sample_local.conf` from the `samples` folder
 to your desired location.
 
 
