@@ -22,6 +22,7 @@ from analysis_result import AnalysisResult
 from celery_app import app
 from config_handling import ConfigurationInit
 from rule_handling import generate_yara_rule_map_hash
+import glob
 
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -184,6 +185,9 @@ def update_yara_rules():
         rules_already_exist = os.path.exists(compiled_rules_filepath)        
         if not(rules_already_exist):        
             new_rules_object = yara.compile(filepaths=yara_rule_map)
+            #remove old rule set files
+            for rulesetfp in glob.glob(os.path.join(globals.g_yara_rules_dir,".YARA_RULES_*")):
+                os.remove(rulesetfp)
         else:
             new_rules_object = yara.load(compiled_rules_filepath)
         compiled_rules_lock.release_read()
