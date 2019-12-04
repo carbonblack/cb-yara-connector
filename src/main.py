@@ -228,7 +228,7 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
 
     :param analysis_results: list of current analysis results
     """
-    logger.debug(f"Saving {len(analysis_results)}...")
+    logger.debug(f"Saving {len(list(filter(lambda ar: not(ar.binary_not_available) , analysis_results)))}...")
     for analysis_result in analysis_results:
         save_result(analysis_result)
 
