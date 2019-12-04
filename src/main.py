@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 celery_logger = logging.getLogger("celery.app.trace")
-celery_logger.setLevel(logging.INFO)
+celery_logger.setLevel(logging.CRITICAL)
 
 # number of promise worker threads to use
 PROMISE_THREADS = 2
@@ -67,6 +67,8 @@ def promise_worker(exit_event: Event, scanning_promise_queue: Queue, scanning_re
                     scanning_results_queue.put(result)
                 except Empty:
                     exit_event.wait(1)
+                except:
+                    exit_event.wait(0.1)
             else:
                 exit_event.wait(1)
     finally:

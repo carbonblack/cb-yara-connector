@@ -20,6 +20,7 @@ from celery import bootsteps, group
 import globals
 from analysis_result import AnalysisResult
 from celery_app import app
+from celery.utils.log import get_task_logger
 from config_handling import ConfigurationInit
 from rule_handling import generate_yara_rule_map_hash
 import glob
@@ -27,8 +28,8 @@ import glob
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+logger = get_task_logger(__name__)
+logger.setLevel(logging.CRITICAL)
 
 
 
