@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 celery_logger = logging.getLogger("celery.app.trace")
-celery_logger.setLevel(logging.ERROR)
+celery_logger.setLevel(logging.INFO)
 
 # number of promise worker threads to use
 PROMISE_THREADS = 2
@@ -642,7 +642,7 @@ def launch_celery_worker(config_file: str = None) -> None:
     :param config_file: optional path to a configuration file
     """
     localworker = worker.worker(app=app)
-    localworker.run(config_file=config_file)
+    localworker.run(loglevel=logging.ERROR, config_file=config_file)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
 

@@ -23,8 +23,12 @@ from celery_app import app
 from config_handling import ConfigurationInit
 from rule_handling import generate_yara_rule_map_hash
 
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
+
 
 
 # ----- Lock Object Class ------------------------------------------------------------
