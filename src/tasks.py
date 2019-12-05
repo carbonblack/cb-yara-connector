@@ -31,7 +31,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = get_task_logger(__name__)
 logger.setLevel(logging.CRITICAL)
 
-
+rulelogger = logging.getLogger("yaraworker")
+rulelogger.setLevel(logging.INFO)
 
 # ----- Lock Object Class ------------------------------------------------------------
 
@@ -186,14 +187,17 @@ def update_yara_rules():
         rules_already_exist = os.path.exists(compiled_rules_filepath)        
         if not(rules_already_exist):        
             new_rules_object = yara.compile(filepaths=yara_rule_map)
+            rulelogger.info(f"Compiled new set of yara-rules  - {rules_hash} - ")
             #remove old rule set files
             for rulesetfp in glob.glob(os.path.join(globals.g_yara_rules_dir,".YARA_RULES_*")):
                 os.remove(rulesetfp)
         else:
+            rulelogger.info(f"Loaded compiled rule set from disk at {compiled_rules_filepath}")
             new_rules_object = yara.load(compiled_rules_filepath)
         compiled_rules_lock.release_read()
         compiled_rules_lock.acquire_write()
         if not(rules_already_exist):
+            rulelogger.info(f"Saved ruleset to disk {compiled_rules_filepath}")
             new_rules_object.save(compiled_rules_filepath)
         compiled_yara_rules = new_rules_object
         compiled_rules_hash = rules_hash
