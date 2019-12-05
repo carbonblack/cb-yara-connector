@@ -140,7 +140,7 @@ class TestConfigurationInit(TestCase):
         Ensure our base configuration is valid for worker types.
         """
         ConfigurationInit(TESTCONF)
-        self.assertEquals("", globals.g_output_file)
+        self.assertEqual("", globals.g_output_file)
         self.assertFalse(globals.g_remote)
 
     def test_01a_missing_config(self):

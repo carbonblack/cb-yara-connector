@@ -2,6 +2,7 @@
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import datetime
+import glob
 import hashlib
 import io
 import logging
@@ -12,20 +13,18 @@ import zipfile
 from typing import List
 
 import requests
-
+import urllib3
 # noinspection PyPackageRequirements
 import yara
 from celery import bootsteps, group
+from celery.utils.log import get_task_logger
 
 import globals
 from analysis_result import AnalysisResult
 from celery_app import app
-from celery.utils.log import get_task_logger
 from config_handling import ConfigurationInit
 from rule_handling import generate_yara_rule_map_hash
-import glob
 
-import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = get_task_logger(__name__)
@@ -33,6 +32,7 @@ logger.setLevel(logging.CRITICAL)
 
 rulelogger = logging.getLogger("yaraworker")
 rulelogger.setLevel(logging.INFO)
+
 
 # ----- Lock Object Class ------------------------------------------------------------
 
@@ -184,19 +184,19 @@ def update_yara_rules():
         )
         logger.debug("yara rule path is {0}".format(compiled_rules_filepath))
 
-        rules_already_exist = os.path.exists(compiled_rules_filepath)        
-        if not(rules_already_exist):        
+        rules_already_exist = os.path.exists(compiled_rules_filepath)
+        if not rules_already_exist:
             new_rules_object = yara.compile(filepaths=yara_rule_map)
             rulelogger.info(f"Compiled new set of yara-rules  - {rules_hash} - ")
-            #remove old rule set files
-            for rulesetfp in glob.glob(os.path.join(globals.g_yara_rules_dir,".YARA_RULES_*")):
+            # remove old rule set files
+            for rulesetfp in glob.glob(os.path.join(globals.g_yara_rules_dir, ".YARA_RULES_*")):
                 os.remove(rulesetfp)
         else:
             rulelogger.info(f"Loaded compiled rule set from disk at {compiled_rules_filepath}")
             new_rules_object = yara.load(compiled_rules_filepath)
         compiled_rules_lock.release_read()
         compiled_rules_lock.acquire_write()
-        if not(rules_already_exist):
+        if not rules_already_exist:
             rulelogger.info(f"Saved ruleset to disk {compiled_rules_filepath}")
             new_rules_object.save(compiled_rules_filepath)
         compiled_yara_rules = new_rules_object
@@ -204,7 +204,7 @@ def update_yara_rules():
         logger.debug("Succesfully updated yara rules")
         compiled_rules_lock.release_write()
         compiled_rules_lock.acquire_read()
-    #logger.debug("Exiting update routine ok")
+    # logger.debug("Exiting update routine ok")
 
 
 def get_binary_by_hash(url: str, hsum: str, token: str):
@@ -299,8 +299,8 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             analysis_result.last_error_msg = f"Yara exception: {err}"
         except Exception as err:
             analysis_result.last_error_msg = (
-                f"Other exception while matching rules: {err}\n"
-                + traceback.format_exc()
+                    f"Other exception while matching rules: {err}\n"
+                    + traceback.format_exc()
             )
         finally:
             compiled_rules_lock.release_read()

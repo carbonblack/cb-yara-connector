@@ -67,7 +67,8 @@ def promise_worker(exit_event: Event, scanning_promise_queue: Queue, scanning_re
                     scanning_results_queue.put(result)
                 except Empty:
                     exit_event.wait(1)
-                except:
+                except Exception as err:
+                    logger.debug(f"Exception in wait: {err}")
                     exit_event.wait(0.1)
             else:
                 exit_event.wait(1)
@@ -162,7 +163,7 @@ def generate_feed_from_db() -> None:
     feedinfo = CbFeedInfo(**feedinfo)
     feed = CbFeed(feedinfo, reports)
 
-    #logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data["name"]))
+    # logger.debug("Writing out feed '{0}' to disk".format(feedinfo.data["name"]))
     with open(globals.g_output_file, "w") as fp:
         fp.write(feed.dump())
 
@@ -228,7 +229,8 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
 
     :param analysis_results: list of current analysis results
     """
-    logger.debug(f"Saving {len(list(filter(lambda ar: not(ar.binary_not_available) , analysis_results)))} analysis results...")
+    logger.debug(
+        f"Saving {len(list(filter(lambda ar: not ar.binary_not_available, analysis_results)))} analysis results...")
     for analysis_result in analysis_results:
         save_result(analysis_result)
 
@@ -356,7 +358,7 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue) -> None:
         if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
             execute_script()
 
-    logger.info(f"Queued {len(md5_hashes)} binaries for analysis")        
+    logger.info(f"Queued {len(md5_hashes)} binaries for analysis")
 
     logger.debug("Exiting database sweep routine")
 
@@ -368,7 +370,7 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     :return: True if the hash needs to be added
     """
     query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
-    #logger.debug(f"Hash = {md5_hash} exists = {query.exists()}")
+    # logger.debug(f"Hash = {md5_hash} exists = {query.exists()}")
     return not query.exists()
 
 
@@ -469,7 +471,7 @@ def run_to_exit_signal(exit_event: Event) -> None:
     Wait-until-exit polling loop function.
     :param exit_event: the event handler
     """
-    while not(exit_event.is_set()):
+    while not (exit_event.is_set()):
         exit_event.wait(30.0)
         numbins = BinaryDetonationResult.select().count()
         logger.info(f"Analyzed {numbins} binaries so far ... ")
