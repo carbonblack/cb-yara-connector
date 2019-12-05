@@ -228,7 +228,7 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
 
     :param analysis_results: list of current analysis results
     """
-    logger.debug(f"Saving {len(list(filter(lambda ar: not(ar.binary_not_available) , analysis_results)))}...")
+    logger.debug(f"Saving {len(list(filter(lambda ar: not(ar.binary_not_available) , analysis_results)))} analysis results...")
     for analysis_result in analysis_results:
         save_result(analysis_result)
 
@@ -347,7 +347,7 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue) -> None:
 
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
-    md5_hashes = filter(_check_hash_against_feed, (row[0].hex() for row in rows))
+    md5_hashes = list(filter(_check_hash_against_feed, (row[0].hex() for row in rows)))
     analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
     # if gathering and analysis took longer than out utility script interval windo, kick it off
@@ -355,6 +355,8 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue) -> None:
         seconds_since_start = (datetime.now() - utility_window_start).seconds
         if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
             execute_script()
+
+    logger.info(f"Queued {len(md5_hashes)} binaries for analysis")        
 
     logger.debug("Exiting database sweep routine")
 
@@ -366,7 +368,7 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     :return: True if the hash needs to be added
     """
     query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
-
+    #logger.debug(f"Hash = {md5_hash} exists = {query.exists()}")
     return not query.exists()
 
 
@@ -467,7 +469,10 @@ def run_to_exit_signal(exit_event: Event) -> None:
     Wait-until-exit polling loop function.
     :param exit_event: the event handler
     """
-    exit_event.wait()
+    while not(exit_event.is_set()):
+        exit_event.wait(30.0)
+        numbins = BinaryDetonationResult.select().count()
+        logger.info(f"Analyzed {numbins} binaries so far ... ")
     logger.debug("Begin graceful shutdown...")
 
 
