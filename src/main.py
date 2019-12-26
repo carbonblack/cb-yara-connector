@@ -45,26 +45,32 @@ logger.setLevel(logging.INFO)
 celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.CRITICAL)
 
-# number of promise worker threads to use
-PROMISE_THREADS = 2
-
-
-def promise_worker(exit_event: Event, scanning_promise_queue: Queue, scanning_results_queue: Queue) -> None:
+def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue) -> None:
     """
     The promise worker scanning function.
 
     :param exit_event: event signaller
-    :param scanning_promise_queue: the promises queue
+    :param hash_queue 
     :param scanning_results_queue: the results queue
     """
     try:
-        while not (exit_event.is_set()) or not (scanning_promise_queue.empty()):
-            if not (scanning_promise_queue.empty()):
+        while not (exit_event.is_set()) or not (hash_queue.empty()):
+            if not (hash_queue.empty()):
                 try:
-                    promise = scanning_promise_queue.get(timeout=1.0)
-                    result = promise.get(disable_sync_subtasks=False)
-                    scanning_promise_queue.task_done()
-                    scanning_results_queue.put(result)
+                    exit_set = False
+                    md5_hashes = hash_queue.get()
+                    promise = analyze_binary.chunks([(mh,) for mh in md5_hashes], globals.g_max_hashes).apply_async()
+                    for prom in promise.children:
+                        exit_set = exit_event.is_set()
+                        if exit_set:
+                            break
+                        results = prom.get(disable_sync_subtasks=False)
+                        scanning_results_queue.put(results)
+                    if not exit_set:    
+                        promise.get(disable_sync_subtasks=False, timeout=1)
+                    else:
+                        promise.forget(disable_sync_subtasks=False, timeout=1)
+                    hash_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
                 except Exception as err:
@@ -73,38 +79,8 @@ def promise_worker(exit_event: Event, scanning_promise_queue: Queue, scanning_re
             else:
                 exit_event.wait(1)
     finally:
-        exit_event.set()
-
-    logger.debug("PROMISE WORKING EXITING")
-
-
-# NOTE: function retained for possible future need.
-# noinspection PyUnusedFunction
-def results_worker(exit_event: Event, results_queue: Queue) -> None:
-    """
-    Sqlite is not meant to be thread-safe.
-
-    This single-worker-thread writes the result(s) to the configured sqlite file to hold the feed-metadata and
-    seen binaries/results from scans.
-
-    :param exit_event: event signaller
-    :param results_queue: the results queue
-    """
-    try:
-        while not (exit_event.is_set()) or not (results_queue.empty()):
-            if not (results_queue.empty()):
-                try:
-                    result = results_queue.get()
-                    save_results_with_logging(result)
-                    results_queue.task_done()
-                except Empty:
-                    exit_event.wait(1)
-            else:
-                exit_event.wait(1)
-    finally:
-        exit_event.set()
-
-    logger.debug("Results worker thread exiting")
+        hash_queue.task_done()
+    logger.debug("ANALYSIS WORKER EXITING")
 
 
 def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
@@ -127,9 +103,7 @@ def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
             else:
                 exit_event.wait(1)
     finally:
-        exit_event.set()
-
-    logger.debug("Results worker thread exiting")
+        logger.debug(f"Results worker thread exiting {exit_event.is_set()}")
 
 
 def generate_feed_from_db() -> None:
@@ -187,40 +161,6 @@ def generate_rule_map_remote(yara_rule_path: str) -> None:
     globals.g_yara_rule_map = ret_dict
     while not result.ready():
         time.sleep(0.1)
-
-
-def analyze_binary_and_queue(scanning_promise_queue: Queue, md5sum: str) -> None:
-    """
-    Analyze Binary for a given md5 and save any promises.
-    :param scanning_promise_queue: the promises queue
-    :param md5sum: md5 hash to look for
-    """
-    promise = analyze_binary.delay(md5sum)
-    scanning_promise_queue.put(promise)
-
-
-# NOTE: function retained for possible future need.
-# noinspection PyUnusedFunction
-def analyze_binaries_and_queue(scanning_promise_queue: Queue, md5_hashes: List[str]) -> None:
-    """
-    Analyze each binary and enqueue.
-    :param scanning_promise_queue: the promise queue
-    :param md5_hashes: list of md5 hashes to scan
-    """
-    for md5 in md5_hashes:
-        analyze_binary_and_queue(scanning_promise_queue, md5)
-
-
-def analyze_binaries_and_queue_chunked(scanning_promise_queue: Queue, md5_hashes: Iterator) -> None:
-    """
-    Attempts to do work in parrallelized chunks of MAX_HASHES grouped.
-
-    :param scanning_promise_queue: the promise queue
-    :param md5_hashes: list of md5 hases
-    """
-    promise = analyze_binary.chunks([(mh,) for mh in md5_hashes], globals.g_max_hashes).apply_async()
-    for prom in promise.children:
-        scanning_promise_queue.put(prom)
 
 
 def save_results(analysis_results: List[AnalysisResult]) -> None:
@@ -322,7 +262,7 @@ def execute_script() -> None:
     logger.info("---------------------------------------- Utility script completed -----\n")
 
 
-def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue) -> None:
+def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
     """
     Main routine - checks the cbr modulestore/storfiles table for new hashes by comparing the sliding-window
     with the contents of the feed database on disk.
@@ -350,7 +290,8 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue) -> None:
     logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
 
     md5_hashes = list(filter(_check_hash_against_feed, (row[0].hex() for row in rows)))
-    analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
+    hash_queue.put(md5_hashes)
+    #analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
     # if gathering and analysis took longer than out utility script interval windo, kick it off
     if globals.g_utility_interval > 0:
@@ -358,7 +299,7 @@ def perform(yara_rule_dir: str, conn, scanning_promises_queue: Queue) -> None:
         if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
             execute_script()
 
-    logger.info(f"Queued {len(md5_hashes)} binaries for analysis")
+    logger.info(f"Queued {len(md5_hashes)} new binaries for analysis")
 
     logger.debug("Exiting database sweep routine")
 
@@ -388,52 +329,6 @@ def save_results_with_logging(analysis_results: List[AnalysisResult]) -> None:
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
-
-
-# NOTE: function retained for possible future need.
-# noinspection PyUnusedFunction
-def save_and_log(analysis_results: List[AnalysisResult], start_time: float, num_binaries_skipped: int,
-                 num_total_binaries: int) -> None:
-    """
-    Save and log analysis results.
-
-    :param analysis_results: list of analysis results
-    :param start_time: starting time (seconds)
-    :param num_binaries_skipped: number of skipped binaries
-    :param num_total_binaries: total binary count
-    """
-    logger.debug(analysis_results)
-    if analysis_results:
-        for analysis_result in analysis_results:
-            logger.debug((
-                f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
-
-            if analysis_result.last_error_msg:
-                logger.error(analysis_result.last_error_msg)
-        save_results(analysis_results)
-
-    _rule_logging(start_time, num_binaries_skipped, num_total_binaries)
-
-
-def _rule_logging(start_time: float, num_binaries_skipped: int, num_total_binaries: int) -> None:
-    """
-    Simple method to log yara work.
-
-    :param start_time: starting time (seconds)
-    :param num_binaries_skipped: number of skipped binaries
-    :param num_total_binaries: total binary count
-    """
-    elapsed_time = time.time() - start_time
-    logger.info("elapsed time: {0}".format(humanfriendly.format_timespan(elapsed_time)))
-    logger.debug("   number binaries scanned: {0}".format(globals.g_num_binaries_analyzed))
-    logger.debug("   number binaries already scanned: {0}".format(num_binaries_skipped))
-    logger.debug("   number binaries unavailable: {0}".format(globals.g_num_binaries_not_available))
-    logger.info("total binaries from db: {0}".format(num_total_binaries))
-    logger.debug("   binaries per second: {0}:".format(round(num_total_binaries / elapsed_time, 2)))
-    logger.info("num binaries score greater than zero: {0}\n".format(
-        len(BinaryDetonationResult.select().where(BinaryDetonationResult.score > 0))))
-
 
 def get_log_file_handles(use_logger) -> List:
     """
@@ -501,7 +396,7 @@ def wait_all_worker_exit() -> None:
     """
     Await the exit of our worker threads.
     """
-    threadcount = PROMISE_THREADS
+    threadcount = 2
     while threadcount > 1:
         threads = list(
             filter(
@@ -519,7 +414,7 @@ def wait_all_worker_exit() -> None:
     logger.debug("Main thread going to exit...")
 
 
-def start_workers(exit_event: Event, scanning_promises_queue: Queue, scanning_results_queue: Queue,
+def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue,
                   run_only_once=False) -> None:
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
@@ -529,15 +424,14 @@ def start_workers(exit_event: Event, scanning_promises_queue: Queue, scanning_re
     :param run_only_once: if True, run once an exit (default False)
     """
     logger.debug("Starting perf thread")
-    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, scanning_promises_queue, scanning_results_queue,
+    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, hash_queue, scanning_results_queue,
                                          exit_event, run_only_once)
     perf_thread.start()
 
-    logger.debug("Starting promise thread(s)")
-    for _ in range(PROMISE_THREADS):
-        promise_worker_thread = Thread(target=promise_worker,
-                                       args=(exit_event, scanning_promises_queue, scanning_results_queue))
-        promise_worker_thread.start()
+    logger.debug("Starting analysis thread")
+    analysis_worker_thread = Thread(target=analysis_worker,
+                                       args=(exit_event, hash_queue, scanning_results_queue))
+    analysis_worker_thread.start()
 
     logger.debug("Starting results saver thread")
     results_worker_thread = Thread(target=results_worker_chunked, args=(exit_event, scanning_results_queue))
@@ -551,7 +445,7 @@ class DatabaseScanningThread(Thread):
     by the signal handler
     """
 
-    def __init__(self, interval: int, scanning_promises_queue: Queue, scanning_results_queue: Queue, exit_event: Event,
+    def __init__(self, interval: int, hash_queue: Queue, scanning_results_queue: Queue, exit_event: Event,
                  run_only_once: bool, *args, **kwargs):
         """
         Create a new database scanning object.
@@ -571,7 +465,7 @@ class DatabaseScanningThread(Thread):
         self.exit_event = exit_event
         self._conn = get_database_conn()
         self._interval = interval
-        self._scanning_promises_queue = scanning_promises_queue
+        self._hash_queue = hash_queue
         self._scanning_results_queue = scanning_results_queue
         self._run_only_once = run_only_once
         if not self._run_only_once:
@@ -584,7 +478,7 @@ class DatabaseScanningThread(Thread):
         Perform a database scan one, then exit.
         """
         self.do_db_scan()
-        self._scanning_promises_queue.join()
+        self._hash_queue.join()
         self._scanning_results_queue.join()
         self.exit_event.set()
 
@@ -609,7 +503,8 @@ class DatabaseScanningThread(Thread):
         """
         logger.debug("START database sweep")
         try:
-            perform(globals.g_yara_rules_dir, self._conn, self._scanning_promises_queue)
+            perform(globals.g_yara_rules_dir, self._conn, self._hash_queue)
+
         except Exception as err:
             logger.exception(f"Something went wrong sweeping the CbR module store: {err} ")
 
@@ -749,7 +644,7 @@ def main():
     else:  # Doing a real run
         # Exit condition and queues for doing work
         exit_event = Event()
-        scanning_promise_queue = Queue()
+        hash_queue = Queue()
         scanning_results_queue = Queue()
         # Lock file so this process is a singleton
         lock_file = lockfile.FileLock(args.lock_file)
@@ -787,7 +682,7 @@ def main():
                         init_local_resources()
 
                         # start working threads
-                        start_workers(exit_event, scanning_promise_queue, scanning_results_queue)
+                        start_workers(exit_event, hash_queue, scanning_results_queue)
 
                         # start local celeryD worker if working mode is local
                         if not globals.g_remote:
@@ -805,7 +700,7 @@ def main():
                 init_local_resources()
 
                 # start necessary worker threads
-                start_workers(exit_event, scanning_promise_queue, scanning_results_queue, run_only_once=True)
+                start_workers(exit_event, hash_queue, scanning_results_queue, run_only_once=True)
 
                 # Start a celery worker if we need one
                 if not globals.g_remote:
