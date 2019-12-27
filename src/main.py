@@ -69,7 +69,7 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
                     if not exit_set:    
                         promise.get(disable_sync_subtasks=False, timeout=1)
                     else:
-                        promise.forget(disable_sync_subtasks=False, timeout=1)
+                        promise.forget(timeout=1)
                     hash_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
@@ -79,8 +79,7 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
             else:
                 exit_event.wait(1)
     finally:
-        hash_queue.task_done()
-    logger.debug("ANALYSIS WORKER EXITING")
+        logger.debug("ANALYSIS WORKER EXITING")
 
 
 def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
