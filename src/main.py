@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+import psutil
 from datetime import datetime, timedelta
 from functools import partial
 from queue import Empty, Queue
@@ -45,6 +46,7 @@ logger.setLevel(logging.INFO)
 celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.CRITICAL)
 
+
 def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue) -> None:
     """
     The promise worker scanning function.
@@ -54,7 +56,7 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
     :param scanning_results_queue: the results queue
     """
     try:
-        while not (exit_event.is_set()) or not (hash_queue.empty()):
+        while not (exit_event.is_set()):
             if not (hash_queue.empty()):
                 try:
                     exit_set = False
@@ -69,7 +71,7 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
                     if not exit_set:    
                         promise.get(disable_sync_subtasks=False, timeout=1)
                     else:
-                        promise.forget(timeout=1)
+                        promise.forget()
                     hash_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
@@ -79,7 +81,7 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
             else:
                 exit_event.wait(1)
     finally:
-        logger.debug("ANALYSIS WORKER EXITING")
+        logger.debug(f"ANALYSIS WORKER EXITING {exit_event.is_set()}")
 
 
 def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
@@ -91,7 +93,7 @@ def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
     :return:
     """
     try:
-        while not (exit_event.is_set()) or not (results_queue.empty()):
+        while not (exit_event.is_set()):
             if not (results_queue.empty()):
                 try:
                     results = results_queue.get()
@@ -527,7 +529,7 @@ class DatabaseScanningThread(Thread):
 
 
 #
-def start_celery_worker_thread(config_file: str) -> None:
+def start_celery_worker_thread(worker, workerkwargs=None, config_file=None ) -> None:
     """
     Start celery worker in a daemon-thread.
 
@@ -535,19 +537,40 @@ def start_celery_worker_thread(config_file: str) -> None:
     :param config_file: path to the yara configuration file
     :return:
     """
-    t = Thread(target=launch_celery_worker, kwargs={"config_file": config_file})
+    t = Thread(target=launch_celery_worker, kwargs={"worker": worker , "workerkwargs": workerkwargs, "config_file": config_file})
     t.daemon = True
     t.start()
 
 
-def launch_celery_worker(config_file: str = None) -> None:
+def launch_celery_worker(worker, workerkwargs=None,config_file: str = None) -> None:
     """
     Launch a celery worker using the imported app context
     :param config_file: optional path to a configuration file
     """
-    localworker = worker.worker(app=app)
-    localworker.run(loglevel=logging.ERROR, config_file=config_file)
+    logger.debug(f"Celery worker args are  {workerkwargs} ")
+    if workerkwargs is None:
+        worker.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker')
+    else:
+        worker.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker', **workerkwargs)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
+
+def terminate_celery_worker(worker=None):
+    """ Attempt to use the pidfile to gracefully terminate celery workers if they exist 
+        if the worker hasn't terminated gracefully after 5 seconds, kill it using the .die() command
+    """
+    with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
+        worker_pid = int(cworkerpidfile.readline())
+        parent = psutil.Process(worker_pid)
+        children = parent.children(recursive=True)
+        for child in children:
+            logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
+            os.kill(child.pid,signal.SIGTERM)
+        logger.debug(f"Sending term sig to celery worker - {worker_pid}")
+        os.kill(worker_pid, signal.SIGTERM)
+
+    time.sleep(5.0) 
+    if worker:
+        worker.die()
 
 
 ################################################################################
@@ -647,6 +670,10 @@ def main():
         scanning_results_queue = Queue()
         # Lock file so this process is a singleton
         lock_file = lockfile.FileLock(args.lock_file)
+        localworker = None
+        workerkwargs = json.loads(globals.g_celeryworkerkwargs) if globals.g_celeryworkerkwargs is not None else None
+        if len(workerkwargs) == 0:
+            workerkwargs = None
 
         try:
             if not args.run_once:  # Running as a deamon
@@ -685,14 +712,17 @@ def main():
 
                         # start local celeryD worker if working mode is local
                         if not globals.g_remote:
-                            start_celery_worker_thread(args.config_file)
+                            localworker = worker.worker(app=app)
+                            start_celery_worker_thread(localworker, workerkwargs, args.config_file)
                     else:
                         # otherwise, we must start a celeryD worker since we are not the master
-                        start_celery_worker_thread(args.config_file)
+                        localworker = worker.worker(app=app)
+                        start_celery_worker_thread(localworker, workerkwargs, args.config_file)
 
                     # run until the service/daemon gets a quitting sig
                     run_to_exit_signal(exit_event)
                     wait_all_worker_exit()
+                    terminate_celery_worker(localworker)
                     logger.info("Yara connector shutdown OK")
             else:  # Just do one batch
                 # init local resources
@@ -703,17 +733,19 @@ def main():
 
                 # Start a celery worker if we need one
                 if not globals.g_remote:
-                    start_celery_worker_thread(args.config_file)
+                    localworker = worker.worker(app=app)
+                    start_celery_worker_thread(localworker, workerkwargs, args.config_file)
                 run_to_exit_signal(exit_event)
                 wait_all_worker_exit()
+                terminate_celery_worker(localworker)
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
-            exit_event.set()
-            sys.exit(3)
         except Exception as err:
             logger.error(f"There were errors executing yara rules: {err}")
+        finally:
             exit_event.set()
-            sys.exit(4)
+            #wait_all_worker_exit()
+            terminate_celery_worker(localworker)
 
 
 if __name__ == "__main__":

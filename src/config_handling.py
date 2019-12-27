@@ -41,6 +41,7 @@ KNOWN = [
     "worker_network_timeout",
     "worker_type",
     "yara_rules_dir",
+    "celery_worker_kwargs"
 ]
 
 
@@ -119,6 +120,10 @@ class ConfigurationInit(object):
 
         globals.g_worker_network_timeout = self._as_int("worker_network_timeout",
                                                         default=globals.g_worker_network_timeout)
+
+        celeryworkerkwargs = self.the_config.get("celery_worker_kwargs", None)
+        if celeryworkerkwargs and len(celeryworkerkwargs) > 0 :
+            globals.g_celeryworkerkwargs = celeryworkerkwargs                                                
 
     def _extended_check(self) -> None:
         """

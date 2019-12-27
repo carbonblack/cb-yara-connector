@@ -42,3 +42,5 @@ g_utility_script = ""
 g_utility_debug = False  # dev use only, reduces interval from minutes to seconds!
 
 g_worker_network_timeout = 5
+
+g_celeryworkerkwargs = None
