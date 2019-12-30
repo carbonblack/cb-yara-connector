@@ -15,9 +15,13 @@ cd %_sourcedir ; pyinstaller cb-yara-connector.spec
 mkdir -p ${RPM_BUILD_ROOT}/var/log/cb/integrations/cb-yara-connector
 mkdir -p ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector
 mkdir -p ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector
+mkdir -p ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yara_rules
 mkdir -p ${RPM_BUILD_ROOT}/etc/init
+mkdir -p ${RPM_BUILD_ROOT}/etc/systemd/system
 cp example-conf/yara.conf ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
-install -m 0755 init-scripts/yaraconnector.conf ${RPM_BUILD_ROOT}/etc/init/yaraconnector.conf
+install -m 0644 cb-yara-connector.service ${RPM_BUILD_ROOT}/etc/systemd/system/cb-yara-connector.service
+#install -m 0755 init-scripts/yaraconnector.conf ${RPM_BUILD_ROOT}/etc/init/yaraconnector.conf
 install -m 0755 ${RPM_SOURCE_DIR}/dist/yaraconnector ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/
 
 %files -f MANIFEST
+%config /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example

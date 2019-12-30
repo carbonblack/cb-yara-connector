@@ -159,9 +159,9 @@ class ConfigurationInit(object):
                                                          default=globals.g_utility_script)
                 logger.warning(f"{self.source} utility script '{globals.g_utility_script}' is enabled; " +
                                "use this advanced feature at your own discretion!")
-        else:
-            if self._as_path("utility_script", required=False, default=globals.g_utility_script):
-                logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
+        #else:
+        #    if self._as_path("utility_script", required=False, default=globals.g_utility_script):
+        #        logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
 
         # developer use only
         globals.g_utility_debug = self._as_bool("utility_debug", default=False)

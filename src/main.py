@@ -672,7 +672,7 @@ def main():
         lock_file = lockfile.FileLock(args.lock_file)
         localworker = None
         workerkwargs = json.loads(globals.g_celeryworkerkwargs) if globals.g_celeryworkerkwargs is not None else None
-        if len(workerkwargs) == 0:
+        if workerkwargs and len(workerkwargs) == 0:
             workerkwargs = None
 
         try:

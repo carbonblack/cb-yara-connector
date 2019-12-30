@@ -17,5 +17,6 @@ rpm:
 	cp -rp init-scripts/* ${BUILDDIR}/init-scripts
 	cp example-conf/yara.conf ${BUILDDIR}/example-conf/yara.conf
 	cp MANIFEST ${BUILDDIR}
+	cp cb-yara-connector.service ${BUILDDIR}
 	cp cb-yara-connector.spec ${SOURCEDIR}/cb-yara-connector.spec
 	rpmbuild -ba cb-yara-connector.rpm.spec
