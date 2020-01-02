@@ -122,8 +122,8 @@ class ConfigurationInit(object):
                                                         default=globals.g_worker_network_timeout)
 
         celeryworkerkwargs = self.the_config.get("celery_worker_kwargs", None)
-        if celeryworkerkwargs and len(celeryworkerkwargs) > 0 :
-            globals.g_celeryworkerkwargs = celeryworkerkwargs                                                
+        if celeryworkerkwargs and len(celeryworkerkwargs) > 0:
+            globals.g_celeryworkerkwargs = celeryworkerkwargs
 
     def _extended_check(self) -> None:
         """
@@ -159,7 +159,7 @@ class ConfigurationInit(object):
                                                          default=globals.g_utility_script)
                 logger.warning(f"{self.source} utility script '{globals.g_utility_script}' is enabled; " +
                                "use this advanced feature at your own discretion!")
-        #else:
+        # else:
         #    if self._as_path("utility_script", required=False, default=globals.g_utility_script):
         #        logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
 

@@ -179,12 +179,11 @@ class TestConfigurationInit(TestCase):
 
     def test_03a_mode_missing(self):
         """
-        Ensure we detect a configuration file without a required 'mode' definition.
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "master")
         """
         self.mangle(change={"mode": None})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "has no 'mode' definition" in "{0}".format(err.exception.args[0])
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("master", globals.g_mode)
 
     def test_03b_mode_invalid(self):
         """

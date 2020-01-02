@@ -11,15 +11,14 @@ import subprocess
 import sys
 import threading
 import time
-import psutil
 from datetime import datetime, timedelta
 from functools import partial
 from queue import Empty, Queue
 from threading import Event, Thread
-from typing import Iterator, List
+from typing import List
 
-import humanfriendly
 import lockfile
+import psutil
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
@@ -68,7 +67,7 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
                             break
                         results = prom.get(disable_sync_subtasks=False)
                         scanning_results_queue.put(results)
-                    if not exit_set:    
+                    if not exit_set:
                         promise.get(disable_sync_subtasks=False, timeout=1)
                     else:
                         promise.forget()
@@ -270,7 +269,7 @@ def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
 
     :param yara_rule_dir: location of the rules directory
     :param conn: The postgres connection
-    :param scanning_promises_queue: the promises queue
+    :param hash_queue: the queue of hashes to handle
     """
     if globals.g_remote:
         logger.info("Uploading yara rules to workers...")
@@ -292,7 +291,7 @@ def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
 
     md5_hashes = list(filter(_check_hash_against_feed, (row[0].hex() for row in rows)))
     hash_queue.put(md5_hashes)
-    #analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
+    # analyze_binaries_and_queue_chunked(scanning_promises_queue, md5_hashes)
 
     # if gathering and analysis took longer than out utility script interval windo, kick it off
     if globals.g_utility_interval > 0:
@@ -316,6 +315,7 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     return not query.exists()
 
 
+# FIXME: Unused
 def save_results_with_logging(analysis_results: List[AnalysisResult]) -> None:
     """
     Save all analysis results, with extended logging.
@@ -330,6 +330,7 @@ def save_results_with_logging(analysis_results: List[AnalysisResult]) -> None:
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
+
 
 def get_log_file_handles(use_logger) -> List:
     """
@@ -420,7 +421,7 @@ def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: 
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
     :param exit_event: event signaller
-    :param scanning_promises_queue: promises queue
+    :param hash_queue: promises queue
     :param scanning_results_queue: results queue
     :param run_only_once: if True, run once an exit (default False)
     """
@@ -431,7 +432,7 @@ def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: 
 
     logger.debug("Starting analysis thread")
     analysis_worker_thread = Thread(target=analysis_worker,
-                                       args=(exit_event, hash_queue, scanning_results_queue))
+                                    args=(exit_event, hash_queue, scanning_results_queue))
     analysis_worker_thread.start()
 
     logger.debug("Starting results saver thread")
@@ -528,35 +529,44 @@ class DatabaseScanningThread(Thread):
             self.exit_event.set()
 
 
-#
-def start_celery_worker_thread(worker, workerkwargs=None, config_file=None ) -> None:
+def start_celery_worker_thread(worker_obj: worker.worker, workerkwargs: dict = None, config_file: str = None) -> None:
     """
     Start celery worker in a daemon-thread.
 
     TODO: - Aggresive autoscaling config options
+    :param worker_obj: worker object
+    :param workerkwargs: dictionary of arguments
     :param config_file: path to the yara configuration file
     :return:
     """
-    t = Thread(target=launch_celery_worker, kwargs={"worker": worker , "workerkwargs": workerkwargs, "config_file": config_file})
+    t = Thread(target=launch_celery_worker,
+               kwargs={"worker": worker_obj, "workerkwargs": workerkwargs, "config_file": config_file})
     t.daemon = True
     t.start()
 
 
-def launch_celery_worker(worker, workerkwargs=None,config_file: str = None) -> None:
+def launch_celery_worker(worker_obj: worker.worker, workerkwargs=None, config_file: str = None) -> None:
     """
     Launch a celery worker using the imported app context
+    :param worker_obj: worker object
+    :param workerkwargs: dictionary of arguments
     :param config_file: optional path to a configuration file
     """
     logger.debug(f"Celery worker args are  {workerkwargs} ")
     if workerkwargs is None:
-        worker.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker')
+        worker_obj.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker')
     else:
-        worker.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker', **workerkwargs)
+        worker_obj.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker',
+                       **workerkwargs)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
-def terminate_celery_worker(worker=None):
-    """ Attempt to use the pidfile to gracefully terminate celery workers if they exist 
-        if the worker hasn't terminated gracefully after 5 seconds, kill it using the .die() command
+
+def terminate_celery_worker(worker_obj: worker.worker = None):
+    """
+    Attempt to use the pidfile to gracefully terminate celery workers if they exist
+    if the worker hasn't terminated gracefully after 5 seconds, kill it using the .die() command
+
+    :param worker_obj: worker object
     """
     with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
         worker_pid = int(cworkerpidfile.readline())
@@ -564,13 +574,13 @@ def terminate_celery_worker(worker=None):
         children = parent.children(recursive=True)
         for child in children:
             logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
-            os.kill(child.pid,signal.SIGTERM)
+            os.kill(child.pid, signal.SIGTERM)
         logger.debug(f"Sending term sig to celery worker - {worker_pid}")
         os.kill(worker_pid, signal.SIGTERM)
 
-    time.sleep(5.0) 
-    if worker:
-        worker.die()
+    time.sleep(5.0)
+    if worker_obj:
+        worker_obj.die("Worker terminated")
 
 
 ################################################################################
@@ -744,7 +754,7 @@ def main():
             logger.error(f"There were errors executing yara rules: {err}")
         finally:
             exit_event.set()
-            #wait_all_worker_exit()
+            # wait_all_worker_exit()
             terminate_celery_worker(localworker)
 
 

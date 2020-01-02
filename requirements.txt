@@ -14,3 +14,4 @@ requests==2.22.0                # May 16, 2019
 simplejson==3.16.0              # Jun 28, 2018
 urllib3==1.25.7
 yara-python==3.11.0             # Oct 10, 2019
+psutil==5.6.7
