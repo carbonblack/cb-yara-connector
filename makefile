@@ -1,5 +1,5 @@
 SOURCEDIR = ~/rpmbuild/SOURCES
-BUILDDIR = ~/rpmbuild/BUILD
+BUILDDIR = ~/pmbuild/BUILD
 
 clean:
 	rm -rf ${SOURCEDIR}
@@ -12,6 +12,7 @@ rpm:
 	mkdir -p ${BUILDDIR}/src
 	mkdir -p ${BUILDDIR}/init-scripts
 	mkdir -p ${BUILDDIR}/example-conf
+	cp yara-logo.png ${SOURCEDIR}/yara-logo.png
 	cp -rp src/* ${SOURCEDIR}/src
 	cp -rp src/* ${BUILDDIR}/src
 	cp -rp init-scripts/* ${BUILDDIR}/init-scripts

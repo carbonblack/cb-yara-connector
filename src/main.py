@@ -20,9 +20,11 @@ from typing import List
 import lockfile
 import psutil
 import psycopg2
+
 # noinspection PyPackageRequirements
 import yara
 from celery.bin import worker
+
 # noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
@@ -46,7 +48,9 @@ celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.CRITICAL)
 
 
-def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue) -> None:
+def analysis_worker(
+    exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue
+) -> None:
     """
     The promise worker scanning function.
 
@@ -60,7 +64,9 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
                 try:
                     exit_set = False
                     md5_hashes = hash_queue.get()
-                    promise = analyze_binary.chunks([(mh,) for mh in md5_hashes], globals.g_max_hashes).apply_async()
+                    promise = analyze_binary.chunks(
+                        [(mh,) for mh in md5_hashes], globals.g_max_hashes
+                    ).apply_async()
                     for prom in promise.children:
                         exit_set = exit_event.is_set()
                         if exit_set:
@@ -131,7 +137,7 @@ def generate_feed_from_db() -> None:
         "provider_url": "http://plusvic.github.io/yara/",
         "summary": "Scan binaries collected by Carbon Black with Yara.",
         "tech_data": "There are no requirements to share any data with Carbon Black to use this feed.",
-        "icon": "yara-logo.png",
+        "icon": "./yara-logo.png",
         "category": "Connectors",
     }
     feedinfo = CbFeedInfo(**feedinfo)
@@ -170,7 +176,8 @@ def save_results(analysis_results: List[AnalysisResult]) -> None:
     :param analysis_results: list of current analysis results
     """
     logger.debug(
-        f"Saving {len(list(filter(lambda ar: not ar.binary_not_available, analysis_results)))} analysis results...")
+        f"Saving {len(list(filter(lambda ar: not ar.binary_not_available, analysis_results)))} analysis results..."
+    )
     for analysis_result in analysis_results:
         save_result(analysis_result)
 
@@ -234,8 +241,8 @@ def get_binary_file_cursor(conn, start_date_binaries: datetime):
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
     query = (
-            "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
-            + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
+        + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
     )
 
     logger.debug(query)
@@ -248,7 +255,9 @@ def execute_script() -> None:
     """
     Execute an external utility script.
     """
-    logger.info("----- Executing utility script ----------------------------------------")
+    logger.info(
+        "----- Executing utility script ----------------------------------------"
+    )
     prog = subprocess.Popen(
         globals.g_utility_script, shell=True, universal_newlines=True
     )
@@ -259,7 +268,9 @@ def execute_script() -> None:
         logger.error(stderr)
     if prog.returncode:
         logger.warning(f"program returned error code {prog.returncode}")
-    logger.info("---------------------------------------- Utility script completed -----\n")
+    logger.info(
+        "---------------------------------------- Utility script completed -----\n"
+    )
 
 
 def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
@@ -296,7 +307,11 @@ def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
     # if gathering and analysis took longer than out utility script interval windo, kick it off
     if globals.g_utility_interval > 0:
         seconds_since_start = (datetime.now() - utility_window_start).seconds
-        if seconds_since_start >= globals.g_utility_interval * 60 if not globals.g_utility_debug else 1:
+        if (
+            seconds_since_start >= globals.g_utility_interval * 60
+            if not globals.g_utility_debug
+            else 1
+        ):
             execute_script()
 
     logger.info(f"Queued {len(md5_hashes)} new binaries for analysis")
@@ -310,7 +325,9 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     :param md5_hash: md5 hash
     :return: True if the hash needs to be added
     """
-    query = BinaryDetonationResult.select().where(BinaryDetonationResult.md5 == md5_hash)
+    query = BinaryDetonationResult.select().where(
+        BinaryDetonationResult.md5 == md5_hash
+    )
     # logger.debug(f"Hash = {md5_hash} exists = {query.exists()}")
     return not query.exists()
 
@@ -325,8 +342,12 @@ def save_results_with_logging(analysis_results: List[AnalysisResult]) -> None:
     logger.debug(analysis_results)
     if analysis_results:
         for analysis_result in analysis_results:
-            logger.debug((f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                          f" {analysis_result.long_result} {analysis_result.last_error_msg}"))
+            logger.debug(
+                (
+                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
+                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
+                )
+            )
             if analysis_result.last_error_msg:
                 logger.error(analysis_result.last_error_msg)
         save_results(analysis_results)
@@ -385,7 +406,9 @@ def init_local_resources() -> None:
     generate yara_rule_set metadata
     """
     globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-    generate_yara_rule_map_hash(globals.g_yara_rules_dir, return_list=False)  # save to globals
+    generate_yara_rule_map_hash(
+        globals.g_yara_rules_dir, return_list=False
+    )  # save to globals
 
     database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
     db.initialize(database)
@@ -394,11 +417,32 @@ def init_local_resources() -> None:
     generate_feed_from_db()
 
 
-def wait_all_worker_exit() -> None:
+def wait_all_worker_exit_threads(threads, timeout=None):
+    """ return when all of the given threads 
+         have exited (sans daemon threads) """
+    living_threads_count = 2
+    start = time.time()
+    while living_threads_count > 1:
+        living_threads_count = len(
+            list(
+                filter(
+                    lambda t: t.isAlive() and not getattr(t, "daemon", True), threads
+                )
+            )
+        )
+        time.sleep(0.1)
+        now = time.time()
+        elapsed = now - start
+        if timeout and elapsed >= timeout:
+            return
+
+
+def wait_all_worker_exit(timeout=None) -> None:
     """
     Await the exit of our worker threads.
     """
     threadcount = 2
+    start = time.time()
     while threadcount > 1:
         threads = list(
             filter(
@@ -409,15 +453,28 @@ def wait_all_worker_exit() -> None:
             )
         )
         threadcount = len(threads)
-        logger.debug(f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)...")
+        logger.debug(
+            f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)..."
+        )
         logger.debug(f"Live threads (excluding daemons): {threads}")
         time.sleep(0.1)
+        timenow = time.time()
+        elapsed = timenow - start
+        if timeout and elapsed >= timeout:
+            logger.debug(
+                f"Main thread exiting after workers failed to timetout in {timeout}"
+            )
+            return
 
     logger.debug("Main thread going to exit...")
 
 
-def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue,
-                  run_only_once=False) -> None:
+def start_workers(
+    exit_event: Event,
+    hash_queue: Queue,
+    scanning_results_queue: Queue,
+    run_only_once=False,
+) -> None:
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
     :param exit_event: event signaller
@@ -426,18 +483,28 @@ def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: 
     :param run_only_once: if True, run once an exit (default False)
     """
     logger.debug("Starting perf thread")
-    perf_thread = DatabaseScanningThread(globals.g_scanning_interval, hash_queue, scanning_results_queue,
-                                         exit_event, run_only_once)
+    perf_thread = DatabaseScanningThread(
+        globals.g_scanning_interval,
+        hash_queue,
+        scanning_results_queue,
+        exit_event,
+        run_only_once,
+    )
     perf_thread.start()
 
     logger.debug("Starting analysis thread")
-    analysis_worker_thread = Thread(target=analysis_worker,
-                                    args=(exit_event, hash_queue, scanning_results_queue))
+    analysis_worker_thread = Thread(
+        target=analysis_worker, args=(exit_event, hash_queue, scanning_results_queue)
+    )
     analysis_worker_thread.start()
 
     logger.debug("Starting results saver thread")
-    results_worker_thread = Thread(target=results_worker_chunked, args=(exit_event, scanning_results_queue))
+    results_worker_thread = Thread(
+        target=results_worker_chunked, args=(exit_event, scanning_results_queue)
+    )
     results_worker_thread.start()
+
+    return [perf_thread, results_worker_thread, analysis_worker_thread]
 
 
 class DatabaseScanningThread(Thread):
@@ -447,8 +514,16 @@ class DatabaseScanningThread(Thread):
     by the signal handler
     """
 
-    def __init__(self, interval: int, hash_queue: Queue, scanning_results_queue: Queue, exit_event: Event,
-                 run_only_once: bool, *args, **kwargs):
+    def __init__(
+        self,
+        interval: int,
+        hash_queue: Queue,
+        scanning_results_queue: Queue,
+        exit_event: Event,
+        run_only_once: bool,
+        *args,
+        **kwargs,
+    ):
         """
         Create a new database scanning object.
 
@@ -488,7 +563,6 @@ class DatabaseScanningThread(Thread):
         """
         Continually scan the database until instructed to quit.
         """
-        # TODO: DRIFT
         self.do_db_scan()
         while not self.exit_event.is_set():
             self.exit_event.wait(timeout=self._interval)
@@ -501,14 +575,16 @@ class DatabaseScanningThread(Thread):
 
     def do_db_scan(self):
         """
-        Do the actual database scan, trappig ang problems.
+        Do the actual database scan, traping any problems.
         """
         logger.debug("START database sweep")
         try:
             perform(globals.g_yara_rules_dir, self._conn, self._hash_queue)
 
         except Exception as err:
-            logger.exception(f"Something went wrong sweeping the CbR module store: {err} ")
+            logger.exception(
+                f"Something went wrong sweeping the CbR module store: {err} "
+            )
 
     def run(self):
         """
@@ -530,6 +606,7 @@ class DatabaseScanningThread(Thread):
 
 
 def start_celery_worker_thread(worker_obj: worker.worker, workerkwargs: dict = None, config_file: str = None) -> None:
+
     """
     Start celery worker in a daemon-thread.
 
@@ -537,13 +614,20 @@ def start_celery_worker_thread(worker_obj: worker.worker, workerkwargs: dict = N
     :param worker_obj: worker object
     :param workerkwargs: dictionary of arguments
     :param config_file: path to the yara configuration file
-    :return:
+    :return the thread, started:
     """
-    t = Thread(target=launch_celery_worker,
-               kwargs={"worker": worker_obj, "workerkwargs": workerkwargs, "config_file": config_file})
+    t = Thread(
+        target=launch_celery_worker,
+        kwargs={
+            "worker": worker,
+            "workerkwargs": workerkwargs,
+            "config_file": config_file,
+        },
+    )
     t.daemon = True
     t.start()
 
+    return t
 
 def launch_celery_worker(worker_obj: worker.worker, workerkwargs=None, config_file: str = None) -> None:
     """
@@ -653,7 +737,9 @@ def main():
     if args.log_file:
         use_log_file = os.path.abspath(os.path.expanduser(args.log_file))
         formatter = logging.Formatter(logging_format)
-        handler = logging.handlers.RotatingFileHandler(use_log_file, maxBytes=10 * 1000000, backupCount=10)
+        handler = logging.handlers.RotatingFileHandler(
+            use_log_file, maxBytes=10 * 1000000, backupCount=10
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
@@ -665,6 +751,7 @@ def main():
         sys.exit(1)
 
     if args.validate_yara_rules:
+        """ RULE VALIDATION MODE OF OPERATION """
         logger.info(f"Validating yara rules in directory: {globals.g_yara_rules_dir}")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         try:
@@ -673,7 +760,8 @@ def main():
         except Exception as err:
             logger.error(f"There were errors compiling yara rules: {err}")
             sys.exit(2)
-    else:  # Doing a real run
+    else:  
+        # Doing a real run
         # Exit condition and queues for doing work
         exit_event = Event()
         hash_queue = Queue()
@@ -681,11 +769,24 @@ def main():
         # Lock file so this process is a singleton
         lock_file = lockfile.FileLock(args.lock_file)
         localworker = None
-        workerkwargs = json.loads(globals.g_celeryworkerkwargs) if globals.g_celeryworkerkwargs is not None else None
+        workerkwargs = (
+            json.loads(globals.g_celeryworkerkwargs)
+            if globals.g_celeryworkerkwargs is not None
+            else None
+        )
         if workerkwargs and len(workerkwargs) == 0:
             workerkwargs = None
 
         try:
+            """
+                There are four principle modes of operation - 
+                1) master and worker
+                2) remote and local
+                Support running as 1) just the binary-getting
+                                     2) binary-getting and analysis locally 
+                                      3) binary-getting and analysis to happen on some worker on the same redis/amqp/backend broker 
+                                       4) Worker (either local to to the cbr machine or remote)  
+            """
             if not args.run_once:  # Running as a deamon
                 # Get working dir setting
                 working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
@@ -695,8 +796,11 @@ def main():
                 files_preserve.extend([args.lock_file, args.log_file, args.output_file])
 
                 # defaults to piping to /dev/null
-                deamon_kwargs = {"working_directory": working_dir, "pidfile": lock_file,
-                                 "files_preserve": files_preserve}
+                deamon_kwargs = {
+                    "working_directory": working_dir,
+                    "pidfile": lock_file,
+                    "files_preserve": files_preserve,
+                }
 
                 # If in debug mode, make sure stdout and stderr don't go to /dev/null
                 if args.debug:
@@ -706,11 +810,15 @@ def main():
                 # Operating mode - are we the master a worker?
                 run_as_master = globals.g_mode == "master"
 
-                # Signal handler partial function
+                # Signal handler
                 sig_handler = partial(handle_sig, exit_event)
-                context.signal_map = {signal.SIGTERM: sig_handler, signal.SIGQUIT: sig_handler}
+                context.signal_map = {
+                    signal.SIGTERM: sig_handler,
+                    signal.SIGQUIT: sig_handler,
+                }
 
                 # Make sure we close the deamon context at the end
+                threads = []
                 with context:
                     # only connect to cbr if we're the master
                     if run_as_master:
@@ -718,43 +826,62 @@ def main():
                         init_local_resources()
 
                         # start working threads
-                        start_workers(exit_event, hash_queue, scanning_results_queue)
+                        threads = start_workers(
+                            exit_event, hash_queue, scanning_results_queue
+                        )
 
                         # start local celeryD worker if working mode is local
                         if not globals.g_remote:
                             localworker = worker.worker(app=app)
-                            start_celery_worker_thread(localworker, workerkwargs, args.config_file)
+                            threads.append(
+                                start_celery_worker_thread(
+                                    localworker, workerkwargs, args.config_file
+                                )
+                            )
                     else:
                         # otherwise, we must start a celeryD worker since we are not the master
                         localworker = worker.worker(app=app)
-                        start_celery_worker_thread(localworker, workerkwargs, args.config_file)
+                        threads.append(
+                            start_celery_worker_thread(
+                                localworker, workerkwargs, args.config_file
+                            )
+                        )
 
                     # run until the service/daemon gets a quitting sig
-                    run_to_exit_signal(exit_event)
-                    wait_all_worker_exit()
-                    terminate_celery_worker(localworker)
-                    logger.info("Yara connector shutdown OK")
-            else:  # Just do one batch
-                # init local resources
+                    try:
+                        run_to_exit_signal(exit_event)
+                    finally:
+                        try:
+                            wait_all_worker_exit_threads(threads, timeout=10.0)
+                        finally:
+                            terminate_celery_worker(localworker)
+                            logger.info("Yara connector shutdown")
+
+            else:  # | | | BATCH MODE | | |
                 init_local_resources()
 
                 # start necessary worker threads
-                start_workers(exit_event, hash_queue, scanning_results_queue, run_only_once=True)
+                threads = start_workers(
+                    exit_event, hash_queue, scanning_results_queue, run_only_once=True
+                )
 
                 # Start a celery worker if we need one
                 if not globals.g_remote:
                     localworker = worker.worker(app=app)
-                    start_celery_worker_thread(localworker, workerkwargs, args.config_file)
+                    threads.append(
+                        start_celery_worker_thread(
+                            localworker, workerkwargs, args.config_file
+                        )
+                    )
                 run_to_exit_signal(exit_event)
-                wait_all_worker_exit()
-                terminate_celery_worker(localworker)
+                wait_all_worker_exit_threads(threads,timeout=10.0)
+                # terminate_celery_worker(localworker)
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
         except Exception as err:
             logger.error(f"There were errors executing yara rules: {err}")
         finally:
             exit_event.set()
-            # wait_all_worker_exit()
             terminate_celery_worker(localworker)
 
 

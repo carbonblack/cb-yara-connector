@@ -1,0 +1,1 @@
+StandardErr=/var/log/cb/integrations/cb-yara-connector/yaraconnector.log
