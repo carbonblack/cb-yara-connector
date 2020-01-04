@@ -23,7 +23,7 @@ import psycopg2
 
 # noinspection PyPackageRequirements
 import yara
-from celery.bin import worker
+from celery.bin.worker import worker
 
 # noinspection PyPackageRequirements
 from daemon import daemon
@@ -605,7 +605,7 @@ class DatabaseScanningThread(Thread):
             self.exit_event.set()
 
 
-def start_celery_worker_thread(worker_obj: worker.worker, workerkwargs: dict = None, config_file: str = None) -> None:
+def start_celery_worker_thread(worker_obj , workerkwargs: dict = None, config_file: str = None) -> None:
 
     """
     Start celery worker in a daemon-thread.
@@ -619,7 +619,7 @@ def start_celery_worker_thread(worker_obj: worker.worker, workerkwargs: dict = N
     t = Thread(
         target=launch_celery_worker,
         kwargs={
-            "worker": worker,
+            "worker_obj": worker_obj,
             "workerkwargs": workerkwargs,
             "config_file": config_file,
         },
@@ -629,7 +629,7 @@ def start_celery_worker_thread(worker_obj: worker.worker, workerkwargs: dict = N
 
     return t
 
-def launch_celery_worker(worker_obj: worker.worker, workerkwargs=None, config_file: str = None) -> None:
+def launch_celery_worker(worker_obj , workerkwargs=None, config_file: str = None) -> None:
     """
     Launch a celery worker using the imported app context
     :param worker_obj: worker object
@@ -645,7 +645,7 @@ def launch_celery_worker(worker_obj: worker.worker, workerkwargs=None, config_fi
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
 
-def terminate_celery_worker(worker_obj: worker.worker = None):
+def terminate_celery_worker(worker_obj: worker = None):
     """
     Attempt to use the pidfile to gracefully terminate celery workers if they exist
     if the worker hasn't terminated gracefully after 5 seconds, kill it using the .die() command
@@ -653,14 +653,18 @@ def terminate_celery_worker(worker_obj: worker.worker = None):
     :param worker_obj: worker object
     """
     with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
-        worker_pid = int(cworkerpidfile.readline())
-        parent = psutil.Process(worker_pid)
-        children = parent.children(recursive=True)
-        for child in children:
-            logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
-            os.kill(child.pid, signal.SIGTERM)
-        logger.debug(f"Sending term sig to celery worker - {worker_pid}")
-        os.kill(worker_pid, signal.SIGTERM)
+        worker_pid_str = cworkerpidfile.readline()
+        worker_pid = int(worker_pid_str) if len(worker_pid_str.strip()) > 0 else None
+        if worker_pid:
+            parent = psutil.Process(worker_pid) if worker_pid else psutil.Process()
+            children = parent.children(recursive=True)
+            for child in children:
+                logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
+                os.kill(child.pid, signal.SIGTERM)
+            logger.debug(f"Sending term sig to celery worker - {worker_pid}")
+            os.kill(worker_pid, signal.SIGTERM)
+        else:
+            logger.debug("Didn't find a worker-pidfile to terminate on exit...")
 
     time.sleep(5.0)
     if worker_obj:
@@ -705,7 +709,7 @@ def handle_arguments():
     )
     # Controls batch vs continous mode , defaults to batch processing
     parser.add_argument(
-        "--run-once", default=True, help="Run as batch mode or no", required=False
+        "--run-forever", default=False, help="Run as batch mode or no", required=False
     )
 
     # Validates the rules
@@ -787,7 +791,8 @@ def main():
                                       3) binary-getting and analysis to happen on some worker on the same redis/amqp/backend broker 
                                        4) Worker (either local to to the cbr machine or remote)  
             """
-            if not args.run_once:  # Running as a deamon
+            if args.run_forever:  # Running as a deamon
+                logger.debug("RUNNING AS DEMON")
                 # Get working dir setting
                 working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
 
@@ -832,7 +837,7 @@ def main():
 
                         # start local celeryD worker if working mode is local
                         if not globals.g_remote:
-                            localworker = worker.worker(app=app)
+                            localworker = worker(app=app)
                             threads.append(
                                 start_celery_worker_thread(
                                     localworker, workerkwargs, args.config_file
@@ -840,7 +845,7 @@ def main():
                             )
                     else:
                         # otherwise, we must start a celeryD worker since we are not the master
-                        localworker = worker.worker(app=app)
+                        localworker = worker(app=app)
                         threads.append(
                             start_celery_worker_thread(
                                 localworker, workerkwargs, args.config_file
@@ -858,6 +863,7 @@ def main():
                             logger.info("Yara connector shutdown")
 
             else:  # | | | BATCH MODE | | |
+                logger.debug("BATCH MODE")
                 init_local_resources()
 
                 # start necessary worker threads
@@ -867,7 +873,7 @@ def main():
 
                 # Start a celery worker if we need one
                 if not globals.g_remote:
-                    localworker = worker.worker(app=app)
+                    localworker = worker(app=app)
                     threads.append(
                         start_celery_worker_thread(
                             localworker, workerkwargs, args.config_file
