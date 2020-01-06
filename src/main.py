@@ -31,6 +31,7 @@ from peewee import SqliteDatabase
 import globals
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
+from celery.exceptions import WorkerLostError
 from celery_app import app
 from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
@@ -79,6 +80,10 @@ def analysis_worker(
                     hash_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
+                except WorkerLostError as we:
+                    logger.debug(f"Lost connection to remote worker..exiting")
+                    exit_event.set()
+                    break
                 except Exception as err:
                     logger.debug(f"Exception in wait: {err}")
                     exit_event.wait(0.1)
@@ -648,7 +653,7 @@ def terminate_celery_worker(worker_obj: worker = None):
 
     :param worker_obj: worker object
     """
-    """with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
+    with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
         worker_pid_str = cworkerpidfile.readline()
         worker_pid = int(worker_pid_str) if len(worker_pid_str.strip()) > 0 else None
         if worker_pid:
@@ -662,7 +667,7 @@ def terminate_celery_worker(worker_obj: worker = None):
         else:
             logger.debug("Didn't find a worker-pidfile to terminate on exit...")
 
-    time.sleep(5.0)"""
+    time.sleep(1.0)
     if worker_obj:
         worker_obj.die("Worker terminated")
 
