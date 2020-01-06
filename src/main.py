@@ -20,11 +20,9 @@ from typing import List
 import lockfile
 import psutil
 import psycopg2
-
 # noinspection PyPackageRequirements
 import yara
 from celery.bin.worker import worker
-
 # noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
@@ -49,7 +47,7 @@ celery_logger.setLevel(logging.CRITICAL)
 
 
 def analysis_worker(
-    exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue
+        exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue
 ) -> None:
     """
     The promise worker scanning function.
@@ -241,8 +239,8 @@ def get_binary_file_cursor(conn, start_date_binaries: datetime):
 
     # noinspection SqlDialectInspection,SqlNoDataSourceInspection
     query = (
-        "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
-        + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
+            "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
+            + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
     )
 
     logger.debug(query)
@@ -308,9 +306,9 @@ def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
     if globals.g_utility_interval > 0:
         seconds_since_start = (datetime.now() - utility_window_start).seconds
         if (
-            seconds_since_start >= globals.g_utility_interval * 60
-            if not globals.g_utility_debug
-            else 1
+                seconds_since_start >= globals.g_utility_interval * 60
+                if not globals.g_utility_debug
+                else 1
         ):
             execute_script()
 
@@ -437,6 +435,7 @@ def wait_all_worker_exit_threads(threads, timeout=None):
             return
 
 
+# FIXME: Unused
 def wait_all_worker_exit(timeout=None) -> None:
     """
     Await the exit of our worker threads.
@@ -469,12 +468,8 @@ def wait_all_worker_exit(timeout=None) -> None:
     logger.debug("Main thread going to exit...")
 
 
-def start_workers(
-    exit_event: Event,
-    hash_queue: Queue,
-    scanning_results_queue: Queue,
-    run_only_once=False,
-) -> None:
+def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue,
+                  run_only_once=False) -> List[Thread]:
     """
     Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
     :param exit_event: event signaller
@@ -515,14 +510,14 @@ class DatabaseScanningThread(Thread):
     """
 
     def __init__(
-        self,
-        interval: int,
-        hash_queue: Queue,
-        scanning_results_queue: Queue,
-        exit_event: Event,
-        run_only_once: bool,
-        *args,
-        **kwargs,
+            self,
+            interval: int,
+            hash_queue: Queue,
+            scanning_results_queue: Queue,
+            exit_event: Event,
+            run_only_once: bool,
+            *args,
+            **kwargs,
     ):
         """
         Create a new database scanning object.
@@ -605,8 +600,7 @@ class DatabaseScanningThread(Thread):
             self.exit_event.set()
 
 
-def start_celery_worker_thread(worker_obj , workerkwargs: dict = None, config_file: str = None) -> None:
-
+def start_celery_worker_thread(worker_obj, workerkwargs: dict = None, config_file: str = None) -> Thread:
     """
     Start celery worker in a daemon-thread.
 
@@ -629,7 +623,8 @@ def start_celery_worker_thread(worker_obj , workerkwargs: dict = None, config_fi
 
     return t
 
-def launch_celery_worker(worker_obj , workerkwargs=None, config_file: str = None) -> None:
+
+def launch_celery_worker(worker_obj, workerkwargs=None, config_file: str = None) -> None:
     """
     Launch a celery worker using the imported app context
     :param worker_obj: worker object
@@ -764,7 +759,7 @@ def main():
         except Exception as err:
             logger.error(f"There were errors compiling yara rules: {err}")
             sys.exit(2)
-    else:  
+    else:
         # Doing a real run
         # Exit condition and queues for doing work
         exit_event = Event()
@@ -783,13 +778,14 @@ def main():
 
         try:
             """
-                There are four principle modes of operation - 
+            There are four principle modes of operation - 
                 1) master and worker
                 2) remote and local
                 Support running as 1) just the binary-getting
-                                     2) binary-getting and analysis locally 
-                                      3) binary-getting and analysis to happen on some worker on the same redis/amqp/backend broker 
-                                       4) Worker (either local to to the cbr machine or remote)  
+                                   2) binary-getting and analysis locally 
+                                   3) binary-getting and analysis to happen on some worker on the same 
+                                      redis/amqp/backend broker 
+                                   4) Worker (either local to to the cbr machine or remote)  
             """
             if args.run_forever:  # Running as a deamon
                 logger.debug("RUNNING AS DEMON")
@@ -880,7 +876,7 @@ def main():
                         )
                     )
                 run_to_exit_signal(exit_event)
-                wait_all_worker_exit_threads(threads,timeout=10.0)
+                wait_all_worker_exit_threads(threads, timeout=10.0)
                 # terminate_celery_worker(localworker)
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
