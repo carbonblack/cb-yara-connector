@@ -20,17 +20,20 @@ to the master node and to any worker(s).
 
 # Dev install #
 
+Use git to retrieve the project, create a new virtual environment using python3.6+ and use pip to install the requirements:
+
 `git clone https://github.com/carbonblack/cb-yara-connector`
-create a virtual environment with python3.6+ and install the requirements from the requirements.txt file
 `pip3 install -r requirements.txt`
 
-There is a docker file provided that setups a basic dev/build envirionment for the connector.
-	
 ## Create Yara Agent Config
 
-The installation process will create a sample configuration file 
+The connector is configured by a .ini formatted configuration file at `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`.
+
+The installation process will create a sample configuration file: 
 `/etc/cb/integrations/cb-yara-connector/yaraconnector.sample.conf`
-use this and create the real configuration file:
+
+Copy the sample configuration file, to edit to produce a working configuration for the connector:
+
 `cp /etc/cb/integrations/cb-yara-connector/yaraconnector.sample.conf /etc/cb/integrations/cb-yara-connector/yaraconnector.conf`
 
 You must configure the postgres connection information for your CBR server , and the rest API location and credentails as well. 
@@ -90,97 +93,6 @@ The yara connector is boudn by libyara.so's limitations for matched strings, num
 `systemctl start cb-yara-connector` will up the service using systemD. 
 `systemctl stop cb-yara-connector` will gracefully stop the yara-connector.
 `systemctl status -l cb-yara-connector` will display logging information. 
-
-These commands are identical for both the master and any remote workers.
-
-##### Command-line Options
-```text
-usage: main.py [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
-               [--output-file OUTPUT_FILE] [--validate-yara-rules] [--debug]
-
-Yara Agent for Yara Connector
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --config-file CONFIG_FILE
-                        Location of the config file
-  --log-file LOG_FILE   Log file output (defaults to `local` folder)
-  --output-file OUTPUT_FILE
-                        output feed file (defaults to `local` folder)
-  --validate-yara-rules
-                        ONLY validate yara rules in a specified directory
-  --debug               Provide additional logging
-
-```
-###### --config-file
-Provides the path of the configuration file to be used _**(REQUIRED)**_
-
-###### --log-file
-Provides the path of the yara log file.  If not supplied, defaults to `local/yara_agent.log`
-within the current yara package.
-
-###### --output-file
-Provides the path containing the feed description file.  If not supplied, defaults to
-`/local/yara_feed.json` within the current yara package.
-
-###### --validate-yara-rules
-If supplied, yara rules will be validated and the script will exit.
-
-#### Example Cron Entry
-_[TBD]_
-
-# Remote Worker Installation (Centos/RHEL 7)
-
-* Make sure openssl-devel is installed
-
-    ```
-    sudo yum install openssl-devel
-    ```
-
-* Install Git and GCC
-
-	```
-	sudo yum install git
-	sudo yum install gcc
-	```
-
-* Install Python 3.6
-
-	```
-	sudo yum install epel-release
-	sudo yum install python36
-	sudo yum install python36-devel
-	```
-	
-* Install Redis
-	
-	```
-	sudo yum install redis
-	sudo systemctl start redis
-	sudo systemctl enable redis
-	```
-	
-	
-* Install Supervisord
-
-	```
-	sudo yum install supervisor
-	```
-	
-* Install Yara Worker
-
-	```
-	git clone https://github.com/carbonblack/cb-yara-connector.git
-	cd cb-yara-connector
-	git checkout yara_version2
-	python3.6 -m venv venv
-	source ./venv/bin/activate
-	pip install -r requirements.txt
-	deactivate
-	```
-	
-	
-* Create Yara Worker Config File `yara_worker.conf`
 
 #### Example Yara Connector Master configuration
 
@@ -270,3 +182,41 @@ The dockerfile in the top-level of the repo contains a centos7 environment for r
 the connector. 
 
 The provided script `docker-build-rpm.sh` will use docker to build the project, and place the RPM(s) in $PWD/RPMS. 
+
+
+
+##### Command-line Options
+```text
+usage: main.py [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
+               [--output-file OUTPUT_FILE] [--validate-yara-rules] [--debug]
+
+Yara Agent for Yara Connector
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --config-file CONFIG_FILE
+                        Location of the config file
+  --log-file LOG_FILE   Log file output (defaults to `local` folder)
+  --output-file OUTPUT_FILE
+                        output feed file (defaults to `local` folder)
+  --validate-yara-rules
+                        ONLY validate yara rules in a specified directory
+  --debug               Provide additional logging
+
+```
+###### --config-file
+Provides the path of the configuration file to be used _**(REQUIRED)**_
+
+###### --log-file
+Provides the path of the yara log file.  If not supplied, defaults to `local/yara_agent.log`
+within the current yara package.
+
+###### --output-file
+Provides the path containing the feed description file.  If not supplied, defaults to
+`/local/yara_feed.json` within the current yara package.
+
+###### --validate-yara-rules
+If supplied, yara rules will be validated and the script will exit.
+
+#### Example Cron Entry
+_[TBD]_
