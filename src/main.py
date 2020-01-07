@@ -555,15 +555,18 @@ class DatabaseScanningThread(Thread):
         """
         Perform a database scan one, then exit.
         """
+        logger.debug("Scanning once before exit (batch)")
         self.do_db_scan()
         self._hash_queue.join()
         self._scanning_results_queue.join()
         self.exit_event.set()
+        logger.debug("Batch done!")
 
     def scan_until_exit(self) -> None:
         """
         Continually scan the database until instructed to quit.
         """
+        logger.debug("Scanning until exit...(continuous)")
         self.do_db_scan()
         while not self.exit_event.is_set():
             self.exit_event.wait(timeout=self._interval)

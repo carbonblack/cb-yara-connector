@@ -30,15 +30,15 @@ Use git to retrieve the project, create a new virtual environment using python3.
 The connector is configured by a .ini formatted configuration file at `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`.
 
 The installation process will create a sample configuration file: 
-`/etc/cb/integrations/cb-yara-connector/yaraconnector.sample.conf`
+`/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample`
 
 Copy the sample configuration file, to edit to produce a working configuration for the connector:
 
-`cp /etc/cb/integrations/cb-yara-connector/yaraconnector.sample.conf /etc/cb/integrations/cb-yara-connector/yaraconnector.conf`
+`cp /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample /etc/cb/integrations/cb-yara-connector/yaraconnector.conf`
 
-You must configure the postgres connection information for your CBR server , and the rest API location and credentails as well. 
+The daemon will attempt to load the postgres credentails from disk, if available - optionally, configure the postgres connection information for your CBR server , and the rest API location and credentails as well using the  `postgres_xxxx` keys in the configuration file.
 
-~~~
+~~~ini
 ;
 ; Cb Response postgres Database settings
 ;
@@ -49,10 +49,7 @@ postgres_db=cb
 postgres_port=5002
 ~~~
 
-The postgres credentails in `/etc/cb/cb.conf`, the port, host, db, user should be as above.
-REST API Credentials are available in the UI of your Carbon Black Response Server.
-
-~~~
+~~~ini
 ;
 ; ONLY for worker_type of local
 ; Cb Response Server settings for scanning locally.
@@ -66,21 +63,11 @@ cb_server_token=<API TOKEN GOES HERE>
 You must configure `broker=` which sets the broker and results_backend for celery. You will set this appropriately as per the celery documentation - here (https://docs.celeryproject.org/en/latest/getting-started/brokers/).
 
 
-The yarar-connector RPM contains a service that can be run in a few distinct configurations:
-1) A local task master and remote worker(s) (RECOMMENDED)
+The yara-connector RPM contains a service that is primarily intended to serve as a distributed system, with a master serving work to remote worker machine(s) for analysis and compiling a threat intelligence feed for Carbon Black Response EDR.
 
-This is the prefered mode of operation, using a celery broker to distribute analysis-tasks to a remote worker from a local task-master that keeps track of binaries resident in the configured server.
+There are two operating modes to support the two roles: `mode=master` and `mode=worker`.
 
-Install the connector on the cbr server - as the task-master and specify that the worker will be remote:
-
-Read through the configuration file, specify the mode of operation,  the `mode=master` and `worker_type=remote`. This represents the configuration for the task master, which will distribute work over the configured broker/backend to each configured worker.
-
-On the worker(s), install the rpm again, and in the configuration file specify the same CBR server information, but 
-configure `mode=slave` and `worker_type=local`. This configuration file doesn't need postgres credentials, but does require rest API access to the Carbon Black Response server in question.
-
-2) A local task master and local celery worker (NOTRECOMMENDED)
-Read through the configuration file, specify the mode of operation as `mode=master` and `worker_type=local`.
-A single daemon will scan binaries, local to the cbr instance. This configuration requires both the postgres , and REST API credentials from Carbon Black Response, in order to function correctly.
+Install the connector on the cbr server, and config it with the master mode - configure postgres credentials, and a directory of monitored yara rules. In worker mode, configure REST API credentials. Both modes require a broker for celery communications.
 
 ## Input your yara rules
 
@@ -182,7 +169,6 @@ The dockerfile in the top-level of the repo contains a centos7 environment for r
 the connector. 
 
 The provided script `docker-build-rpm.sh` will use docker to build the project, and place the RPM(s) in $PWD/RPMS. 
-
 
 
 ##### Command-line Options
