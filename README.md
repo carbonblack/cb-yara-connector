@@ -4,7 +4,7 @@ The Yara agent has two parts - a master and a potentially remote worker.
 
 The task-master service must be installed on the same system as Cb Response.
 
-You can download the latest RPM from the github releases page, here(https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-0b4e650fa85727815eb2/python-cb-threatconnect-connector-2.1.0-1.x86_64.rpm).
+You can download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-0b4e650fa85727815eb2/python-cb-threatconnect-connector-2.1.0-1.x86_64.rpm).
 
 `yum install python-cb-yara-connector-<Latest>.rpm` will install the connector from the downloaded RPM.
 
