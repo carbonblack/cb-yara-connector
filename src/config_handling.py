@@ -50,7 +50,7 @@ class ConfigurationInit(object):
     Class to deal with all configuration loading and validation.
     """
 
-    def __init__(self, config_file: str, output_file: str = None) -> None:
+    def __init__(self, config_file: str, output_file: str = None, **kwargs) -> None:
         """
         Validate the config file.
         :param config_file: The config file to validate
@@ -74,6 +74,10 @@ class ConfigurationInit(object):
         if not config.has_section("general"):
             raise CbInvalidConfig(f"{self.source} does not have a 'general' section")
         self.the_config = config["general"]
+
+        # if testing core methods, get out now
+        if "TESTING_ONLY" in kwargs:
+            return
 
         # warn about unknown parameters -- typos?
         extras = []
@@ -108,7 +112,7 @@ class ConfigurationInit(object):
         else:
             globals.g_remote = True
 
-        globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, exists=True, is_dir=True)
+        globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
 
         # local/remote configuration data
         cb_req = not (globals.g_mode == "master" and globals.g_remote)
@@ -155,19 +159,19 @@ class ConfigurationInit(object):
                 globals.g_utility_interval = 0
                 globals.g_utility_script = ""
             else:
-                globals.g_utility_script = self._as_path("utility_script", required=True, is_dir=False,
+                globals.g_utility_script = self._as_path("utility_script", required=True, expect_dir=False,
                                                          default=globals.g_utility_script)
                 logger.warning(f"{self.source} utility script '{globals.g_utility_script}' is enabled; " +
                                "use this advanced feature at your own discretion!")
         else:
-            if self._as_path("utility_script", required=False, default=globals.g_utility_script):
+            if self._as_str("utility_script", required=False, default=globals.g_utility_script) != "":
                 logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
                 globals.g_utility_script = ""
 
         # developer use only
         globals.g_utility_debug = self._as_bool("utility_debug", default=False)
 
-        globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, is_dir=True,
+        globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, expect_dir=True,
                                                     default=globals.g_feed_database_dir, create_if_needed=True)
 
         globals.g_scanning_interval = self._as_int('database_scanning_interval', default=globals.g_scanning_interval,
@@ -203,7 +207,7 @@ class ConfigurationInit(object):
 
         return value
 
-    def _as_path(self, param: str, required: bool = False, exists: bool = True, is_dir: bool = False,
+    def _as_path(self, param: str, required: bool = False, check_exists: bool = True, expect_dir: bool = False,
                  default: str = "", create_if_needed: bool = False) -> str:
         """
         Get a string parameter from the configuration and treat it as a path, performing normalization
@@ -212,35 +216,37 @@ class ConfigurationInit(object):
 
         :param param: Name of the configuration parameter
         :param required: True if this must be specified in the configuration
-        :param exists: if True and required, check for existance as well
-        :param is_dir: if exists and True, source must be a directory
         :param default: If not required, default value if not supplied
-        :param create_if_needed: if True, create any directory if it does not exist
-        :return: the integer value, or None if not required and no exception
+        :param check_exists: if True, check for existance
+        :param expect_dir: if exists and True, target must be a directory
+        :param create_if_needed: if True and we expect a directory, create if it does not exist
+        :return: the path value, or empty string if not required and no exception
         :raises CbInvalidConfig:
         """
-        value = self._as_str(param, required, default=default)
-        value = os.path.abspath(os.path.expanduser(value))
-        if exists and required:
-            if not os.path.exists(value):
-                if create_if_needed and is_dir:
-                    try:
-                        os.makedirs(value)
-                    except Exception as err:
-                        raise CbInvalidConfig(f"{self.source} unable to create '{value}' for '{param}': {err}")
-                else:
-                    raise CbInvalidConfig(f"{self.source} specified path parameter '{param}' ({value}) does not exist")
-            if is_dir:
-                if not os.path.isdir(value):
-                    raise CbInvalidConfig(f"{self.source} specified path '{param}' ({value}) is not a directory")
-            else:
-                if os.path.isdir(value):
-                    raise CbInvalidConfig(f"{self.source} specified path '{param}' ({value}) is a directory")
+        value = self._as_str(param, required=required, default=default)
 
-        return value
+        if value == "":  # not required and not specified
+            return value
+        else:
+            value = os.path.abspath(os.path.expanduser(value))
+            if check_exists:
+                if os.path.exists(value):  # path exists
+                    if expect_dir and not os.path.isdir(value):
+                        raise CbInvalidConfig(f"{self.source} specified path '{param}' ({value}) is not a directory")
+                    elif not expect_dir and os.path.isdir(value):
+                        raise CbInvalidConfig(f"{self.source} specified path '{param}' ({value}) is a directory")
+                else:  # does not exist
+                    if create_if_needed and expect_dir:
+                        try:
+                            os.makedirs(value)
+                        except Exception as err:
+                            raise CbInvalidConfig(f"{self.source} unable to create '{value}' for '{param}': {err}")
+                    else:
+                        raise CbInvalidConfig(
+                            f"{self.source} specified path parameter '{param}' ({value}) does not exist")
+            return value
 
-    def _as_int(self, param: str, required: bool = False, default: int = -1, min_value: int = None,
-                ) -> int:
+    def _as_int(self, param: str, required: bool = False, default: int = -1, min_value: int = None) -> int:
         """
         Get an integer configuration parameter from the configuration.  A parameter that cannot be converted
         to an int will return a ValueError.
@@ -253,23 +259,25 @@ class ConfigurationInit(object):
         :raises CbInvalidConfig:
         :raises ValueError:
         """
+        self._as_str(param, required=required)  # required check
         value = int(self._as_str(param, required=required, default=str(default)))
         if min_value is not None and value < min_value:
             raise CbInvalidConfig(f"{self.source} '{param}' must be greater or equal to {min_value}")
         return value
 
     # noinspection PySameParameterValue
-    def _as_bool(self, param: str, required: bool = False, default: bool = None) -> Optional[bool]:
+    def _as_bool(self, param: str, required: bool = False, default: bool = False) -> Optional[bool]:
         """
         Get a boolean configuration parameter from the configuration.  A parameter not one of
         ["true", "yes", "false", "no"] will return a ValueError.
 
         :param param: Name of the configuration parameter
         :param required: True if this must be specified in the configuration
-        :return: the boolean value, or None if not required and no exception
+        :return: the boolean value, or False if not required and no exception
         :raises CbInvalidConfig:
         :raises ValueError:
         """
+        self._as_str(param, required=required)  # required check
         value = self._as_str(param, required=required, default=str(default))
         if value is not None and value.lower() not in ["true", "yes", "false", "no"]:
             raise ValueError(f"{self.source} parameter '{param}' is not a valid boolean value")
