@@ -19,6 +19,7 @@ from typing import List
 
 import lockfile
 import psutil
+import mmap
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
@@ -30,6 +31,7 @@ from peewee import SqliteDatabase
 import globals
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
+from celery.exceptions import WorkerLostError
 from celery_app import app
 from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
@@ -78,6 +80,10 @@ def analysis_worker(
                     hash_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
+                except WorkerLostError as we:
+                    logger.debug(f"Lost connection to remote worker..exiting")
+                    exit_event.set()
+                    break
                 except Exception as err:
                     logger.debug(f"Exception in wait: {err}")
                     exit_event.wait(0.1)
@@ -366,7 +372,7 @@ def get_log_file_handles(use_logger) -> List:
     return handles
 
 
-def handle_sig(exit_event: Event, sig: int) -> None:
+def handle_sig(exit_event: Event, sig: int, frame) -> None:
     """
     Signal handler - handle the signal and mark exit if its an exiting signal type.
 
@@ -661,7 +667,7 @@ def terminate_celery_worker(worker_obj: worker = None):
         else:
             logger.debug("Didn't find a worker-pidfile to terminate on exit...")
 
-    time.sleep(5.0)
+    time.sleep(1.0)
     if worker_obj:
         worker_obj.die("Worker terminated")
 
@@ -853,9 +859,9 @@ def main():
                         run_to_exit_signal(exit_event)
                     finally:
                         try:
-                            wait_all_worker_exit_threads(threads, timeout=10.0)
+                            wait_all_worker_exit_threads(threads, timeout=4.0)
                         finally:
-                            terminate_celery_worker(localworker)
+                            #terminate_celery_worker(localworker)
                             logger.info("Yara connector shutdown")
 
             else:  # | | | BATCH MODE | | |
@@ -876,15 +882,15 @@ def main():
                         )
                     )
                 run_to_exit_signal(exit_event)
-                wait_all_worker_exit_threads(threads, timeout=10.0)
-                # terminate_celery_worker(localworker)
+                wait_all_worker_exit_threads(threads,timeout=4.0)
+                #terminate_celery_worker(localworker)
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
         except Exception as err:
             logger.error(f"There were errors executing yara rules: {err}")
         finally:
             exit_event.set()
-            terminate_celery_worker(localworker)
+            #terminate_celery_worker(localworker)
 
 
 if __name__ == "__main__":

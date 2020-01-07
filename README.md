@@ -1,36 +1,96 @@
-# Installing Yara Agent (Centos/RHEL 6)
+# Installing Yara Agent (Centos/RHEL 7+)
 
-The Yara agent must be installed on the same system as Cb Response.
+The Yara agent has two parts - a master and a potentially remote worker. 
 
-* Create installation area
-    ```shell script
-    mkdir -p /usr/share/cb/integrations/yara
-    ``` 
-* Download Yara Agent
+The task-master service must be installed on the same system as Cb Response.
 
-	```
-	wget -O /usr/share/cb/integrations/yara/yara_agent https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.1/yara_agent
-	```
-	
-* Download Yara Logo
+You can download the latest RPM from the github releases page, here(https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-0b4e650fa85727815eb2/python-cb-threatconnect-connector-2.1.0-1.x86_64.rpm).
 
-	```
-	wget -O /usr/share/cb/integrations/yara/yara-logo.png https://github.com/carbonblack/cb-yara-connector/releases/download/2.0.1/yara-logo.png
-	```
+`yum install python-cb-yara-connector-<Latest>.rpm` will install the connector from the downloaded RPM.
+
+The connector uses a configured directory containing yara rules, to efficiently scan binaries as they
+are seen by the CB Response Server, and uses the generated threat information to produce an
+intelligence feed for consumption by the CbR server.
+
+The yara connector uses celery-queues to distribute work to remote workers - you will need to install and 
+configure a broker (probbably, redis - but any broker compatible with celery 4.x+ will do) that is accessible
+to the master node and to any worker(s).
+
+# Dev install #
+
+`git clone https://github.com/carbonblack/cb-yara-connector`
+create a virtual environment with python3.6+ and install the requirements from the requirements.txt file
+`pip3 install -r requirements.txt`
+
+There is a docker file provided that setups a basic dev/build envirionment for the connector.
 	
 ## Create Yara Agent Config
-Copy and modify `sample_local.conf` from the `samples` folder
-to your desired location.
+
+The installation process will create a sample configuration file 
+`/etc/cb/integrations/cb-yara-connector/yaraconnector.sample.conf`
+use this and create the real configuration file:
+`cp /etc/cb/integrations/cb-yara-connector/yaraconnector.sample.conf /etc/cb/integrations/cb-yara-connector/yaraconnector.conf`
+
+You must configure the postgres connection information for your CBR server , and the rest API location and credentails as well. 
+
+~~~
+;
+; Cb Response postgres Database settings
+;
+postgres_host=127.0.0.1
+postgres_username=cb
+postgres_password=<Password from /etc/cb/cb.conf goes here>
+postgres_db=cb
+postgres_port=5002
+~~~
+
+You can find your postgres credentails in `/etc/cb/cb.conf`, the port, host, db, user should be as above.
+
+You can find your API credential information in UI settings pane of your Carbon Black Response server.
+
+~~~
+;
+; ONLY for worker_type of local
+; Cb Response Server settings for scanning locally.
+; For remote scanning please set these parameters in the yara worker config file
+; Default: https://127.0.0.1
+;
+cb_server_url=https://localhost
+cb_server_token=<API TOKEN GOES HERE>
+~~~
+
+You must configure `broker=` which sets the broker and results_backend for celery. You will set this appropriately as per the celery documentation - here (https://docs.celeryproject.org/en/latest/getting-started/brokers/).
 
 
-> NOTES:
-> 1) All paths can use `~/` to allow the use of the user's home directory.
+The yarar-connector RPM contains a service that can be run in a few distinct configurations:
+1) A local task master and remote worker(s) (RECOMMENDED)
 
-#### Running Yara Agent Manually
+This is the prefered mode of operation, using a celery broker to distribute analysis-tasks to a remote worker from a local task-master that keeps track of binaries resident in the configured server.
 
-```shell script
-./yara_agent --config-file=<config file location>
-```
+Install the connector on the cbr server - as the task-master and specify that the worker will be remote:
+
+Read through the configuration file, specify the mode of operation,  the `mode=master` and `worker_type=remote`. This represents the configuration for the task master, which will distribute work over the configured broker/backend to each configured worker.
+
+On the worker(s), install the rpm again, and in the configuration file specify the same CBR server information, but 
+configure `mode=slave` and `worker_type=local`. This configuration file doesn't need postgres credentials, but does require rest API access to the Carbon Black Response server in question.
+
+2) A local task master and local celery worker (NOTRECOMMENDED)
+Read through the configuration file, specify the mode of operation as `mode=master` and `worker_type=local`.
+A single daemon will scan binaries, local to the cbr instance. This configuration requires both the postgres , and REST API credentials from Carbon Black Response, in order to function correctly.
+
+## Input your yara rules
+
+The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each specifying one or more yara rule. Your rules need to have `metadata` section with a `score: [1-10]` tag to appropriately score matching binaries.  This directory is configurable in your configuration file.
+
+The yara connector is boudn by libyara.so's limitations for matched strings, number of compiler rules, etc. 
+
+#### Running Yara Agent 
+
+`systemctl start cb-yara-connector` will up the service using systemD. 
+`systemctl stop cb-yara-connector` will gracefully stop the yara-connector.
+`systemctl status -l cb-yara-connector` will display logging information. 
+
+These commands are identical for both the master and any remote workers.
 
 ##### Command-line Options
 ```text
@@ -121,61 +181,61 @@ _[TBD]_
 	
 * Create Yara Worker Config File `yara_worker.conf`
 
-#### Example Yara Worker Config File
+#### Example Yara Connector Master configuration
 
 ```ini
 [general]
 
 ;
-; Python Celery Broker Url. Set this full url string for Redis
+; Python Celery Broker Url. Set this full url stringg
 ; Example: redis://<ip_address>
 ;
 broker_url=redis://127.0.0.1
+
+mode=master
+
+worker_type=remote
 
 ;
 ; Cb Response Server Configuration
 ; Used for downloading binaries
 ;
-cb_server_url=
-cb_server_token=
+cb_server_url=https://localhost
+cb_server_token=aafdasfdsafdsafdsa
 
 ;
 ; Directory for temporary yara rules storage
 ; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
 ;
-yara_rules_dir=./yara_rules
+yara_rules_dir=/etc/cb/integrations/cb-yara-connector/yara-rules
 ```
 
-* Copy, modify and save to `yara_worker.conf`
-	
-#### Run Yara Worker Manually
+### Example Remote Worker configuration
 
-	celery -A tasks worker --config-file=yara_worker.conf --concurrency=10 --loglevel=info
-	
-#### Example Supervisor Config
+```ini
+[general]
 
-	[program:yara_workers]
-	stdout_logfile=/var/log/yara_worker.log
-	stderr_logfile=/var/log/yara_worker.log
-	user=<username>
-	directory=/home/<username>/cb-yara-connector
-	command=/home/<username>/cb-yara-connector/venv/bin/celery -A tasks worker --config-file=yara_worker.conf --concurrency=10 --loglevel=info
-	autostart=true
-	autorestart=true
-	
-* Copy the above, modify and add to `/etc/supervisord.conf`
+;
+; Python Celery Broker Url. Set this full url stringg
+; Example: redis://<ip_address>
+;
+broker_url=redis://127.0.0.1
 
-* Enabled Supervisor
+mode=slave
 
-	```
-	systemctl enable supervisord
-	```
-	
-* Restart Supervisor
+worker_type=local
 
-	```
-	systemctl restart supervisord
-	```
+;
+; Cb Response Server Configuration
+; Used for downloading binaries
+;
+cb_server_url=https://localhost
+cb_server_token=aafdasfdsafdsafdsa
+
+```
+
+
+
 # Development Notes	
 
 ## Utility Script
@@ -203,31 +263,9 @@ utility_interval=-1
 utility_script=./scripts/vacuumscript.sh
 ```
 
-## Yara Agent Build Instructions (Centos 6)
+## Yara Agent Build Instructions 
 
-### Install Dependencies
+The dockerfile in the top-level of the repo contains a centos7 environment for running, building, and testing 
+the connector. 
 
-* zlib-devel
-* openssl-devel
-* sqlite-devel
-
-### Install Python 3.6
-
-	
-	./configure --prefix=/usr/local --enable-shared LDFLAGS="-Wl,-rpath /usr/local/lib"
-	make
-	make altinstall
-
-
-### Create VirtualEnv
-
-
-	python3.6 -m venv venv-build
-	source ./venv-build/bin/activate
-	pip install -r requirements.txt
-
-
-### Create Executable
-
-
-	pyinstaller main.spec
+The provided script `docker-build-rpm.sh` will use docker to build the project, and place the RPM(s) in $PWD/RPMS. 
