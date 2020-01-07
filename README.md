@@ -1,16 +1,18 @@
 # Installing Yara Agent (Centos/RHEL 7+)
 
-The Yara agent has two parts - a master and a potentially remote worker. 
+The Yara agent has two parts a master and one or more workers.
 
-The task-master service must be installed on the same system as Cb Response.
+The master service must be installed on the same system as Cb Response.
 
-You can download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-0b4e650fa85727815eb2/python-cb-threatconnect-connector-2.1.0-1.x86_64.rpm).
+Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-0b4e650fa85727815eb2/python-cb-threatconnect-connector-2.1.0-1.x86_64.rpm).
 
-`yum install python-cb-yara-connector-<Latest>.rpm` will install the connector from the downloaded RPM.
+The connector can be easily installed from an rpm:
+
+`yum install python-cb-yara-connector-<Latest>.rpm` 
 
 The connector uses a configured directory containing yara rules, to efficiently scan binaries as they
-are seen by the CB Response Server, and uses the generated threat information to produce an
-intelligence feed for consumption by the CbR server.
+are seen by the CB Response Server. The generated threat information is used to produce an
+intelligence feed for ingest by the Cb Response Server again.
 
 The yara connector uses celery-queues to distribute work to remote workers - you will need to install and 
 configure a broker (probbably, redis - but any broker compatible with celery 4.x+ will do) that is accessible
@@ -44,9 +46,8 @@ postgres_db=cb
 postgres_port=5002
 ~~~
 
-You can find your postgres credentails in `/etc/cb/cb.conf`, the port, host, db, user should be as above.
-
-You can find your API credential information in UI settings pane of your Carbon Black Response server.
+The postgres credentails in `/etc/cb/cb.conf`, the port, host, db, user should be as above.
+REST API Credentials are available in the UI of your Carbon Black Response Server.
 
 ~~~
 ;
