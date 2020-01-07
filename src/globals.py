@@ -12,8 +12,7 @@ g_yara_rule_map = {}
 g_yara_rule_map_hash_list = []
 
 # configuiration
-g_remote = False
-g_mode = ""
+g_mode = "master"
 
 g_cb_server_url = ""
 g_cb_server_token = ""

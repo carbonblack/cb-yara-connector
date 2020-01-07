@@ -286,7 +286,7 @@ def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
     :param conn: The postgres connection
     :param hash_queue: the queue of hashes to handle
     """
-    if globals.g_remote:
+    if globals.g_mode == "master":
         logger.info("Uploading yara rules to workers...")
         generate_rule_map_remote(yara_rule_dir)
 
@@ -784,14 +784,10 @@ def main():
 
         try:
             """
-            There are four principle modes of operation - 
-                1) master and worker
-                2) remote and local
-                Support running as 1) just the binary-getting
-                                   2) binary-getting and analysis locally 
-                                   3) binary-getting and analysis to happen on some worker on the same 
-                                      redis/amqp/backend broker 
-                                   4) Worker (either local to to the cbr machine or remote)  
+            3 modes of operation
+            1) task master
+            2) standalone worker
+            3) worker+master unit
             """
             if args.run_forever:  # Running as a deamon
                 logger.debug("RUNNING AS DEMON")
@@ -815,7 +811,7 @@ def main():
                 context = daemon.DaemonContext(**deamon_kwargs)
 
                 # Operating mode - are we the master a worker?
-                run_as_master = globals.g_mode == "master"
+                run_as_master = "master" in globals.g_mode
 
                 # Signal handler
                 sig_handler = partial(handle_sig, exit_event)
@@ -838,7 +834,7 @@ def main():
                         )
 
                         # start local celeryD worker if working mode is local
-                        if not globals.g_remote:
+                        if "worker" in globals.g_mode:
                             localworker = worker(app=app)
                             threads.append(
                                 start_celery_worker_thread(
@@ -874,7 +870,7 @@ def main():
                 )
 
                 # Start a celery worker if we need one
-                if not globals.g_remote:
+                if "worker" in globals.g_mode:
                     localworker = worker(app=app)
                     threads.append(
                         start_celery_worker_thread(

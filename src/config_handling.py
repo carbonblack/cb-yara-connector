@@ -5,6 +5,7 @@ import configparser
 import logging
 import os
 from typing import List, Optional
+import re
 
 import globals
 from celery_app import app
@@ -104,20 +105,16 @@ class ConfigurationInit(object):
 
         :raises CbInvalidConfig:
         """
-        globals.g_mode = self._as_str("mode", required=False, default="master", allowed=["master", "slave"])
-
-        value = self._as_str("worker_type", default="local", allowed=["local", "remote"])
-        if value == "local":
-            globals.g_remote = False
-        else:
-            globals.g_remote = True
+        globals.g_mode = self._as_str("mode", required=False, default="master", allowed=["master", "worker", "master+worker"])
+      
 
         globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
 
-        # local/remote configuration data
-        cb_req = not (globals.g_mode == "master" and globals.g_remote)
+        #we need the cb_server_api information whenever  required (ie, we are a worker)
+        cb_req = "worker" in globals.g_mode
+
         globals.g_cb_server_url = self._as_str("cb_server_url", required=cb_req)
-        globals.g_cb_server_token = self._as_str("cb_server_token", required=cb_req)
+        globals.g_cb_server_token = self._as_str("cb_server_token", required=cb_req) 
 
         value = self._as_str("broker_url", required=True)
         app.conf.update(broker_url=value, result_backend=value)
@@ -136,11 +133,27 @@ class ConfigurationInit(object):
         :raises CbInvalidConfig:
         :raises ValueError:
         """
-        globals.g_postgres_host = self._as_str("postgres_host", default=globals.g_postgres_host)
-        globals.g_postgres_username = self._as_str("postgres_username", default=globals.g_postgres_username)
-        globals.g_postgres_password = self._as_str("postgres_password", required=True)
-        globals.g_postgres_db = self._as_str("postgres_db", default=globals.g_postgres_username)
-        globals.g_postgres_port = self._as_int("postgres_port", default=globals.g_postgres_port)
+
+        config = configparser.ConfigParser()
+        if os.path.isfile('/etc/cb/cb.conf'):
+            try:
+                config.read_file(open('/etc/cb/cb.conf'))
+                dburl = config['DatabaseURL'].strip()
+                dbregex = "postgresql\+psycopg2:\/\/(.+):(.+)@localhost:(\d+)/(.+)"
+                matches = re.match(dbregex, dburl)
+                globals.g_postgres_user = "cb"
+                globals.g_postgres_password = matches.group(2) if matches else "NONE"
+                globals.g_postgres_port = 5002
+                globals.g_postgres_db = "cb"
+                globals.g_postgres_host = "https://localhost"
+            except Exception:
+                logger.exception("Someting went wrong trying to parse /etc/cb/cb.conf for postgres details")
+        else:
+            globals.g_postgres_host = self._as_str("postgres_host", default=globals.g_postgres_host)
+            globals.g_postgres_username = self._as_str("postgres_username", default=globals.g_postgres_username)
+            globals.g_postgres_password = self._as_str("postgres_password", required=True)
+            globals.g_postgres_db = self._as_str("postgres_db", default=globals.g_postgres_username)
+            globals.g_postgres_port = self._as_int("postgres_port", default=globals.g_postgres_port)
 
         value = self._as_str("niceness")
         if value != "":
