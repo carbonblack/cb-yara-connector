@@ -597,30 +597,6 @@ def launch_celery_worker(worker_obj, workerkwargs=None, config_file: str = None)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
 
-# FIXME: Unused
-def terminate_celery_worker(worker_obj: worker = None):
-    """
-    Attempt to use the pidfil to shutdown workers correctly, try .die()  afterward
-
-    :param worker_obj: worker object
-    """
-    with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
-        worker_pid_str = cworkerpidfile.readline()
-        worker_pid = int(worker_pid_str) if len(worker_pid_str.strip()) > 0 else None
-        if worker_pid:
-            parent = psutil.Process(worker_pid) if worker_pid else psutil.Process()
-            children = parent.children(recursive=True)
-            for child in children:
-                logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
-                os.kill(child.pid, signal.SIGQUIT)
-            logger.debug(f"Sending term sig to celery worker - {worker_pid}")
-            os.kill(worker_pid, signal.SIGQUIT)
-        else:
-            logger.debug("Didn't find a worker-pidfile to terminate on exit.")
-    # if worker_obj:
-    #        worker_obj.die("Worker terminated")
-
-
 ################################################################################
 # Main entrypoint
 ################################################################################
@@ -802,7 +778,6 @@ def main():
                         try:
                             wait_all_worker_exit_threads(threads, timeout=4.0)
                         finally:
-                            terminate_celery_worker(localworker)
                             logger.info("Yara connector shutdown")
 
             else:  # | | | BATCH MODE | | |
@@ -824,14 +799,12 @@ def main():
                     )
                 run_to_exit_signal(exit_event)
                 wait_all_worker_exit_threads(threads, timeout=4.0)
-                # terminate_celery_worker(localworker)
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
         except Exception as err:
             logger.error(f"There were errors executing yara rules: {err}")
         finally:
             exit_event.set()
-            # terminate_celery_worker(localworker)
 
 
 if __name__ == "__main__":
