@@ -16,7 +16,7 @@ import requests
 import urllib3
 # noinspection PyPackageRequirements
 import yara
-from celery import bootsteps, group
+from celery import bootsteps, group, Task
 from celery.utils.log import get_task_logger
 
 import globals
@@ -32,6 +32,12 @@ logger.setLevel(logging.CRITICAL)
 
 rulelogger = logging.getLogger("yaraworker")
 rulelogger.setLevel(logging.INFO)
+
+class MyTask(Task):
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        print('{0!r} failed: {1!r}'.format(task_id, exc))
+
 
 
 # ----- Lock Object Class ------------------------------------------------------------
@@ -141,7 +147,7 @@ def generate_rule_map(yara_rule_path: str) -> dict:
     return rule_map
 
 
-@app.task
+@app.task(base=MyTask)
 def update_yara_rules_remote(yara_rules: dict) -> None:
     """
     Update remote yara rules.
@@ -232,19 +238,7 @@ def get_binary_by_hash(url: str, hsum: str, token: str):
         # otherwise return None which will be interpreted correctly in analyze_binary as haven failed to lookup the hash
         return None
 
-
-# noinspection PyUnusedFunction
-@app.task
-def analyze_bins(hashes: List[str]) -> group:
-    """
-    Analize any returned binaries.
-    :param hashes: list of hashes
-    :return: celery group
-    """
-    return group(analyze_binary.s(h) for h in hashes).apply_async()
-
-
-@app.task
+@app.task(base=MyTask)
 def analyze_binary(md5sum: str) -> AnalysisResult:
     """
     Analyze binary information.
