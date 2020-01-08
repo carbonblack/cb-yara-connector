@@ -21,7 +21,7 @@ import lockfile
 import psutil
 import psycopg2
 # noinspection PyPackageRequirements
-import yara
+import mmap
 from celery.bin.worker import worker
 from celery.exceptions import WorkerLostError
 # noinspection PyPackageRequirements
@@ -380,7 +380,7 @@ def handle_sig(exit_event: Event, sig: int, frame) -> None:
     :param sig: the signal seen
     :param frame: frame event (sent by DaemonContext, unused)
     """
-    exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL)
+    exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL,signal.SIGQUIT)
     if sig in exit_sigs:
         exit_event.set()
         logger.debug("Sig handler set exit event")
