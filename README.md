@@ -4,7 +4,7 @@ The Yara agent has two parts a master and one or more workers.
 
 The master service must be installed on the same system as Cb Response.
 
-Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-e5650883f82210808c8f/python-cb-yara-connector-2.1-0.x86_64.rpm).
+Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-6cfa6daacf8dddb82b22/python-cb-yara-connector-2.1-0.x86_64.rpm).
 
 The connector can be easily installed from an rpm:
 
