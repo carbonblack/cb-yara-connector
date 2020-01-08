@@ -19,11 +19,11 @@ from typing import List
 
 import lockfile
 import psutil
-import mmap
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
 from celery.bin.worker import worker
+from celery.exceptions import WorkerLostError
 # noinspection PyPackageRequirements
 from daemon import daemon
 from peewee import SqliteDatabase
@@ -31,7 +31,6 @@ from peewee import SqliteDatabase
 import globals
 from analysis_result import AnalysisResult
 from binary_database import BinaryDetonationResult, db
-from celery.exceptions import WorkerLostError
 from celery_app import app
 from config_handling import ConfigurationInit
 from feed import CbFeed, CbFeedInfo, CbReport
@@ -80,8 +79,8 @@ def analysis_worker(
                     hash_queue.task_done()
                 except Empty:
                     exit_event.wait(1)
-                except WorkerLostError as we:
-                    logger.debug(f"Lost connection to remote worker..exiting")
+                except WorkerLostError as err:
+                    logger.debug(f"Lost connection to remote worker and exiting\n{err}")
                     exit_event.set()
                     break
                 except Exception as err:
@@ -372,12 +371,14 @@ def get_log_file_handles(use_logger) -> List:
     return handles
 
 
+# noinspection PyUnusedLocal
 def handle_sig(exit_event: Event, sig: int, frame) -> None:
     """
     Signal handler - handle the signal and mark exit if its an exiting signal type.
 
     :param exit_event: the event handler
     :param sig: the signal seen
+    :param frame: frame event (sent by DaemonContext, unused)
     """
     exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL)
     if sig in exit_sigs:
@@ -649,6 +650,7 @@ def launch_celery_worker(worker_obj, workerkwargs=None, config_file: str = None)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
 
+# FIXME: Unused
 def terminate_celery_worker(worker_obj: worker = None):
     """
     Attempt to use the pidfile to gracefully terminate celery workers if they exist
@@ -776,14 +778,10 @@ def main():
         scanning_results_queue = Queue()
         # Lock file so this process is a singleton
         lock_file = lockfile.FileLock(args.lock_file)
+
+        # noinspection PyUnusedLocal
+        # used for local worker handling in some scenarios
         localworker = None
-        workerkwargs = (
-            json.loads(globals.g_celeryworkerkwargs)
-            if globals.g_celeryworkerkwargs is not None
-            else None
-        )
-        if workerkwargs and len(workerkwargs) == 0:
-            workerkwargs = None
 
         try:
             """
@@ -841,7 +839,7 @@ def main():
                             localworker = worker(app=app)
                             threads.append(
                                 start_celery_worker_thread(
-                                    localworker, workerkwargs, args.config_file
+                                    localworker, globals.g_celeryworkerkwargs, args.config_file
                                 )
                             )
                     else:
@@ -849,7 +847,7 @@ def main():
                         localworker = worker(app=app)
                         threads.append(
                             start_celery_worker_thread(
-                                localworker, workerkwargs, args.config_file
+                                localworker, globals.g_celeryworkerkwargs, args.config_file
                             )
                         )
 
@@ -860,7 +858,7 @@ def main():
                         try:
                             wait_all_worker_exit_threads(threads, timeout=4.0)
                         finally:
-                            #terminate_celery_worker(localworker)
+                            # terminate_celery_worker(localworker)
                             logger.info("Yara connector shutdown")
 
             else:  # | | | BATCH MODE | | |
@@ -877,19 +875,19 @@ def main():
                     localworker = worker(app=app)
                     threads.append(
                         start_celery_worker_thread(
-                            localworker, workerkwargs, args.config_file
+                            localworker, globals.g_celeryworkerkwargs, args.config_file
                         )
                     )
                 run_to_exit_signal(exit_event)
-                wait_all_worker_exit_threads(threads,timeout=4.0)
-                #terminate_celery_worker(localworker)
+                wait_all_worker_exit_threads(threads, timeout=4.0)
+                # terminate_celery_worker(localworker)
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
         except Exception as err:
             logger.error(f"There were errors executing yara rules: {err}")
         finally:
             exit_event.set()
-            #terminate_celery_worker(localworker)
+            # terminate_celery_worker(localworker)
 
 
 if __name__ == "__main__":

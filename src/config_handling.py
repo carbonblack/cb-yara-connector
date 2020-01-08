@@ -2,10 +2,11 @@
 # Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
 
 import configparser
+import json
 import logging
 import os
-from typing import List, Optional
 import re
+from typing import List, Optional
 
 import globals
 from celery_app import app
@@ -24,6 +25,7 @@ KNOWN = [
     "broker_url",
     "cb_server_token",
     "cb_server_url",
+    "celery_worker_kwargs",
     "concurrent_hashes",
     "database_scanning_interval",
     "disable_rescan",
@@ -40,9 +42,7 @@ KNOWN = [
     "utility_interval",
     "utility_script",
     "worker_network_timeout",
-    "worker_type",
     "yara_rules_dir",
-    "celery_worker_kwargs"
 ]
 
 
@@ -105,26 +105,23 @@ class ConfigurationInit(object):
 
         :raises CbInvalidConfig:
         """
-        globals.g_mode = self._as_str("mode", required=False, default="master", allowed=["master", "worker", "master+worker"])
-      
+        globals.g_mode = self._as_str("mode", required=False, default="master",
+                                      allowed=["master", "worker", "master+worker"])
 
         globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
 
-        #we need the cb_server_api information whenever  required (ie, we are a worker)
+        # we need the cb_server_api information whenever  required (ie, we are a worker)
         cb_req = "worker" in globals.g_mode
 
         globals.g_cb_server_url = self._as_str("cb_server_url", required=cb_req)
-        globals.g_cb_server_token = self._as_str("cb_server_token", required=cb_req) 
+        globals.g_cb_server_token = self._as_str("cb_server_token", required=cb_req)
 
         value = self._as_str("broker_url", required=True)
         app.conf.update(broker_url=value, result_backend=value)
 
         globals.g_worker_network_timeout = self._as_int("worker_network_timeout",
                                                         default=globals.g_worker_network_timeout)
-
-        celeryworkerkwargs = self.the_config.get("celery_worker_kwargs", None)
-        if celeryworkerkwargs and len(celeryworkerkwargs) > 0:
-            globals.g_celeryworkerkwargs = celeryworkerkwargs
+        globals.g_celeryworkerkwargs = self._as_json("celery_worker_kwargs")
 
     def _extended_check(self) -> None:
         """
@@ -139,15 +136,15 @@ class ConfigurationInit(object):
             try:
                 config.read_file(open('/etc/cb/cb.conf'))
                 dburl = config['DatabaseURL'].strip()
-                dbregex = "postgresql\+psycopg2:\/\/(.+):(.+)@localhost:(\d+)/(.+)"
+                dbregex = r"postgresql\+psycopg2:\/\/(.+):(.+)@localhost:(\d+)/(.+)"
                 matches = re.match(dbregex, dburl)
                 globals.g_postgres_user = "cb"
                 globals.g_postgres_password = matches.group(2) if matches else "NONE"
                 globals.g_postgres_port = 5002
                 globals.g_postgres_db = "cb"
                 globals.g_postgres_host = "https://localhost"
-            except Exception:
-                logger.exception("Someting went wrong trying to parse /etc/cb/cb.conf for postgres details")
+            except Exception as err:
+                logger.exception(f"Someting went wrong trying to parse /etc/cb/cb.conf for postgres details: {err}")
         else:
             globals.g_postgres_host = self._as_str("postgres_host", default=globals.g_postgres_host)
             globals.g_postgres_username = self._as_str("postgres_username", default=globals.g_postgres_username)
@@ -299,3 +296,20 @@ class ConfigurationInit(object):
             return default
         else:
             return value if value is None else value.lower() in ["true", "yes"]
+
+    # noinspection PySameParameterValue
+    def _as_json(self, param: str, required: bool = False) -> Optional[dict]:
+        """
+        Get a single-line JSON string and convert to a python dict for use as a kwargs.
+        :param param: Name of the configuration parameter
+        :param required: True if this must be specified in the configuration
+        :return: dictionary converstion, or None if not required and not supplied
+        """
+        value = self._as_str(param, required=required)  # required check
+        if value == "":
+            return None
+
+        try:
+            return json.loads(value)
+        except Exception as err:
+            raise CbInvalidConfig(f"{self.source} '{param}' has invalid JSON: {err}")

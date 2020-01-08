@@ -14,7 +14,6 @@ TESTS = os.path.abspath(os.path.dirname(__file__))
 TESTCONF = os.path.join(TESTS, "conf-testing.conf")
 BASE = """[general]
 mode=master
-worker_type=local
 
 cb_server_url=https://127.0.0.1:443
 cb_server_token=abcdefghijklmnopqrstuvwxyz012345
@@ -41,6 +40,8 @@ feed_database_dir=./feed_db
 
 worker_network_timeout=5
 database_scanning_interval=360
+
+celery_worker_kwargs={"autoscale":"4,4"}
 """
 
 
@@ -53,7 +54,6 @@ class TestConfigurationInit(TestCase):
         """
         globals.g_config = {}
         globals.g_output_file = ""
-        globals.g_remote = False
         globals.g_mode = ""
         globals.g_cb_server_url = ""
         globals.g_cb_server_token = ""
@@ -77,6 +77,7 @@ class TestConfigurationInit(TestCase):
         globals.g_feed_database_dir = "./feed_db"
         globals.g_worker_network_timeout = 5
         globals.g_scanning_interval = 360
+        globals.g_celeryworkerkwargs = None
 
         with open(TESTCONF, "w") as fp:
             fp.write(BASE)
@@ -133,7 +134,6 @@ class TestConfigurationInit(TestCase):
         """
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertTrue(globals.g_output_file.endswith("sample.json"))
-        self.assertFalse(globals.g_remote)
 
     def test_00b_validate_config_worker(self):
         """
@@ -141,7 +141,6 @@ class TestConfigurationInit(TestCase):
         """
         ConfigurationInit(TESTCONF)
         self.assertEqual("", globals.g_output_file)
-        self.assertFalse(globals.g_remote)
 
     def test_01a_missing_config(self):
         """
@@ -192,7 +191,8 @@ class TestConfigurationInit(TestCase):
         self.mangle(change={"mode": "bogus"})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
-        assert "does not specify an allowed value: ['master', 'slave']" in "{0}".format(err.exception.args[0])
+        assert "does not specify an allowed value: ['master', 'worker', 'master+worker']" in "{0}".format(
+            err.exception.args[0])
 
     def test_03c_mode_duplicated(self):
         """
@@ -204,134 +204,59 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(TESTCONF)
         assert "option 'mode' in section 'general' already exists" in "{0}".format(err.exception.args[0])
 
-    def test_04a_worker_missing(self):
-        """
-        Ensure that lacking 'worker_type' information defaults to local.
-        """
-        self.mangle(change={"worker_type": None})
-        ConfigurationInit(TESTCONF)
-        self.assertFalse(globals.g_remote)
+    # test_04 worker_type removed
 
-    def test_04b_worker_empty(self):
-        """
-        Ensure that empty 'worker_type' information defaults to local.
-        """
-        self.mangle(change={"worker_type": ""})
-        ConfigurationInit(TESTCONF)
-        self.assertFalse(globals.g_remote)
-
-    def test_04c_config_bogus_worker(self):
-        """
-        Ensure that with bogus 'worker_type' is detected.
-        """
-        self.mangle(change={"worker_type": "BOGUS"})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "does not specify an allowed value: ['local', 'remote']" in "{0}".format(err.exception.args[0])
-
-    def test_05a_cb_server_url_missing_for_master_and_remote(self):
+    def test_05a_cb_server_url_missing_for_master(self):
         """
         Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
         """
-        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_url": None})
+        self.mangle(change={"mode": "master", "cb_server_url": None})
         ConfigurationInit(TESTCONF)
         self.assertEqual("", globals.g_cb_server_url)
 
-    def test_05b_cb_server_url_empty_for_master_and_remote(self):
+    def test_05b_cb_server_url_empty_for_master(self):
         """
         Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
         """
-        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_url": ""})
+        self.mangle(change={"mode": "master", "cb_server_url": ""})
         ConfigurationInit(TESTCONF)
         self.assertEqual("", globals.g_cb_server_url)
 
-    def test_05c_cb_server_url_missing_for_slave(self):
+    def test_05c_cb_server_url_missing_for_worker(self):
         """
-        Ensure that 'cb_server_url' is required and detected if mode=slave.
+        Ensure that 'cb_server_url' is required and detected if mode=worker.
         """
-        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_url": None})
+        self.mangle(change={"mode": "worker", "cb_server_url": None})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_05d_cb_server_url_empty_for_slave(self):
+    def test_05d_cb_server_url_empty_for_worker(self):
         """
-        Ensure that 'cb_server_url' is required and detected if mode=slave.
+        Ensure that 'cb_server_url' is required and detected if mode=worker.
         """
-        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_url": ""})
+        self.mangle(change={"mode": "worker", "cb_server_url": ""})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_05e_cb_server_url_missing_for_local(self):
+    def test_05e_cb_server_url_missing_for_worker(self):
         """
-        Ensure that 'cb_server_url' is required and detected if worker_type=local.
+        Ensure that 'cb_server_url' is required and detected.
         """
-        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_url": None})
+        self.mangle(change={"mode": "worker", "cb_server_url": None})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_05f_cb_server_url_empty_for_local(self):
+    def test_05f_cb_server_url_empty_for_worker(self):
         """
-        Ensure that 'cb_server_url' is required and detected if worker_type=local.
+        Ensure that 'cb_server_url' is required and detected.
         """
-        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_url": ""})
+        self.mangle(change={"mode": "worker", "cb_server_url": ""})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
-
-    def test_06a_cb_server_token_missing_for_master_and_remote(self):
-        """
-        Ensure that 'cb_server_token' is not required if mode==slave and worker_type==remote
-        """
-        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_token": None})
-        ConfigurationInit(TESTCONF)
-        self.assertEqual("", globals.g_cb_server_token)
-
-    def test_06b_cb_server_token_empty_for_master_and_remote(self):
-        """
-        Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
-        """
-        self.mangle(change={"mode": "master", "worker_type": "remote", "cb_server_token": ""})
-        ConfigurationInit(TESTCONF)
-        self.assertEqual("", globals.g_cb_server_token)
-
-    def test_06c_cb_server_url_missing_for_slave(self):
-        """
-        Ensure that 'cb_server_token' is required and detected if mode=slave.
-        """
-        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_token": None})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
-
-    def test_06d_cb_server_token_empty_for_slave(self):
-        """
-        Ensure that 'cb_server_token' is required and detected if mode=slave.
-        """
-        self.mangle(change={"mode": "slave", "worker_type": "remote", "cb_server_token": ""})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
-
-    def test_06e_cb_server_token_missing_for_local(self):
-        """
-        Ensure that 'cb_server_token' is required and detected if worker_type=local.
-        """
-        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_token": None})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
-
-    def test_06f_cb_server_token_empty_for_local(self):
-        """
-        Ensure that 'cb_server_token' is required and detected if worker_type=local.
-        """
-        self.mangle(change={"mode": "master", "worker_type": "local", "cb_server_token": ""})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "has no 'cb_server_token' definition" in "{0}".format(err.exception.args[0])
 
     def test_06a_broker_url_missing(self):
         """
@@ -841,6 +766,24 @@ class TestConfigurationInit(TestCase):
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF, "sample.json")
         assert "'database_scanning_interval' must be greater or equal to 360" in "{0}".format(err.exception.args[0])
+
+    def test_25a_celery_worker_config(self):
+        """
+        Ensure that basic celery worker config is handled
+        """
+        ConfigurationInit(TESTCONF, "sample.json")
+        self.assertEqual(1, len(globals.g_celeryworkerkwargs))
+        self.assertTrue("autoscale" in globals.g_celeryworkerkwargs)
+        self.assertEqual("4,4", globals.g_celeryworkerkwargs['autoscale'])
+
+    def test_25b_celery_worker_config_bad_json(self):
+        """
+        Ensure that basic celery worker config is handled
+        """
+        self.mangle(change={"celery_worker_kwargs": "{BOGUS}"})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF, "sample.json")
+        assert "invalid JSON" in err.exception.args[0]
 
     # ----- Unknown configuration (typo detection)
 

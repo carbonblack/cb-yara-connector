@@ -22,8 +22,10 @@ to the master node and to any worker(s).
 
 Use git to retrieve the project, create a new virtual environment using python3.6+ and use pip to install the requirements:
 
-`git clone https://github.com/carbonblack/cb-yara-connector`
-`pip3 install -r requirements.txt`
+```
+git clone https://github.com/carbonblack/cb-yara-connector
+pip3 install -r requirements.txt
+```
 
 ## Create Yara Agent Config
 
