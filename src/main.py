@@ -336,27 +336,6 @@ def _check_hash_against_feed(md5_hash: str) -> bool:
     return not query.exists()
 
 
-# FIXME: Unused
-def save_results_with_logging(analysis_results: List[AnalysisResult]) -> None:
-    """
-    Save all analysis results, with extended logging.
-
-    :param analysis_results: list of analysis results
-    """
-    logger.debug(analysis_results)
-    if analysis_results:
-        for analysis_result in analysis_results:
-            logger.debug(
-                (
-                    f"Analysis result is {analysis_result.md5} {analysis_result.binary_not_available}"
-                    f" {analysis_result.long_result} {analysis_result.last_error_msg}"
-                )
-            )
-            if analysis_result.last_error_msg:
-                logger.error(analysis_result.last_error_msg)
-        save_results(analysis_results)
-
-
 def get_log_file_handles(use_logger) -> List:
     """
     Get a list of filehandle numbers from logger to be handed to DaemonContext.files_preserve.
@@ -441,39 +420,6 @@ def wait_all_worker_exit_threads(threads, timeout=None):
         elapsed = now - start
         if timeout and elapsed >= timeout:
             return
-
-
-# FIXME: Unused
-def wait_all_worker_exit(timeout=None) -> None:
-    """
-    Await the exit of our worker threads.
-    """
-    threadcount = 2
-    start = time.time()
-    while threadcount > 1:
-        threads = list(
-            filter(
-                lambda running_thread: not running_thread.daemon
-                if hasattr(running_thread, "daemon")
-                else True,
-                threading.enumerate(),
-            )
-        )
-        threadcount = len(threads)
-        logger.debug(
-            f"Main thread Waiting on {threadcount} live worker-threads (exluding deamons)..."
-        )
-        logger.debug(f"Live threads (excluding daemons): {threads}")
-        time.sleep(0.1)
-        timenow = time.time()
-        elapsed = timenow - start
-        if timeout and elapsed >= timeout:
-            logger.debug(
-                f"Main thread exiting after workers failed to timetout in {timeout}"
-            )
-            return
-
-    logger.debug("Main thread going to exit...")
 
 
 def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue,
