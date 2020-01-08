@@ -38,7 +38,7 @@ Copy the sample configuration file, to edit to produce a working configuration f
 
 `cp /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample /etc/cb/integrations/cb-yara-connector/yaraconnector.conf`
 
-The daemon will attempt to load the postgres credentails from disk, if available - optionally, configure the postgres connection information for your CBR server , and the rest API location and credentails as well using the  `postgres_xxxx` keys in the configuration file.
+The daemon will attempt to load the postgres credentails from disk, if available - optionally, configure the postgres connection information for your CBR server using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
 
 ~~~ini
 ;
@@ -73,9 +73,7 @@ Install the connector on the cbr server, and config it with the master mode - co
 
 ## Input your yara rules
 
-The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each specifying one or more yara rule. Your rules need to have `metadata` section with a `score: [1-10]` tag to appropriately score matching binaries.  This directory is configurable in your configuration file.
-
-The yara connector is boudn by libyara.so's limitations for matched strings, number of compiler rules, etc. 
+The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each specifying one or more yara rule. Your rules need to have `metadata` section with a `score: [1-100]` tag to appropriately score matching binaries.  This directory is configurable in your configuration file.
 
 #### Running Yara Agent 
 
@@ -135,8 +133,6 @@ cb_server_url=https://localhost
 cb_server_token=aafdasfdsafdsafdsa
 
 ```
-
-
 
 # Development Notes	
 
