@@ -778,12 +778,19 @@ class TestConfigurationInit(TestCase):
 
     def test_25b_celery_worker_config_bad_json(self):
         """
-        Ensure that basic celery worker config is handled
+        Ensure that basic celery worker config is handled with bad json.
         """
         self.mangle(change={"celery_worker_kwargs": "{BOGUS}"})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid JSON" in err.exception.args[0]
+
+    def test_25c_celery_worker_config_missing(self):
+        """
+        Ensure that basic celery worker config is handled when missing
+        """
+        self.mangle(change={"celery_worker_kwargs": None})
+        self.assertEqual(None, globals.g_celeryworkerkwargs)
 
     # ----- Unknown configuration (typo detection)
 
