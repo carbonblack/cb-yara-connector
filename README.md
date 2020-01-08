@@ -78,7 +78,9 @@ The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connecto
 #### Running Yara Agent 
 
 `systemctl start cb-yara-connector` will up the service using systemD. 
+
 `systemctl stop cb-yara-connector` will gracefully stop the yara-connector.
+
 `systemctl status -l cb-yara-connector` will display logging information. 
 
 #### Example Yara Connector Master configuration
