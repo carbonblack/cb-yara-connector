@@ -9,7 +9,6 @@ import os
 import signal
 import subprocess
 import sys
-import threading
 import time
 from datetime import datetime, timedelta
 from functools import partial
@@ -18,7 +17,6 @@ from threading import Event, Thread
 from typing import List
 
 import lockfile
-import psutil
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
