@@ -21,7 +21,8 @@ import lockfile
 import psutil
 import psycopg2
 # noinspection PyPackageRequirements
-import mmap
+import yara
+# noinspection PyPackageRequirements
 from celery.bin.worker import worker
 from celery.exceptions import WorkerLostError
 # noinspection PyPackageRequirements
@@ -380,7 +381,7 @@ def handle_sig(exit_event: Event, sig: int, frame) -> None:
     :param sig: the signal seen
     :param frame: frame event (sent by DaemonContext, unused)
     """
-    exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL,signal.SIGQUIT)
+    exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL, signal.SIGQUIT)
     if sig in exit_sigs:
         exit_event.set()
         logger.debug("Sig handler set exit event")
@@ -670,7 +671,7 @@ def terminate_celery_worker(worker_obj: worker = None):
             os.kill(worker_pid, signal.SIGQUIT)
         else:
             logger.debug("Didn't find a worker-pidfile to terminate on exit.")
-    #if worker_obj:
+    # if worker_obj:
     #        worker_obj.die("Worker terminated")
 
 

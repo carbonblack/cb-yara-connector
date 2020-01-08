@@ -10,13 +10,12 @@ import multiprocessing
 import os
 import traceback
 import zipfile
-from typing import List
 
 import requests
 import urllib3
 # noinspection PyPackageRequirements
 import yara
-from celery import bootsteps, group, Task
+from celery import bootsteps, Task
 from celery.utils.log import get_task_logger
 
 import globals
@@ -33,12 +32,13 @@ logger.setLevel(logging.CRITICAL)
 rulelogger = logging.getLogger("yaraworker")
 rulelogger.setLevel(logging.INFO)
 
+
+# FIXME: Does not implement all abstract tasks
 class MyTask(Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         pass
-        #print('{0!r} failed: {1!r}'.format(task_id, exc))
-
+        # print('{0!r} failed: {1!r}'.format(task_id, exc))
 
 
 # ----- Lock Object Class ------------------------------------------------------------
@@ -238,6 +238,7 @@ def get_binary_by_hash(url: str, hsum: str, token: str):
     else:
         # otherwise return None which will be interpreted correctly in analyze_binary as haven failed to lookup the hash
         return None
+
 
 @app.task(base=MyTask)
 def analyze_binary(md5sum: str) -> AnalysisResult:
