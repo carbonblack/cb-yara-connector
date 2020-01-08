@@ -21,7 +21,7 @@ import lockfile
 import psutil
 import psycopg2
 # noinspection PyPackageRequirements
-import yara
+import mmap
 from celery.bin.worker import worker
 from celery.exceptions import WorkerLostError
 # noinspection PyPackageRequirements
@@ -380,7 +380,7 @@ def handle_sig(exit_event: Event, sig: int, frame) -> None:
     :param sig: the signal seen
     :param frame: frame event (sent by DaemonContext, unused)
     """
-    exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL)
+    exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL,signal.SIGQUIT)
     if sig in exit_sigs:
         exit_event.set()
         logger.debug("Sig handler set exit event")
@@ -653,8 +653,7 @@ def launch_celery_worker(worker_obj, workerkwargs=None, config_file: str = None)
 # FIXME: Unused
 def terminate_celery_worker(worker_obj: worker = None):
     """
-    Attempt to use the pidfile to gracefully terminate celery workers if they exist
-    if the worker hasn't terminated gracefully after 5 seconds, kill it using the .die() command
+    Attempt to use the pidfil to shutdown workers correctly, try .die()  afterward
 
     :param worker_obj: worker object
     """
@@ -666,15 +665,13 @@ def terminate_celery_worker(worker_obj: worker = None):
             children = parent.children(recursive=True)
             for child in children:
                 logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
-                os.kill(child.pid, signal.SIGTERM)
+                os.kill(child.pid, signal.SIGQUIT)
             logger.debug(f"Sending term sig to celery worker - {worker_pid}")
-            os.kill(worker_pid, signal.SIGTERM)
+            os.kill(worker_pid, signal.SIGQUIT)
         else:
-            logger.debug("Didn't find a worker-pidfile to terminate on exit...")
-
-    time.sleep(1.0)
-    if worker_obj:
-        worker_obj.die("Worker terminated")
+            logger.debug("Didn't find a worker-pidfile to terminate on exit.")
+    #if worker_obj:
+    #        worker_obj.die("Worker terminated")
 
 
 ################################################################################
@@ -858,7 +855,7 @@ def main():
                         try:
                             wait_all_worker_exit_threads(threads, timeout=4.0)
                         finally:
-                            # terminate_celery_worker(localworker)
+                            terminate_celery_worker(localworker)
                             logger.info("Yara connector shutdown")
 
             else:  # | | | BATCH MODE | | |
