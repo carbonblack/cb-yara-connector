@@ -20,6 +20,7 @@ mkdir -p ${RPM_BUILD_ROOT}/etc/init
 mkdir -p ${RPM_BUILD_ROOT}/etc/systemd/system
 mkdir -p ${RPM_BUILD_ROOT}/tmp
 mkdir -p ${RPM_BUILD_ROOT}/var/run/
+mkdir -p ${RPM_BUILD_ROOT}/var/cb/data/cb-yara-connector/feed_db
 cp ${RPM_SOURCE_DIR}/example-conf/yara.conf ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
 install -m 0644 ${RPM_SOURCE_DIR}/cb-yara-connector.service ${RPM_BUILD_ROOT}/etc/systemd/system/cb-yara-connector.service
 install -m 0755 ${RPM_SOURCE_DIR}/dist/yaraconnector ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/

@@ -20,6 +20,8 @@ import lockfile
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
+#DO NOT REMOVE NEEDED FOR RPM BUILD
+import mmap
 # noinspection PyPackageRequirements
 from celery.bin.worker import worker
 from celery.exceptions import WorkerLostError

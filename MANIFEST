@@ -7,3 +7,5 @@
 /etc/cb/integrations/cb-yara-connector/yara_rules
 /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
 /tmp/yaraconnectorceleryworker
+%dir /var/cb/data/cb-yara-connector
+%dir /var/cb/data/cb-yara-connector/feed_db
