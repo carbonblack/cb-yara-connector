@@ -111,7 +111,7 @@ class ConfigurationInit(object):
         globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
 
         # we need the cb_server_api information whenever  required (ie, we are a worker)
-        cb_req = "worker" in globals.g_mode
+        cb_req = "worker" in globals.g_mode or "master+worker" in globals.g_mode
 
         globals.g_cb_server_url = self._as_str("cb_server_url", required=cb_req)
         globals.g_cb_server_token = self._as_str("cb_server_token", required=cb_req)

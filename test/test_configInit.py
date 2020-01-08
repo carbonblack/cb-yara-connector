@@ -208,7 +208,7 @@ class TestConfigurationInit(TestCase):
 
     def test_05a_cb_server_url_missing_for_master(self):
         """
-        Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
+        Ensure that 'cb_server_url' is not required if mode==master
         """
         self.mangle(change={"mode": "master", "cb_server_url": None})
         ConfigurationInit(TESTCONF)
@@ -216,7 +216,7 @@ class TestConfigurationInit(TestCase):
 
     def test_05b_cb_server_url_empty_for_master(self):
         """
-        Ensure that 'cb_server_url' is not required if mode==slave and worker_type==remote
+        Ensure that 'cb_server_url' is not required if mode==master
         """
         self.mangle(change={"mode": "master", "cb_server_url": ""})
         ConfigurationInit(TESTCONF)
@@ -240,27 +240,27 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_05e_cb_server_url_missing_for_worker(self):
+    def test_05e_cb_server_url_missing_for_master_worker(self):
         """
-        Ensure that 'cb_server_url' is required and detected.
+        Ensure that 'cb_server_url' is not required if mode==master+worker
         """
-        self.mangle(change={"mode": "worker", "cb_server_url": None})
+        self.mangle(change={"mode": "master+worker", "cb_server_url": None})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_05f_cb_server_url_empty_for_worker(self):
+    def test_05f_cb_server_url_empty_for_master_worker(self):
         """
-        Ensure that 'cb_server_url' is required and detected.
+        Ensure that 'cb_server_url' is not required if mode==master+worker
         """
-        self.mangle(change={"mode": "worker", "cb_server_url": ""})
+        self.mangle(change={"mode": "master+worker", "cb_server_url": ""})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
     def test_06a_broker_url_missing(self):
         """
-        Ensure that  missing broker_url is detected.
+        Ensure that missing broker_url is detected.
         """
         self.mangle(change={"broker_url": None})
         with self.assertRaises(CbInvalidConfig) as err:
