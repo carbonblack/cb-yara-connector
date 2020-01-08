@@ -7,8 +7,8 @@ Environment=C_FORCE_ROOT=1
 Type=forking
 ExecStart=/usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True
 WorkingDirectory=/usr/share/cb/integrations/cb-yara-connector
-User=cb
-Group=cb
+#User=cb
+#Group=cb
 
 
 [Install]
