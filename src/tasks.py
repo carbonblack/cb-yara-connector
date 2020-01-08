@@ -15,6 +15,7 @@ import requests
 import urllib3
 # noinspection PyPackageRequirements
 import yara
+# noinspection PyProtectedMember
 from celery import bootsteps, Task
 from celery.utils.log import get_task_logger
 
@@ -33,7 +34,7 @@ rulelogger = logging.getLogger("yaraworker")
 rulelogger.setLevel(logging.INFO)
 
 
-# FIXME: Does not implement all abstract tasks
+# noinspection PyAbstractClass
 class MyTask(Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
