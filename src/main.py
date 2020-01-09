@@ -672,6 +672,7 @@ def main():
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+        
 
     # Verify the configuration file and load up important global variables
     try:

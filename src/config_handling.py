@@ -13,6 +13,7 @@ from celery_app import app
 from exceptions import CbInvalidConfig
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 __all__ = ["ConfigurationInit"]
 
@@ -133,19 +134,23 @@ class ConfigurationInit(object):
 
         config = configparser.ConfigParser()
         if os.path.isfile('/etc/cb/cb.conf'):
+            logger.debug("FOUND CB.CONF")
             try:
-                config.read_file(open('/etc/cb/cb.conf'))
-                dburl = config['DatabaseURL'].strip()
-                dbregex = r"postgresql\+psycopg2:\/\/(.+):(.+)@localhost:(\d+)/(.+)"
-                matches = re.match(dbregex, dburl)
-                globals.g_postgres_user = "cb"
-                globals.g_postgres_password = matches.group(2) if matches else "NONE"
-                globals.g_postgres_port = 5002
-                globals.g_postgres_db = "cb"
-                globals.g_postgres_host = "https://localhost"
+                with open('/etc/cb/cb.conf') as cbconffile:
+                    for line in cbconffile.readlines():
+                        if line.startswith("DatabaseURL="):
+                            dbregex = r"DatabaseURL=postgresql\+psycopg2:\/\/(.+):(.+)@localhost:(\d+)/(.+)"
+                            matches = re.match(dbregex, line)
+                            globals.g_postgres_user = "cb"
+                            globals.g_postgres_password = matches.group(2) if matches else "NONE"
+                            globals.g_postgres_port = 5002
+                            globals.g_postgres_db = "cb"
+                            globals.g_postgres_host = "127.0.01"
+                            break
             except Exception as err:
                 logger.exception(f"Someting went wrong trying to parse /etc/cb/cb.conf for postgres details: {err}")
         else:
+            logger.debug("Couldn't find /etc/cb/cb.conf")
             globals.g_postgres_host = self._as_str("postgres_host", default=globals.g_postgres_host)
             globals.g_postgres_username = self._as_str("postgres_username", default=globals.g_postgres_username)
             globals.g_postgres_password = self._as_str("postgres_password", required=True)
