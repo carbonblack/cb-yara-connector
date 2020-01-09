@@ -73,7 +73,22 @@ Install the connector on the cbr server, and config it with the master mode - co
 
 ## Input your yara rules
 
-The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each specifying one or more yara rule. Your rules need to have `metadata` section with a `score: [1-100]` tag to appropriately score matching binaries.  This directory is configurable in your configuration file.
+The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each 
+specifying one or more yara rule. Your rules need to have `metadata` section with a 
+`score: [1-100]` tag to appropriately score matching binaries.  This directory is 
+configurable in your configuration file.
+
+###### Sample Yara Rule File
+```
+// Sample rule to match binaries over 100kb in size
+
+rule matchover100kb {
+	meta:
+		score = 10
+	condition:
+		filesize > 100KB
+}
+```
 
 #### Running Yara Agent 
 
