@@ -4,7 +4,7 @@ The Yara agent has two parts a master and one or more workers.
 
 The master service must be installed on the same system as Cb Response.
 
-Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-845bf75ee6de094b22f9/python-cb-yara-connector-2.1-0.x86_64.rpm).
+Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-845bf75ee6de094b22f9/python-cb-yara-connector-2.1-0.x86_64.rp).
 
 The connector can be easily installed from an rpm:
 
@@ -75,7 +75,7 @@ Install the connector on the cbr server, and config it with the master mode - co
 
 The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each 
 specifying one or more yara rule. Your rules need to have `metadata` section with a 
-`score: [1-100]` tag to appropriately score matching binaries.  This directory is 
+`score= [1-10]` tag to appropriately score matching binaries.  This directory is 
 configurable in your configuration file.
 
 ###### Sample Yara Rule File
