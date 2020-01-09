@@ -5,9 +5,7 @@ from unittest import TestCase
 
 from feed import CbFeed, CbInvalidFeed
 
-
-class TestCbFeed(TestCase):
-    SOURCE = """{
+SOURCE = """{
   "feedinfo": {
     "category": "Local Feed QA Feed BBI893963562",
     "display_name": "QA Feed BBI893963562",
@@ -54,11 +52,14 @@ class TestCbFeed(TestCase):
   ]
 }"""
 
+
+class TestCbFeed(TestCase):
+
     def test_load_and_dump(self):
         """
         Ensure that the load functionality works as expected.
         """
-        feed = CbFeed.load(self.SOURCE)
+        feed = CbFeed.load(SOURCE)
 
         fi = feed.data['feedinfo'].data
         self.assertEqual('qafeedbbi893963562', fi['name'])
@@ -68,13 +69,13 @@ class TestCbFeed(TestCase):
         self.assertEqual(2, len(rpts))
 
         check = feed.dump()
-        self.assertEqual(self.SOURCE, check)
+        self.assertEqual(SOURCE, check)
 
     def test_duplicate_report_ids(self):
         """
         Ensure that report ids cannot be the same..
         """
-        feed = CbFeed.load(self.SOURCE)
+        feed = CbFeed.load(SOURCE)
         reps = feed.data['reports']
         reps[1].data['id'] = reps[0].data['id']
 
@@ -83,7 +84,7 @@ class TestCbFeed(TestCase):
         assert "duplicate report id" in "{0}".format(err.exception.args[0])
 
     def test_dumpjson(self):
-        feed = CbFeed.load(self.SOURCE)
+        feed = CbFeed.load(SOURCE)
         json = feed.dumpjson()
 
         fi = feed.data['feedinfo'].data
@@ -100,7 +101,7 @@ class TestCbFeed(TestCase):
                 self.assertEqual(check[entry][key], rpt[key])
 
     def test_iter_iocs(self):
-        feed = CbFeed.load(self.SOURCE)
+        feed = CbFeed.load(SOURCE)
 
         check = {
             "ID36724710133780394307691457860616137.exe": "58ce99ab4ca124973fe2bfee428862a0",
