@@ -92,13 +92,14 @@ class ConfigurationInit(object):
         except configparser.InterpolationSyntaxError as err:
             raise CbInvalidConfig(f"{self.source} cannot be parsed: {err}")
 
+        globals.g_mode = self._as_str("mode", required=False, default="master",
+                                      allowed=["master", "worker", "master+worker"])
+
         # do the config checks
         self._worker_check()
 
-        if output_file is not None and output_file != "":
-            globals.g_output_file = os.path.abspath(os.path.expanduser(output_file))
-            logger.debug(f"NOTE: output file will be '{globals.g_output_file}'")
-            self._extended_check()
+        if globals.g_mode in ["master", "master+worker"]:
+            self._master_check(output_file)
 
     def _worker_check(self) -> None:
         """
@@ -106,9 +107,6 @@ class ConfigurationInit(object):
 
         :raises CbInvalidConfig:
         """
-        globals.g_mode = self._as_str("mode", required=False, default="master",
-                                      allowed=["master", "worker", "master+worker"])
-
         globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
 
         # we need the cb_server_api information whenever  required (ie, we are a worker)
@@ -124,10 +122,11 @@ class ConfigurationInit(object):
                                                         default=globals.g_worker_network_timeout)
         globals.g_celeryworkerkwargs = self._as_json("celery_worker_kwargs")
 
-    def _extended_check(self) -> None:
+    def _master_check(self, output_file) -> None:
         """
         Validate entries used by the main process.
 
+        :param output_file: output file location from command line
         :raises CbInvalidConfig:
         :raises ValueError:
         """
@@ -188,6 +187,13 @@ class ConfigurationInit(object):
 
         globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, expect_dir=True,
                                                     default=globals.g_feed_database_dir, create_if_needed=True)
+
+        if output_file is not None and output_file != "":
+            globals.g_output_file = os.path.abspath(os.path.expanduser(output_file))
+        else:  # same location as feed db, called "feed.json"
+            globals.g_output_file = os.path.join(os.path.dirname(globals.g_feed_database_dir), "feed.json")
+
+        logger.debug(f"NOTE: output file will be '{globals.g_output_file}'")
 
         globals.g_scanning_interval = self._as_int('database_scanning_interval', default=globals.g_scanning_interval,
                                                    min_value=360)

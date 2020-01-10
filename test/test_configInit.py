@@ -140,7 +140,7 @@ class TestConfigurationInit(TestCase):
         Ensure our base configuration is valid for worker types.
         """
         ConfigurationInit(TESTCONF)
-        self.assertEqual("", globals.g_output_file)
+        self.assertTrue(globals.g_output_file.endswith("feed.json"))
 
     def test_01a_missing_config(self):
         """
@@ -807,8 +807,9 @@ class TestConfigurationInit(TestCase):
 
     def test_90_minimal_validation_effects(self):
         """
-        Ensure that minimal caonfiguration does not set extra globals
+        Ensure that minimal configuration does not set extra globals
         """
+        self.mangle(change={"mode": "worker"})
         globals.g_postgres_host = None
         ConfigurationInit(TESTCONF)
         self.assertIsNone(globals.g_postgres_host)

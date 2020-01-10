@@ -623,7 +623,7 @@ def handle_arguments():
     )
     # Controls the output feed location+name
     parser.add_argument(
-        "--output-file", default="yara_feed.json", help="output feed file"
+        "--output-file", default=None, help="output feed file"
     )
     # Controls the working directory
     parser.add_argument(
@@ -672,7 +672,6 @@ def main():
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-        
 
     # Verify the configuration file and load up important global variables
     try:
