@@ -42,7 +42,7 @@ The daemon will attempt to load the postgres credentails from disk, if available
 
 ~~~ini
 ;
-; Cb Response postgres Database settings
+; Cb Response postgres Database settings (master)
 ;
 postgres_host=127.0.0.1
 postgres_username=cb
@@ -53,8 +53,8 @@ postgres_port=5002
 
 ~~~ini
 ;
-; ONLY for worker_type of local
-; Cb Response Server settings for scanning locally.
+; ONLY FOR WORKER(S) 
+; Cb Response Server settings for scanning locally
 ; For remote scanning please set these parameters in the yara worker config file
 ; Default: https://127.0.0.1
 ;
@@ -74,9 +74,9 @@ Install the connector on the cbr server, and config it with the master mode - co
 ## Input your yara rules
 
 The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each 
-specifying one or more yara rule. Your rules need to have `metadata` section with a 
-`score= [1-10]` tag to appropriately score matching binaries.  This directory is 
-configurable in your configuration file.
+specifying one or more yara rule. Your rules must have `meta` section with a 
+`score = [1-10]` tag to appropriately score matching binaries.  This directory is 
+configurable in your configuration file. C-style comments are supported.
 
 ###### Sample Yara Rule File
 ```
