@@ -20,6 +20,7 @@ from typing import List
 
 import lockfile
 import psycopg2
+import psutil
 # noinspection PyPackageRequirements
 import yara
 # noinspection PyPackageRequirements
@@ -81,7 +82,7 @@ def analysis_worker(
                 except Empty:
                     exit_event.wait(1)
                 except WorkerLostError as err:
-                    logger.debug(f"Lost connection to remote worker and exiting\n{err}")
+                    logger.debug(f"Lost connection to remote worker and exiting \n {err}")
                     exit_event.set()
                     break
                 except Exception as err:
@@ -597,6 +598,30 @@ def launch_celery_worker(worker_obj, workerkwargs=None, config_file: str = None)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
 
+def terminate_celery_worker(worker_obj: worker = None):
+    """
+    Attempt to use the pidfile to gracefully terminate celery workers if they exist
+    if the worker hasn't terminated gracefully after 5 seconds, kill it using the .die() command
+    :param worker_obj: worker object
+    """
+    """with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
+        worker_pid_str = cworkerpidfile.readline()
+        worker_pid = int(worker_pid_str) if len(worker_pid_str.strip()) > 0 else None
+        if worker_pid:
+            parent = psutil.Process(worker_pid) if worker_pid else psutil.Process()
+            children = parent.children(recursive=True)
+            for child in children:
+                logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
+                os.kill(child.pid, signal.SIGQUIT)
+            logger.debug(f"Sending term sig to celery worker - {worker_pid}")
+            os.kill(worker_pid, signal.SIGQUIT)
+        else:
+            logger.debug("Didn't find a worker-pidfile to terminate on exit...")
+
+    time.sleep(1.0) """
+    if worker_obj:
+        worker_obj.die("Worker terminated")
+
 ################################################################################
 # Main entrypoint
 ################################################################################
@@ -773,11 +798,13 @@ def main():
 
                     # run until the service/daemon gets a quitting sig
                     try:
+                        logger.debug("Started as demon OK")
                         run_to_exit_signal(exit_event)
                     finally:
                         try:
                             wait_all_worker_exit_threads(threads, timeout=4.0)
                         finally:
+                            #terminate_celery_worker(localworker)
                             logger.info("Yara connector shutdown")
 
             else:  # | | | BATCH MODE | | |
