@@ -377,8 +377,9 @@ def run_to_exit_signal(exit_event: Event) -> None:
     """
     while not (exit_event.is_set()):
         exit_event.wait(30.0)
-        numbins = BinaryDetonationResult.select().count()
-        logger.info(f"Analyzed {numbins} binaries so far ... ")
+        if "master" in globals.g_mode: 
+            numbins = BinaryDetonationResult.select().count()
+            logger.info(f"Analyzed {numbins} binaries so far ... ")
     logger.debug("Begin graceful shutdown...")
 
 
@@ -800,6 +801,8 @@ def main():
                     try:
                         logger.debug("Started as demon OK")
                         run_to_exit_signal(exit_event)
+                    except Exception as e:
+                        logger.exception("Error starting {e}")
                     finally:
                         try:
                             wait_all_worker_exit_threads(threads, timeout=4.0)
