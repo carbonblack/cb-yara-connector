@@ -1,13 +1,12 @@
 # Installing Yara Agent (Centos/RHEL 7+)
 
-The Yara agent is made up of two parts -- a master and one or more workers.
+The Yara Integration is made up of two parts -- a master and one or more workers.
 The master service must be installed on the same system as Cb Response, while workers
 are usually installed on other systems (but can also be on the master system, if so
-desired).
+desired). 
 
-The yara connector itself uses celery-queues to distribute work to and remote (or local) workers - you will need to install and 
-configure a broker (probably, redis - but any broker compatible with celery 4.x+ will do) that is accessible
-to the master node and to any worker(s).
+The yara connector itself uses celery to distribute work to and remote (or local) workers - you will need to install and 
+configure a broker (ex, redis, postgres) that is accessible to both the task-master and the remote worker instance(s).
 
 Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-c64dc62eb602dc1b82df/python-cb-yara-connector-2.1-0.x86_64.rpm).
 
@@ -19,17 +18,7 @@ The connector uses a configured directory containing yara rules, to efficiently 
 are seen by the CB Response Server. The generated threat information is used to produce an
 intelligence feed for ingest by the Cb Response Server again.
 
-
-# Dev install 
-
-Use git to retrieve the project, create a new virtual environment using python3.6+ and use pip to install the requirements:
-
-```
-git clone https://github.com/carbonblack/cb-yara-connector
-pip3 install -r requirements.txt
-```
-
-# Create Yara Agent Config
+# Create Yara Connector Config
 
 The installation process will create a sample configuration file in the control directory
 as `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample`.  Simply copy
@@ -133,7 +122,7 @@ mode=master
 ; Used for downloading binaries
 ;
 cb_server_url=https://localhost
-cb_server_token=aafdasfdsafdsafdsa
+cb_server_token=12345678910
 
 ;
 ; Directory for temporary yara rules storage
@@ -153,14 +142,14 @@ yara_rules_dir=/etc/cb/integrations/cb-yara-connector/yara-rules
 ;
 broker_url=redis://master.server.url
 
-mode=slave
+mode=worker
 
 ;
 ; Cb Response Server Configuration
 ; Used for downloading binaries
 ;
 cb_server_url=https://master.server.url
-cb_server_token=aafdasfdsafdsafdsa
+cb_server_token=12345678910
 
 ```
 
@@ -234,3 +223,12 @@ If supplied, yara rules will be validated and the script will exit.
 
 #### Example Cron Entry
 _[TBD]_
+
+# Dev install 
+
+Use git to retrieve the project, create a new virtual environment using python3.6+ and use pip to install the requirements:
+
+```
+git clone https://github.com/carbonblack/cb-yara-connector
+pip3 install -r requirements.txt
+```
