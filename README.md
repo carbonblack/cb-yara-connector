@@ -3,10 +3,9 @@
 The Yara Integration is made up of two parts -- a master and one or more workers.
 The master service must be installed on the same system as Cb Response, while workers
 are usually installed on other systems (but can also be on the master system, if so
-desired). 
-
+desired).
 The yara connector itself uses celery to distribute work to and remote (or local) workers - you will need to install and 
-configure a broker (ex, redis, postgres) that is accessible to both the task-master and the remote worker instance(s).
+configure a [broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (ex. redis)  that is accessible to both the task-master and the remote worker instance(s).
 
 Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-c64dc62eb602dc1b82df/python-cb-yara-connector-2.1-0.x86_64.rpm).
 
@@ -103,6 +102,8 @@ rule matchover100kb {
 `systemctl stop cb-yara-connector` will gracefully stop the yara-connector.
 
 `systemctl status -l cb-yara-connector` will display logging information. 
+
+`journalctl -u cb-yara-connector.service` - verbose logs. 
 
 #### Example Yara Connector Master configuration
 
