@@ -8,8 +8,6 @@ Type=forking
 ExecStart=/usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log
 WorkingDirectory=/usr/share/cb/integrations/cb-yara-connector
 KillSignal=SIGQUIT
-#User=cb
-#Group=cb
 
 
 [Install]
