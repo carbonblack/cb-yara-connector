@@ -1,12 +1,17 @@
 # Installing Yara Agent (Centos/RHEL 7+)
 
-The Yara agent has two parts a master and one or more workers.
+The Yara agent is made up of two parts -- a master and one or more workers.
+The master service must be installed on the same system as Cb Response, while workers
+are usually installed on other systems (but can also be on the master system, if so
+desired).
 
-The master service must be installed on the same system as Cb Response.
+The yara connector itself uses celery-queues to distribute work to and remote (or local) workers - you will need to install and 
+configure a broker (probably, redis - but any broker compatible with celery 4.x+ will do) that is accessible
+to the master node and to any worker(s).
 
-Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-ac560575c782caf791c5/python-cb-yara-connector-2.1-0.x86_64.rpm).
+Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-c64dc62eb602dc1b82df/python-cb-yara-connector-2.1-0.x86_64.rpm).
 
-The connector can be easily installed from an rpm:
+Once downloaded, the connector can be easily installed from the rpm:
 
 `yum install python-cb-yara-connector-<Latest>.rpm` 
 
@@ -14,11 +19,8 @@ The connector uses a configured directory containing yara rules, to efficiently 
 are seen by the CB Response Server. The generated threat information is used to produce an
 intelligence feed for ingest by the Cb Response Server again.
 
-The yara connector uses celery-queues to distribute work to remote workers - you will need to install and 
-configure a broker (probbably, redis - but any broker compatible with celery 4.x+ will do) that is accessible
-to the master node and to any worker(s).
 
-# Dev install #
+# Dev install 
 
 Use git to retrieve the project, create a new virtual environment using python3.6+ and use pip to install the requirements:
 
@@ -27,43 +29,58 @@ git clone https://github.com/carbonblack/cb-yara-connector
 pip3 install -r requirements.txt
 ```
 
-## Create Yara Agent Config
+# Create Yara Agent Config
 
-The connector is configured by a .ini formatted configuration file at `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`.
+The installation process will create a sample configuration file in the control directory
+as `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample`.  Simply copy
+this sample template to `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`,
+which is looked for by the yara connectory service.  You will likely have to edit this
+configuration file on each system (master and workers) to supply any missing
+information:
+* worker systems will need to change the mode to `worker`; if you plan to use the master
+system to also run a worker (not suggested, but allowed), the mode must be `master+worker`.
+* Remote worker systems will require the master's URL for `cb_server_url` (local workers need no modification);
+ they also require  the token of a global admin user for `cb_server_token`. 
+* Remote workers will require the URL of the master's redis server 
 
-The installation process will create a sample configuration file: 
-`/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample`
+The daemon will attempt to load the postgres credentals from the response server's `cb.conf`, 
+if available, falling back to  postgres connection information for your CBR server 
+in the master's configurration file using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
 
-Copy the sample configuration file, to edit to produce a working configuration for the connector:
-
-`cp /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample /etc/cb/integrations/cb-yara-connector/yaraconnector.conf`
-
-The daemon will attempt to load the postgres credentails from disk, if available - optionally, configure the postgres connection information for your CBR server using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
-
-~~~ini
+```ini
 ;
-; Cb Response postgres Database settings (master)
+; Cb Response postgres Database settings, required for 'master' and 'master+worker' systems
+; The seever will attempt to read from local cb.conf file first and fall back
+; to these settings if it cannot do so.
 ;
 postgres_host=127.0.0.1
 postgres_username=cb
-postgres_password=<Password from /etc/cb/cb.conf goes here>
+postgres_password=<POSTGRES PASSWORD GOES HERE>
 postgres_db=cb
 postgres_port=5002
-~~~
+```
 
-~~~ini
+```ini
 ;
-; ONLY FOR WORKER(S) 
-; Cb Response Server settings for scanning locally
-; For remote scanning please set these parameters in the yara worker config file
-; Default: https://127.0.0.1
+; Cb Response Server settings, required for 'worker' and 'master+worker' systems
+; For remote workers, the cb_server_url mus be that of the master
 ;
-cb_server_url=https://localhost
+cb_server_url=https://127.0.0.1
 cb_server_token=<API TOKEN GOES HERE>
-~~~
+```
 
-You must configure `broker=` which sets the broker and results_backend for celery. You will set this appropriately as per the celery documentation - here (https://docs.celeryproject.org/en/latest/getting-started/brokers/).
+You must configure `broker=` which sets the broker and results_backend for celery. 
+You will set this appropriately as per the celery documentation - 
+here (https://docs.celeryproject.org/en/latest/getting-started/brokers/).
 
+```ini
+;
+; URL of the redis server, defaulting to the local response server redis for the master.  If this is a worker
+; system, alter to point to the master system.  If you are using a standalone redis server, both master and
+; workers must point to the same server.
+;
+broker_url=redis://127.0.0.1
+```
 
 The yara-connector RPM contains a service that is primarily intended to serve as a distributed system, with a master serving work to remote worker machine(s) for analysis and compiling a threat intelligence feed for Carbon Black Response EDR.
 
@@ -111,8 +128,6 @@ broker_url=redis://127.0.0.1
 
 mode=master
 
-worker_type=remote
-
 ;
 ; Cb Response Server Configuration
 ; Used for downloading binaries
@@ -136,17 +151,15 @@ yara_rules_dir=/etc/cb/integrations/cb-yara-connector/yara-rules
 ; Python Celery Broker Url. Set this full url stringg
 ; Example: redis://<ip_address>
 ;
-broker_url=redis://127.0.0.1
+broker_url=redis://master.server.url
 
 mode=slave
-
-worker_type=local
 
 ;
 ; Cb Response Server Configuration
 ; Used for downloading binaries
 ;
-cb_server_url=https://localhost
+cb_server_url=https://master.server.url
 cb_server_token=aafdasfdsafdsafdsa
 
 ```
@@ -214,7 +227,7 @@ within the current yara package.
 
 ###### --output-file
 Provides the path containing the feed description file.  If not supplied, defaults to
-`/local/yara_feed.json` within the current yara package.
+`feed.json` in the same location as the configured `feed_database_dir` folder.
 
 ###### --validate-yara-rules
 If supplied, yara rules will be validated and the script will exit.

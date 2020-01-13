@@ -130,10 +130,9 @@ class ConfigurationInit(object):
         :raises CbInvalidConfig:
         :raises ValueError:
         """
-
-        config = configparser.ConfigParser()
+        use_fallback = True
         if os.path.isfile('/etc/cb/cb.conf'):
-            logger.debug("FOUND CB.CONF")
+            logger.debug("Found local 'cb.conf', attempting to configure postgres from it...")
             try:
                 with open('/etc/cb/cb.conf') as cbconffile:
                     for line in cbconffile.readlines():
@@ -144,12 +143,14 @@ class ConfigurationInit(object):
                             globals.g_postgres_password = matches.group(2) if matches else "NONE"
                             globals.g_postgres_port = 5002
                             globals.g_postgres_db = "cb"
-                            globals.g_postgres_host = "127.0.01"
+                            globals.g_postgres_host = "127.0.0.1"
                             break
+                use_fallback = False  # we good!
             except Exception as err:
                 logger.exception(f"Someting went wrong trying to parse /etc/cb/cb.conf for postgres details: {err}")
-        else:
-            logger.debug("Couldn't find /etc/cb/cb.conf")
+
+        if use_fallback:
+            logger.debug("Falling back to config settings for postgres...")
             globals.g_postgres_host = self._as_str("postgres_host", default=globals.g_postgres_host)
             globals.g_postgres_username = self._as_str("postgres_username", default=globals.g_postgres_username)
             globals.g_postgres_password = self._as_str("postgres_password", required=True)
