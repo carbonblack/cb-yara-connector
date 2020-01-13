@@ -377,7 +377,7 @@ def run_to_exit_signal(exit_event: Event) -> None:
     """
     while not (exit_event.is_set()):
         exit_event.wait(30.0)
-        if "master" in globals.g_mode: 
+        if "master" in globals.g_mode:
             numbins = BinaryDetonationResult.select().count()
             logger.info(f"Analyzed {numbins} binaries so far ... ")
     logger.debug("Begin graceful shutdown...")
