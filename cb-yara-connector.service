@@ -5,11 +5,9 @@ After=syslog.target network.target
 [Service]
 Environment=C_FORCE_ROOT=1
 Type=forking
-ExecStart=/usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log
+ExecStart=/usr/share/cb/integrations/cb-yara-connector/yaraconnector --output-file /var/cb/data/cb-yara-connector/feed.json --debug --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log
 WorkingDirectory=/usr/share/cb/integrations/cb-yara-connector
 KillSignal=SIGQUIT
-#User=cb
-#Group=cb
 
 
 [Install]
