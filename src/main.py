@@ -19,8 +19,9 @@ from threading import Event, Thread
 from typing import List
 
 import lockfile
-import psycopg2
+# noinspection PyUnresolvedReferences
 import psutil
+import psycopg2
 # noinspection PyPackageRequirements
 import yara
 # noinspection PyPackageRequirements
@@ -49,9 +50,7 @@ celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.CRITICAL)
 
 
-def analysis_worker(
-        exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue
-) -> None:
+def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue) -> None:
     """
     The promise worker scanning function.
 
@@ -372,14 +371,17 @@ def handle_sig(exit_event: Event, sig: int, frame) -> None:
 #
 def run_to_exit_signal(exit_event: Event) -> None:
     """
-    Wait-until-exit polling loop function.
+    Wait-until-exit polling loop function.  Spam reduced by only updating when count changes.
     :param exit_event: the event handler
     """
+    last_numbins = 0
     while not (exit_event.is_set()):
         exit_event.wait(30.0)
         if "master" in globals.g_mode:
             numbins = BinaryDetonationResult.select().count()
-            logger.info(f"Analyzed {numbins} binaries so far ... ")
+            if numbins != last_numbins:
+                logger.info(f"Analyzed {numbins} binaries so far ... ")
+                last_numbins = numbins
     logger.debug("Begin graceful shutdown...")
 
 
@@ -599,30 +601,6 @@ def launch_celery_worker(worker_obj, workerkwargs=None, config_file: str = None)
     logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
 
 
-def terminate_celery_worker(worker_obj: worker = None):
-    """
-    Attempt to use the pidfile to gracefully terminate celery workers if they exist
-    if the worker hasn't terminated gracefully after 5 seconds, kill it using the .die() command
-    :param worker_obj: worker object
-    """
-    """with open('/tmp/yaraconnectorceleryworker') as cworkerpidfile:
-        worker_pid_str = cworkerpidfile.readline()
-        worker_pid = int(worker_pid_str) if len(worker_pid_str.strip()) > 0 else None
-        if worker_pid:
-            parent = psutil.Process(worker_pid) if worker_pid else psutil.Process()
-            children = parent.children(recursive=True)
-            for child in children:
-                logger.debug(f"Sending term sig to celery worker child - {worker_pid}")
-                os.kill(child.pid, signal.SIGQUIT)
-            logger.debug(f"Sending term sig to celery worker - {worker_pid}")
-            os.kill(worker_pid, signal.SIGQUIT)
-        else:
-            logger.debug("Didn't find a worker-pidfile to terminate on exit...")
-
-    time.sleep(1.0) """
-    if worker_obj:
-        worker_obj.die("Worker terminated")
-
 ################################################################################
 # Main entrypoint
 ################################################################################
@@ -729,6 +707,7 @@ def main():
         # used for local worker handling in some scenarios
         localworker = None
 
+        exit_rc = 0
         try:
             """
             3 modes of operation
@@ -802,12 +781,11 @@ def main():
                         logger.debug("Started as demon OK")
                         run_to_exit_signal(exit_event)
                     except Exception as e:
-                        logger.exception("Error starting {e}")
+                        logger.exception(f"Error while executing: {e}")
                     finally:
                         try:
                             wait_all_worker_exit_threads(threads, timeout=4.0)
                         finally:
-                            #terminate_celery_worker(localworker)
                             logger.info("Yara connector shutdown")
 
             else:  # | | | BATCH MODE | | |
@@ -831,10 +809,13 @@ def main():
                 wait_all_worker_exit_threads(threads, timeout=4.0)
         except KeyboardInterrupt:
             logger.info("\n\n##### Interupted by User!\n")
+            exit_rc = 3
         except Exception as err:
             logger.error(f"There were errors executing yara rules: {err}")
+            exit_rc = 4
         finally:
             exit_event.set()
+        sys.exit(exit_rc)
 
 
 if __name__ == "__main__":

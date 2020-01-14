@@ -5,9 +5,10 @@ The master service must be installed on the same system as Cb Response, while wo
 are usually installed on other systems (but can also be on the master system, if so
 desired).
 The yara connector itself uses celery to distribute work to and remote (or local) workers - you will need to install and 
-configure a [broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (ex. redis)  that is accessible to both the task-master and the remote worker instance(s).
+configure a [broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (ex. redis)  that is accessible
+ to both the task-master and the remote worker instance(s).
 
-Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-c64dc62eb602dc1b82df/python-cb-yara-connector-2.1-0.x86_64.rpm).
+Download the latest RPM from the github releases page, [here](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-b39ed959488c9ec78055/python-cb-yara-connector-2.1-0.x86_64.rpm).
 
 Once downloaded, the connector can be easily installed from the rpm:
 
@@ -22,7 +23,7 @@ intelligence feed for ingest by the Cb Response Server again.
 The installation process will create a sample configuration file in the control directory
 as `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample`.  Simply copy
 this sample template to `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`,
-which is looked for by the yara connectory service.  You will likely have to edit this
+which is looked for by the yara connector service.  You will likely have to edit this
 configuration file on each system (master and workers) to supply any missing
 information:
 * worker systems will need to change the mode to `worker`; if you plan to use the master
@@ -31,9 +32,9 @@ system to also run a worker (not suggested, but allowed), the mode must be `mast
  they also require  the token of a global admin user for `cb_server_token`. 
 * Remote workers will require the URL of the master's redis server 
 
-The daemon will attempt to load the postgres credentals from the response server's `cb.conf`, 
+The daemon will attempt to load the postgres credentials from the response server's `cb.conf`, 
 if available, falling back to  postgres connection information for your CBR server 
-in the master's configurration file using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
+in the master's configuration file using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
 
 ```ini
 ;
@@ -76,7 +77,7 @@ There are two operating modes to support the two roles: `mode=master` and `mode=
 
 Install the connector on the cbr server, and config it with the master mode - configure postgres credentials, and a directory of monitored yara rules. In worker mode, configure REST API credentials. Both modes require a broker for celery communications.
 
-## Input your yara rules
+## Create your yara rules
 
 The yara connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each 
 specifying one or more yara rule. Your rules must have `meta` section with a 
@@ -95,7 +96,7 @@ rule matchover100kb {
 }
 ```
 
-#### Running Yara Agent 
+#### Controlling the Yara Agent 
 
 `systemctl start cb-yara-connector` will up the service using systemD. 
 
@@ -105,54 +106,6 @@ rule matchover100kb {
 
 `journalctl -u cb-yara-connector.service` - verbose logs. 
 
-#### Example Yara Connector Master configuration
-
-```ini
-[general]
-
-;
-; Python Celery Broker Url. Set this full url stringg
-; Example: redis://<ip_address>
-;
-broker_url=redis://127.0.0.1
-
-mode=master
-
-;
-; Cb Response Server Configuration
-; Used for downloading binaries
-;
-cb_server_url=https://localhost
-cb_server_token=12345678910
-
-;
-; Directory for temporary yara rules storage
-; WARNING: Put your yara rules with the yara agent.  This is just temporary storage.
-;
-yara_rules_dir=/etc/cb/integrations/cb-yara-connector/yara-rules
-```
-
-### Example Remote Worker configuration
-
-```ini
-[general]
-
-;
-; Python Celery Broker Url. Set this full url stringg
-; Example: redis://<ip_address>
-;
-broker_url=redis://master.server.url
-
-mode=worker
-
-;
-; Cb Response Server Configuration
-; Used for downloading binaries
-;
-cb_server_url=https://master.server.url
-cb_server_token=12345678910
-
-```
 
 # Development Notes	
 
@@ -186,7 +139,7 @@ utility_script=./scripts/vacuumscript.sh
 The dockerfile in the top-level of the repo contains a centos7 environment for running, building, and testing 
 the connector. 
 
-The provided script `docker-build-rpm.sh` will use docker to build the project, and place the RPM(s) in $PWD/RPMS. 
+The provided script `docker-build-rpm.sh` will use docker to build the project, and place the RPM(s) in ${PWD}/RPMS. 
 
 
 ##### Command-line Options
@@ -225,6 +178,7 @@ If supplied, yara rules will be validated and the script will exit.
 #### Example Cron Entry
 _[TBD]_
 
+---
 # Dev install 
 
 Use git to retrieve the project, create a new virtual environment using python3.6+ and use pip to install the requirements:
