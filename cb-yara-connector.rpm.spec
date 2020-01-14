@@ -1,8 +1,14 @@
+%define version 2.1.0
+%define release 1
+
 Name: python-cb-yara-connector
-Version: 2.1
-Release: 0
+Version: %{version}
+Release: %{release}%{?dist}
 Summary: Carbon Black Yara Agent
 License: MIT
+BuildArch: x86_64
+Vendor: Carbon Black
+Url: http://www.carbonblack.com/
 
 %description
 Carbon Black Yara Agent - Scans binaries with configured yara rules

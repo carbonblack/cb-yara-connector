@@ -15,13 +15,11 @@ WORKDIR /home/cb
 RUN mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 RUN virtualenv yaraconnector
 RUN source ./yaraconnector/bin/activate
-RUN git clone https://github.com/carbonblack/cb-yara-connector
+COPY --chown=cb ./ /home/cb/cb-yara-connector/
 WORKDIR /home/cb/cb-yara-connector
-RUN git checkout feature-cb-28268
 RUN pip3 install -r requirements.txt --user
 RUN pip3 install pyinstaller==3.5.0 --user
 ENV PATH $PATH:~/.local/bin
 RUN make clean ; make rpm
 USER root
-#RUN yum install -y /home/cb/rpmbuild/RPMS/x86_64/python-cb-yara-connector.*.rpm
 CMD ["/bin/bash","-c"]

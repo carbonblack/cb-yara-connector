@@ -40,6 +40,7 @@ nosetests.xml
 
 # IDE exclusions
 .idea
+*.iml
 
 config.ini
 
@@ -49,4 +50,6 @@ binary.db
 # incase inadvertantly left by unit testing
 conf-testing.conf
 
-#
+# Build files
+RPMS/
+
