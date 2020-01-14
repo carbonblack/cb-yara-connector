@@ -1,4 +1,4 @@
-# Installing YARA Agent (Centos/RHEL 6+)
+# Installing YARA Agent (CentOS/RHEL 6/7)
 
 [YARA](https://virustotal.github.io/yara/) Integration is made up of two parts -- a master and one or more workers. The master service must be installed on the same system as CB EDR, while workers are usually installed on other systems (but can also be on the master system, if so desired). The YARA connector itself uses [Celery](http://www.celeryproject.org/) to distribute work to and remote (or local) workers - you will need to install and configure a [broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (e.g., [Redis](https://redis.io/)) that is accessible to both the task-master and the remote worker instance(s).
 
@@ -89,8 +89,7 @@ rule matchover100kb {
 | Display logging information | `systemctl status -l cb-yara-connector` | 
 | Displaying verbose logs | `journalctl -u cb-YARA-connector.service` |
 
-
-Use `service` commands instead of runnnig on Centos 6. SystemD is prefered.
+Use `service` commands instead if running on CentOS 6.x (systemd is preferred).
 
 # Development Notes	
 
