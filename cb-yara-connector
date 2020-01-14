@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+#       /etc/rc.d/init.d/cb-yara-connector
+#
+. /etc/init.d/functions
+
+
+start() {
+        echo -n "Starting cb-yara-connector: "
+	return /usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json
+}
+
+stop() {
+        echo -n "Shutting down cb-yara-connector: "
+	kill -3 /usr/share/cb/integrations/cb-yara-connector/yaraconnector.lock
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        echo 'running'
+        ;;
+    restart)
+        stop
+        start
+        ;;
+esac
+exit $?

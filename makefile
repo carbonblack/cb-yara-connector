@@ -20,6 +20,7 @@ rpm:
 	cp -rp src/* ${SOURCEDIR}/src
 	cp -rp src/* ${BUILDDIR}/src
 	cp -rp init-scripts/* ${BUILDDIR}/init-scripts
+	cp -rp cb-yara-connector ${SOURCEDIR}/cb-yara-connector
 	cp example-conf/yara.conf ${BUILDDIR}/example-conf/yara.conf
 	cp -rp  example-conf/yara.conf ${SOURCEDIR}/example-conf/yara.conf
 	cp -p MANIFEST ${BUILDDIR}/MANIFEST
