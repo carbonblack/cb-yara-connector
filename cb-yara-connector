@@ -7,12 +7,21 @@
 
 start() {
         echo -n "Starting cb-yara-connector: "
-	return /usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json
+	    /usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json
+        return $
 }
 
 stop() {
         echo -n "Shutting down cb-yara-connector: "
-	kill -3 /usr/share/cb/integrations/cb-yara-connector/yaraconnector.lock
+	    kill -3 /usr/share/cb/integrations/cb-yara-connector/yaraconnector.lock
+}
+
+status() {
+    if [ -f "/usr/share/cb/integrations/cb-yara-connector/yaraconnector.lock" ]; then 
+        echo 'running - (pidfile exists)'
+    else
+        echo 'stopped/dead'
+    fi
 }
 
 case "$1" in
@@ -23,7 +32,7 @@ case "$1" in
         stop
         ;;
     status)
-        echo 'running'
+        status
         ;;
     restart)
         stop

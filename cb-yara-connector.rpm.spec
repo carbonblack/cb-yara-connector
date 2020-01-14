@@ -3,7 +3,6 @@ Version: 2.1
 Release: 0
 Summary: Carbon Black Yara Agent
 License: MIT
-Requires: redis
 
 %description
 Carbon Black Yara Agent - Scans binaries with configured yara rules
