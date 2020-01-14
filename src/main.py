@@ -19,8 +19,6 @@ from threading import Event, Thread
 from typing import List
 
 import lockfile
-# noinspection PyUnresolvedReferences
-import psutil
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
