@@ -8,7 +8,7 @@
 start() {
         echo -n "Starting cb-yara-connector: "
 	    /usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json
-        return $
+        return $?
 }
 
 stop() {
