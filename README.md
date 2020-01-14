@@ -1,8 +1,8 @@
 # Installing YARA Agent (Centos/RHEL 7+)
 
-[YARA](https://virustotal.github.io/yara/) Integration is made up of two parts -- a master and one or more workers. The master service must be installed on the same system as Cb Response, while workers are usually installed on other systems (but can also be on the master system, if so desired). The YARA connector itself uses [Celery](http://www.celeryproject.org/) to distribute work to and remote (or local) workers - you will need to install and configure a [broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (e.g., [Redis](https://redis.io/)) that is accessible to both the task-master and the remote worker instance(s).
+[YARA](https://virustotal.github.io/yara/) Integration is made up of two parts -- a master and one or more workers. The master service must be installed on the same system as CB EDR, while workers are usually installed on other systems (but can also be on the master system, if so desired). The YARA connector itself uses [Celery](http://www.celeryproject.org/) to distribute work to and remote (or local) workers - you will need to install and configure a [broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (e.g., [Redis](https://redis.io/)) that is accessible to both the task-master and the remote worker instance(s).
 
-The connector uses a configured directory containing YARA rules, to efficiently scan binaries as they are seen by the CB Response Server. The generated threat information is used to produce an intelligence feed for ingest by the Cb Response Server again.
+The connector reads YARA rules from a configured directory to efficiently scan binaries as they are seen by the CB EDR server. The generated threat information is used to produce an intelligence feed for ingest by the CB EDR Server.
 
 1. Download the latest RPM from the [GitHub releases page](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-b39ed959488c9ec78055/python-cb-yara-connector-2.1-0.x86_64.rpm).
 1. Install the RPM:
@@ -25,13 +25,12 @@ information:
  they also require  the token of a global admin user for `cb_server_token`. 
 * Remote workers will require the URL of the master's Redis server 
 
-The daemon will attempt to load the postgres credentials from the response server's `cb.conf`, 
-if available, falling back to  postgres connection information for your CBR server 
-in the master's configuration file using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
+The daemon will attempt to load the PostgreSQL credentials from the CB EDR server's `cb.conf` file, 
+if available, falling back to the PostgreSQL connection information in the master's configuration file using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
 
 ```ini
 ;
-; Cb Response postgres Database settings, required for 'master' and 'master+worker' systems
+; Cb Response PostgreSQL Database settings, required for 'master' and 'master+worker' systems
 ; The seever will attempt to read from local cb.conf file first and fall back
 ; to these settings if it cannot do so.
 ;
@@ -44,7 +43,7 @@ postgres_port=5002
 
 ```ini
 ;
-; Cb Response Server settings, required for 'worker' and 'master+worker' systems
+; Cb EDR server settings, required for 'worker' and 'master+worker' systems
 ; For remote workers, the cb_server_url mus be that of the master
 ;
 cb_server_url=https://127.0.0.1
@@ -56,7 +55,7 @@ Set this appropriately as per the [Celery documentation](https://docs.celeryproj
 
 ```ini
 ;
-; URL of the Redis server, defaulting to the local response server Redis for the master.  If this is a worker
+; URL of the Redis server, defaulting to the local CB EDR server Redis for the master.  If this is a worker
 ; system, alter to point to the master system.  If you are using a standalone Redis server, both master and
 ; workers must point to the same server.
 ;
