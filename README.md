@@ -20,7 +20,8 @@ this sample template to `/etc/cb/integrations/cb-yara-connector/yaraconnector.co
 which is the filename and location that the connector expects.  You will likely have to edit this
 configuration file on each system (master and workers) to supply any missing
 information:
-* There are two operating modes to support the two roles: `mode=master` and `mode=worker`. Both modes require a broker for Celery communications. Worker systems will need to change the mode to `worker`; if you plan to use the master system to also run a worker (not suggested, but allowed), the mode must be `master+worker`.
+* There are two operating modes to support the two roles: `mode=master` and `mode=worker`. Both modes require a broker for Celery communications. Worker systems will need to change the mode to `worker`; 
+
 * Remote worker systems will require the master's URL for `cb_server_url` (local workers need no modification);
  they also require  the token of a global admin user for `cb_server_token`. 
 * Remote workers will require the URL of the master's Redis server 
