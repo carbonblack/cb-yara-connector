@@ -7,7 +7,10 @@
 prog="cb-yara-connector"
 piddir="/run/cb/integrations/$prog"
 pidfile="$piddir/$prog.pid"
-command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
+logdir="/var/log/cb/integrations/$prog"
+logfile="/$prog.startup.log"
+
+command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file $logdir/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
 
 start() {
     if [ -f "$pidfile" ] && kill -0 $(cat "$pidfile"); then
@@ -17,7 +20,7 @@ start() {
 
     mkdir -p $piddir
     echo -n "Starting $prog: "
-    $command
+    $command &> $logfile
     result=$?
 
     if [ -f "$pidfile" ]; then
