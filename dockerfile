@@ -1,25 +1,20 @@
 FROM centos:7
-RUN yum -y install rpm-build
-RUN yum -y install epel-release
-RUN yum -y install python36 python36-devel
-RUN yum -y install git
-RUN yum -y install make
-RUN yum -y install gcc gcc-devel
-RUN yum -y install automake libtool make gcc
+RUN yum -y install rpm-build epel-release
+RUN yum -y install python36 python36-devel git make gcc gcc-devel automak libtool make
 RUN groupadd -r cb && useradd --no-log-init -r -g cb cb
-RUN mkdir /home/cb
-RUN chown cb:cb /home/cb
+RUN mkdir /home/cb && \
+    chown cb:cb /home/cb
 RUN pip3 install virtualenv virtualenvwrapper 
 USER cb
 WORKDIR /home/cb
-RUN mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+ENV PATH ~/yaraconnector/bin:$PATH:~/.local/bin
+ARG REBUILD_STEP=unknown
+RUN REBUILD_STEP=${REBUILD_STEP} mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 RUN virtualenv yaraconnector
-RUN source ./yaraconnector/bin/activate
 COPY --chown=cb ./ /home/cb/cb-yara-connector/
 WORKDIR /home/cb/cb-yara-connector
-RUN pip3 install -r requirements.txt --user
-RUN pip3 install pyinstaller==3.5.0 --user
-ENV PATH $PATH:~/.local/bin
+RUN pip3 install -r requirements.txt
+RUN pip3 install pyinstaller==3.5.0
 RUN make clean ; make rpm
 USER root
 CMD ["/bin/bash","-c"]

@@ -18,7 +18,6 @@ from queue import Empty, Queue
 from threading import Event, Thread
 from typing import List
 
-import lockfile
 import psycopg2
 # noinspection PyPackageRequirements
 import yara
@@ -631,9 +630,9 @@ def handle_arguments():
     parser.add_argument(
         "--working-dir", default=".", help="working directory", required=False
     )
-    # Controls the lock File
+    # Controls the pid File
     parser.add_argument(
-        "--lock-file", default="./yaraconnector", help="lock file", required=False
+        "--pid-file", default="", help="pid file location", required=False
     )
     # Controls batch vs continous mode , defaults to batch processing
     parser.add_argument(
@@ -649,6 +648,17 @@ def handle_arguments():
     parser.add_argument("--debug", action="store_true")
 
     return parser.parse_args()
+
+
+def write_pid_file(file_location: str):
+    if not file_location:
+        return
+    try:
+        with open(file_location, 'w+') as f:
+            f.write(str(os.getpid()))
+    except (IOError, OSError) as ex:
+        logger.error(F"Failed to write to PID file: {ex}")
+        exit(1)
 
 
 def main():
@@ -698,8 +708,7 @@ def main():
         exit_event = Event()
         hash_queue = Queue()
         scanning_results_queue = Queue()
-        # Lock file so this process is a singleton
-        lock_file = lockfile.FileLock(args.lock_file)
+        write_pid_file(args.pid_file)
 
         # noinspection PyUnusedLocal
         # used for local worker handling in some scenarios
@@ -720,19 +729,14 @@ def main():
 
                 # Mark files to be preserved
                 files_preserve = get_log_file_handles(logger)
-                files_preserve.extend([args.lock_file, args.log_file, args.output_file])
+                files_preserve.extend([args.log_file, args.output_file])
 
-                # defaults to piping to /dev/null
-                deamon_kwargs = {
-                    "working_directory": working_dir,
-                    "pidfile": lock_file,
-                    "files_preserve": files_preserve,
-                }
-
-                # If in debug mode, make sure stdout and stderr don't go to /dev/null
-                if args.debug:
-                    deamon_kwargs.update({"stdout": sys.stdout, "stderr": sys.stderr})
-                context = daemon.DaemonContext(**deamon_kwargs)
+                context = daemon.DaemonContext(
+                    working_directory=working_dir,
+                    files_preserve=files_preserve,
+                    stdout=sys.stdout if args.debug else None,
+                    stderr=sys.stderr if args.debug else None
+                )
 
                 # Operating mode - are we the master a worker?
                 run_as_master = "master" in globals.g_mode

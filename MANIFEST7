@@ -3,10 +3,9 @@
 %dir /usr/share/cb/integrations/cb-yara-connector
 %dir /var/log/cb/integrations/cb-yara-connector
 /var/log/cb/integrations/cb-yara-connector/yaraconnector.log
-/etc/systemd/system/cb-yara-connector.service
-/etc/init.d/cb-yara-connector
 /etc/cb/integrations/cb-yara-connector/yara_rules
 /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
-/tmp/yaraconnectorceleryworker
 %dir /var/cb/data/cb-yara-connector
 %dir /var/cb/data/cb-yara-connector/feed_db
+/tmp/yaraconnectorceleryworker
+/etc/systemd/system/cb-yara-connector.service

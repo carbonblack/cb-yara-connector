@@ -4,23 +4,47 @@
 #
 . /etc/init.d/functions
 
+prog="cb-yara-connector"
+piddir="/var/run/cb/integrations/$prog"
+pidfile="$piddir/$prog.pid"
+command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
 
 start() {
-        echo -n "Starting cb-yara-connector: "
-	    /usr/share/cb/integrations/cb-yara-connector/yaraconnector --debug --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json
-        return $?
+    if [ -f "$pidfile" ] && kill -0 $(cat "$pidfile"); then
+        echo "Already started"
+        return 1
+    fi
+
+    mkdir -p $piddir
+    echo -n "Starting $prog: "
+    $command
+    result=$?
+
+    if [ -f "$pidfile" ]; then
+        echo "Ok"
+    else
+        echo "Failed"
+    fi
+    return $result
 }
 
 stop() {
-        echo -n "Shutting down cb-yara-connector: "
-	    kill -3 /usr/share/cb/integrations/cb-yara-connector/yaraconnector.lock
+    echo -n "Shutting down $prog: "
+    if [ ! -f "$pidfile" ] || ! kill -0 $(cat "$pidfile"); then
+        echo "Ok"
+        return 1
+    fi
+	kill -s SIGTERM $(cat $pidfile) && rm -f $pidfile
+	echo "Ok"
+    return 0
 }
 
 status() {
-    if [ -f "/usr/share/cb/integrations/cb-yara-connector/yaraconnector.lock" ]; then 
-        echo 'running - (pidfile exists)'
+    echo -n "Status of $prog: "
+    if [ -f "$pidfile" ] && kill -0 $(cat "$pidfile"); then
+        echo "Running"
     else
-        echo 'stopped/dead'
+        echo "Stopped"
     fi
 }
 
