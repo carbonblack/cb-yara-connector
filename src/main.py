@@ -675,7 +675,7 @@ def write_pid_file(file_location: str):
     if not file_location:
         return
     try:
-        os.mkdir(os.path.dirname(file_location))
+        os.makedirs(os.path.dirname(file_location), exist_ok=True)
         with open(file_location, 'w+') as f:
             f.write(str(os.getpid()))
     except (IOError, OSError) as ex:
