@@ -5,7 +5,7 @@
 . /etc/init.d/functions
 
 prog="cb-yara-connector"
-piddir="/var/run/cb/integrations/$prog"
+piddir="/run/cb/integrations/$prog"
 pidfile="$piddir/$prog.pid"
 command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --run-forever True --log-file /var/log/cb/integrations/cb-yara-connector/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
 

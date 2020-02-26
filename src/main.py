@@ -228,6 +228,27 @@ def get_database_conn():
     return conn
 
 
+def test_database_conn() -> bool:
+    """
+    Tests the connection to the postgres database.  Closes the connection if successful.
+    :return: Returns True if connection to db was successful.
+    """
+    logger.info("Testing connection to Postgres database...")
+    try:
+        conn = psycopg2.connect(
+            host=globals.g_postgres_host,
+            database=globals.g_postgres_db,
+            user=globals.g_postgres_username,
+            password=globals.g_postgres_password,
+            port=globals.g_postgres_port,
+        )
+        conn.close()
+    except psycopg2.DatabaseError as ex:
+        logger.error(F"Failed to connect to postgres database: {ex}")
+        return False
+    return True
+
+
 def get_binary_file_cursor(conn, start_date_binaries: datetime):
     """
     Get the cursor index to the binaries.
@@ -654,6 +675,7 @@ def write_pid_file(file_location: str):
     if not file_location:
         return
     try:
+        os.mkdir(os.path.dirname(file_location))
         with open(file_location, 'w+') as f:
             f.write(str(os.getpid()))
     except (IOError, OSError) as ex:
@@ -688,6 +710,8 @@ def main():
     # Verify the configuration file and load up important global variables
     try:
         ConfigurationInit(args.config_file, args.output_file)
+        if not test_database_conn():
+            sys.exit(1)
     except Exception as err:
         logger.error(f"Unable to continue due to a configuration problem: {err}")
         sys.exit(1)
@@ -751,6 +775,7 @@ def main():
                 # Make sure we close the deamon context at the end
                 threads = []
                 with context:
+                    write_pid_file(args.pid_file)
                     # only connect to cbr if we're the master
                     if run_as_master:
                         # initialize local resources
