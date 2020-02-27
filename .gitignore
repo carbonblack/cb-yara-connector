@@ -1,3 +1,7 @@
+################################################################################
+## Set of file patterns to prevent being checked into the repo
+################################################################################
+
 *.py[cod]
 
 # C extensions
@@ -29,6 +33,9 @@ nosetests.xml
 # Translations
 *.mo
 
+# Virtual Environments
+.venv
+
 # Mr Developer
 .mr.developer.cfg
 .project
@@ -36,5 +43,16 @@ nosetests.xml
 
 # IDE exclusions
 .idea
+*.iml
 
 config.ini
+
+# created local DB
+binary.db
+
+# incase inadvertantly left by unit testing
+conf-testing.conf
+
+# Build files
+RPMS/
+

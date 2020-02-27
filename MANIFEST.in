@@ -1,5 +1,0 @@
-recursive-include cbopensource *
-recursive-include root/etc *
-recursive-include root/usr *
-include cb-yara-connector.spec
-recursive-include scripts

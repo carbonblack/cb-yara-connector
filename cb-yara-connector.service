@@ -1,0 +1,16 @@
+[Unit]
+Description=Carbon Black Response Yara Connector
+After=syslog.target network.target
+
+[Service]
+Environment=C_FORCE_ROOT=1
+Type=forking
+ExecStart=/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file /run/cb/integrations/cb-yara-connector/cb-yara-connector.pid --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --daemon --log-file /var/log/cb/integrations/cb-yara-connector/cb-yara-connector.log --output-file /var/cb/data/cb-yara-connector/feed.json
+PIDFile=/run/cb/integrations/cb-yara-connector/cb-yara-connector.pid
+WorkingDirectory=/usr/share/cb/integrations/cb-yara-connector
+KillSignal=SIGTERM
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
