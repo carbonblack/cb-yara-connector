@@ -680,7 +680,7 @@ def write_pid_file(file_location: str):
             f.write(str(os.getpid()))
     except (IOError, OSError) as ex:
         logger.error(F"Failed to write to PID file: {ex}")
-        exit(1)
+        sys.exit(1)
 
 
 def main():
@@ -814,6 +814,8 @@ def main():
                             wait_all_worker_exit_threads(threads, timeout=4.0)
                         finally:
                             logger.info("Yara connector shutdown")
+                            # noinspection PyProtectedMember
+                            os._exit(exit_rc)
 
             else:  # | | | BATCH MODE | | |
                 logger.debug("BATCH MODE")
