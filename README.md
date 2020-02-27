@@ -4,14 +4,30 @@
 
 The connector reads YARA rules from a configured directory to efficiently scan binaries as they are seen by the CB EDR server. The generated threat information is used to produce an intelligence feed for ingest by the CB EDR Server.
 
-1. Download the latest RPM from the [GitHub releases page](https://github.com/carbonblack/cb-yara-connector/releases/download/untagged-b39ed959488c9ec78055/python-cb-yara-connector-2.1-0.x86_64.rpm).
-1. Install the RPM:
+1. Install the CbOpenSource repository if it isn't already present:
+    
+    ```
+    cd /etc/yum.repos.d
+    curl -O https://opensource.carbonblack.com/CbOpenSource.repo
+    ``` 
 
-    `yum install python-cb-yara-connector-<Latest>.rpm`
+1. Install the RPM:
+    ```
+    yum install python-cb-yara-connector
+    ```
 
 1. Enable the service:
-
-    `systemctl enable cb-yara-connector`
+    
+    1. For Centos/Red Had 6:
+        
+        ```
+        chkconfig cb-yara-connector on
+        ```
+    1. For Centos/Red Had 7:
+        
+        ```
+        systemctl enable cb-yara-connector
+        ```
 
 # Create YARA Connector Config
 
@@ -69,7 +85,7 @@ specifying one or more YARA rule. Your rules must have `meta` section with a
 `score = [1-10]` tag to appropriately score matching binaries.  This directory is 
 configurable in your configuration file. C-style comments are supported.
 
-###### Sample YARA Rule File
+#### Sample YARA Rule File
 ```
 // Sample rule to match binaries over 100kb in size
 
@@ -81,16 +97,24 @@ rule matchover100kb {
 }
 ```
 
-#### Controlling the YARA Agent 
+## Controlling the YARA Agent 
+
+#### CentOS / Red Hat 6
+
+| Action | Command |
+| ------ | ------- |
+| Start the service | `service cb-yara-connector start` |
+| Stop the service | `service cb-yara-connector stop` |
+| Display service status | `service cb-yara-connector status` | 
+
+#### CentOS / Red Hat 7
 
 | Action | Command |
 | ------ | ------- |
 | Start the service | `systemctl start cb-yara-connector` |
 | Stop the service | `systemctl stop cb-yara-connector` |
-| Display logging information | `systemctl status -l cb-yara-connector` | 
-| Displaying verbose logs | `journalctl -u cb-YARA-connector.service` |
-
-Use `service` commands instead if running on CentOS 6.x (systemd is preferred).
+| Display service status | `systemctl status -l cb-yara-connector` |
+| Displaying verbose logs | `journalctl -u cb-yara-connector` |
 
 # Development Notes	
 
@@ -129,22 +153,28 @@ The provided script `docker-build-rpm.sh` will use docker to build the project, 
 
 ##### Command-line Options
 ```text
-usage: main.py [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
-               [--output-file OUTPUT_FILE] [--validate-yara-rules] [--debug]
+usage: yaraconnector [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
+                     [--output-file OUTPUT_FILE] [--working-dir WORKING_DIR]
+                     [--pid-file PID_FILE] [--daemon]
+                     [--validate-yara-rules] [--debug]
 
-YARA Agent for YARA Connector
+Yara Agent for Yara Connector
 
 optional arguments:
   -h, --help            show this help message and exit
   --config-file CONFIG_FILE
-                        Location of the config file
-  --log-file LOG_FILE   Log file output (defaults to `local` folder)
+                        location of the config file
+  --log-file LOG_FILE   file location for log output
   --output-file OUTPUT_FILE
-                        output feed file (defaults to `local` folder)
+                        file location for feed file
+  --working-dir WORKING_DIR
+                        working directory
+  --pid-file PID_FILE   pid file location - if not supplied, will not write a
+                        pid file
+  --daemon              run in daemon mode (run as a service)
   --validate-yara-rules
-                        ONLY validate YARA rules in a specified directory
-  --debug               Provide additional logging
-
+                        only validate the yara rules, then exit
+  --debug               enabled debug level logging
 ```
 ###### --config-file
 Provides the path of the configuration file to be used _**(REQUIRED)**_
@@ -159,9 +189,6 @@ Provides the path containing the feed description file.  If not supplied, defaul
 
 ###### --validate-yara-rules
 If supplied, YARA rules will be validated and the script will exit.
-
-#### Example Cron Entry
-_[TBD]_
 
 ---
 # Dev install 

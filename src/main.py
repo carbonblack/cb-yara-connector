@@ -632,41 +632,38 @@ def handle_arguments():
     """
     parser = argparse.ArgumentParser(description="Yara Agent for Yara Connector")
 
-    # Controls config file  (ini)
+    # Controls config file (ini)
     parser.add_argument(
-        "--config-file",
-        required=True,
-        default="yaraconnector.conf",
-        help="Location of the config file",
+        "--config-file", default="yaraconnector.conf", help="location of the config file", required=True,
     )
     # Controls log file location+name
     parser.add_argument(
-        "--log-file", default="yaraconnector.log", help="Log file output"
+        "--log-file", default="cb-yara-connector.log", help="file location for log output"
     )
     # Controls the output feed location+name
     parser.add_argument(
-        "--output-file", default=None, help="output feed file"
+        "--output-file", default=None, help="file location for feed file"
     )
     # Controls the working directory
     parser.add_argument(
-        "--working-dir", default=".", help="working directory", required=False
+        "--working-dir", default=".", help="working directory"
     )
     # Controls the pid File
     parser.add_argument(
-        "--pid-file", default="", help="pid file location", required=False
-    )
-    # Controls batch vs continous mode , defaults to batch processing
-    parser.add_argument(
-        "--run-forever", default=False, help="Run as batch mode or no", required=False
+        "--pid-file", default="", help="pid file location - if not supplied, will not write a pid file"
     )
 
-    # Validates the rules
-    parser.add_argument(
-        "--validate-yara-rules",
-        action="store_true",
-        help="Only validate yara rules, then exit",
+    group = parser.add_mutually_exclusive_group()
+    # Controls if we run in daemon mode
+    group.add_argument(
+        "--daemon", action='store_true', help="run in daemon mode (run as a service)"
     )
-    parser.add_argument("--debug", action="store_true")
+    # Validates the rules
+    group.add_argument(
+        "--validate-yara-rules", action="store_true", help="only validate the yara rules, then exit"
+    )
+
+    parser.add_argument("--debug", action="store_true", help="enabled debug level logging")
 
     return parser.parse_args()
 
@@ -726,6 +723,7 @@ def main():
         except Exception as err:
             logger.error(f"There were errors compiling yara rules: {err}")
             sys.exit(2)
+        sys.exit()
     else:
         # Doing a real run
         # Exit condition and queues for doing work
@@ -746,7 +744,7 @@ def main():
             2) standalone worker
             3) worker+master unit
             """
-            if args.run_forever:  # Running as a deamon
+            if args.daemon:
                 logger.debug("RUNNING AS DEMON")
                 # Get working dir setting
                 working_dir = os.path.abspath(os.path.expanduser(args.working_dir))
