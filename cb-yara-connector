@@ -8,22 +8,27 @@ prog="cb-yara-connector"
 piddir="/run/cb/integrations/$prog"
 pidfile="$piddir/$prog.pid"
 logdir="/var/log/cb/integrations/$prog"
-logfile="/$prog.startup.log"
+logfile="$logdir/$prog.startup.log"
 
 command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --daemon --log-file $logdir/cb-yara-connector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
 
+is_running() {
+    [ -f "$pidfile" ] && kill -0 $(cat "$pidfile") 2> /dev/null
+}
+
 start() {
-    if [ -f "$pidfile" ] && kill -0 $(cat "$pidfile"); then
+    if is_running; then
         echo "Already started"
         return 1
     fi
 
     mkdir -p $piddir
+    rm -f $pidfile 2> /dev/null
     echo -n "Starting $prog: "
     $command &> $logfile
     result=$?
 
-    if [ -f "$pidfile" ]; then
+    if is_running; then
         echo "Ok"
     else
         echo "Failed"
@@ -33,18 +38,19 @@ start() {
 
 stop() {
     echo -n "Shutting down $prog: "
-    if [ ! -f "$pidfile" ] || ! kill -0 $(cat "$pidfile"); then
+    if is_running; then
+        kill -s SIGTERM $(cat $pidfile) && rm -f $pidfile 2> /dev/null
         echo "Ok"
-        return 1
+        return 0
     fi
-	kill -s SIGTERM $(cat $pidfile) && rm -f $pidfile
-	echo "Ok"
-    return 0
+
+    echo "Ok"
+    return 1
 }
 
 status() {
     echo -n "Status of $prog: "
-    if [ -f "$pidfile" ] && kill -0 $(cat "$pidfile"); then
+    if is_running; then
         echo "Running"
     else
         echo "Stopped"
