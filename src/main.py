@@ -707,8 +707,6 @@ def main():
     # Verify the configuration file and load up important global variables
     try:
         ConfigurationInit(args.config_file, args.output_file)
-        if not test_database_conn():
-            sys.exit(1)
     except Exception as err:
         logger.error(f"Unable to continue due to a configuration problem: {err}")
         sys.exit(1)
@@ -762,6 +760,14 @@ def main():
 
                 # Operating mode - are we the master a worker?
                 run_as_master = "master" in globals.g_mode
+
+                # noinspection PyBroadException
+                try:
+                    if run_as_master and not test_database_conn():
+                        sys.exit(1)
+                except Exception as ex:
+                    logger.error(F"Failed database connection test: {ex}")
+                    sys.exit(1)
 
                 # Signal handler
                 sig_handler = partial(handle_sig, exit_event)
