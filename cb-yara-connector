@@ -13,7 +13,7 @@ logfile="$logdir/$prog.startup.log"
 running_check_retries=20
 running_check_wait=0.25
 
-command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --daemon --log-file $logdir/cb-yara-connector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
+command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --daemon --log-file $logdir/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
 
 is_running() {
     [ -f "$pidfile" ] && kill -0 $(cat "$pidfile") 2> /dev/null
