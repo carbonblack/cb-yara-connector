@@ -8,22 +8,44 @@ prog="cb-yara-connector"
 piddir="/run/cb/integrations/$prog"
 pidfile="$piddir/$prog.pid"
 logdir="/var/log/cb/integrations/$prog"
-logfile="/$prog.startup.log"
+logfile="$logdir/$prog.startup.log"
+# 5 Seconds for yara to startup.
+running_check_retries=20
+running_check_wait=0.25
 
-command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --daemon --log-file $logdir/cb-yara-connector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
+command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --daemon --log-file $logdir/yaraconnector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
+
+is_running() {
+    [ -f "$pidfile" ] && kill -0 $(cat "$pidfile") 2> /dev/null
+}
+
+is_running_retry() {
+    retry_count=0
+    while [ $retry_count -le $running_check_retries ]
+    do
+        if is_running; then
+            return 0 # Return true
+        fi
+        sleep $running_check_wait
+        retry_count=$[$retry_count + 1]
+    done
+    return 1 # Return false
+}
 
 start() {
-    if [ -f "$pidfile" ] && kill -0 $(cat "$pidfile"); then
+    if is_running; then
         echo "Already started"
         return 1
     fi
 
     mkdir -p $piddir
+    rm -f $pidfile 2> /dev/null
     echo -n "Starting $prog: "
+    export C_FORCE_ROOT=1
     $command &> $logfile
     result=$?
 
-    if [ -f "$pidfile" ]; then
+    if is_running_retry; then
         echo "Ok"
     else
         echo "Failed"
@@ -33,18 +55,21 @@ start() {
 
 stop() {
     echo -n "Shutting down $prog: "
-    if [ ! -f "$pidfile" ] || ! kill -0 $(cat "$pidfile"); then
+    if is_running; then
+        pid=$(cat $pidfile)
+        pgid=$(ps -o pgid --pid $pid --no-heading)
+        pkill -15 -g $pgid && rm -f $pidfile 2> /dev/null
         echo "Ok"
-        return 1
+        return 0
     fi
-	kill -s SIGTERM $(cat $pidfile) && rm -f $pidfile
-	echo "Ok"
-    return 0
+
+    echo "Ok"
+    return 1
 }
 
 status() {
     echo -n "Status of $prog: "
-    if [ -f "$pidfile" ] && kill -0 $(cat "$pidfile"); then
+    if is_running; then
         echo "Running"
     else
         echo "Stopped"
