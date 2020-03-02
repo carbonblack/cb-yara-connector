@@ -25,7 +25,7 @@ mkdir -p ${RPM_BUILD_ROOT}/tmp
 mkdir -p ${RPM_BUILD_ROOT}/var/run/
 mkdir -p ${RPM_BUILD_ROOT}/var/cb/data/cb-yara-connector/feed_db
 
-%if "%{?dist}" == ".el6"
+%if %{defined el6}
 mkdir -p ${RPM_BUILD_ROOT}/etc/init
 mkdir -p ${RPM_BUILD_ROOT}/etc/init.d/
 install -m 700 ${RPM_SOURCE_DIR}/cb-yara-connector ${RPM_BUILD_ROOT}/etc/init.d/cb-yara-connector
@@ -44,7 +44,7 @@ touch ${RPM_BUILD_ROOT}/tmp/yaraconnectorceleryworker
 %config /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
 
 %preun
-%if "%{?dist}" == ".el6"
+%if %{defined el6}
 service cb-yara-connector stop
 %else # EL7 and up
 systemctl stop cb-yara-connector
