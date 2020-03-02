@@ -59,12 +59,10 @@ stop() {
         pid=$(cat $pidfile)
         pgid=$(ps -o pgid --pid $pid --no-heading)
         pkill -15 -g $pgid && rm -f $pidfile 2> /dev/null
-        echo "Ok"
-        return 0
     fi
 
     echo "Ok"
-    return 1
+    return 0
 }
 
 status() {
