@@ -42,3 +42,11 @@ touch ${RPM_BUILD_ROOT}/tmp/yaraconnectorceleryworker
 
 %files -f MANIFEST
 %config /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
+
+%preun
+%if "%{?dist}" == ".el6"
+service cb-yara-connector stop
+%else # EL7 and up
+systemctl stop cb-yara-connector
+%endif
+
