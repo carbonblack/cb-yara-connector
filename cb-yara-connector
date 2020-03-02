@@ -9,11 +9,27 @@ piddir="/run/cb/integrations/$prog"
 pidfile="$piddir/$prog.pid"
 logdir="/var/log/cb/integrations/$prog"
 logfile="$logdir/$prog.startup.log"
+# 5 Seconds for yara to startup.
+running_check_retries=20
+running_check_wait=0.25
 
 command="/usr/share/cb/integrations/cb-yara-connector/yaraconnector --pid-file $pidfile --working-dir /usr/share/cb/integrations/cb-yara-connector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf --daemon --log-file $logdir/cb-yara-connector.log --output-file /var/cb/data/cb-yara-connector/feed.json"
 
 is_running() {
     [ -f "$pidfile" ] && kill -0 $(cat "$pidfile") 2> /dev/null
+}
+
+is_running_retry() {
+    retry_count=0
+    while [ $retry_count -le $running_check_retries ]
+    do
+        if is_running; then
+            return 0 # Return true
+        fi
+        sleep $running_check_wait
+        retry_count=$[$retry_count + 1]
+    done
+    return 1 # Return false
 }
 
 start() {
@@ -28,7 +44,7 @@ start() {
     $command &> $logfile
     result=$?
 
-    if is_running; then
+    if is_running_retry; then
         echo "Ok"
     else
         echo "Failed"
