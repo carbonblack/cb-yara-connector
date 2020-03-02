@@ -41,6 +41,7 @@ start() {
     mkdir -p $piddir
     rm -f $pidfile 2> /dev/null
     echo -n "Starting $prog: "
+    export C_FORCE_ROOT=1
     $command &> $logfile
     result=$?
 
@@ -55,7 +56,9 @@ start() {
 stop() {
     echo -n "Shutting down $prog: "
     if is_running; then
-        kill -s SIGTERM $(cat $pidfile) && rm -f $pidfile 2> /dev/null
+        pid=$(cat $pidfile)
+        pgid=$(ps -o pgid --pid $pid --no-heading)
+        pkill -15 -g $pgid && rm -f $pidfile 2> /dev/null
         echo "Ok"
         return 0
     fi
