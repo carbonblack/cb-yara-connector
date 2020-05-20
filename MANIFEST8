@@ -1,0 +1,11 @@
+/usr/share/cb/integrations/cb-yara-connector/yaraconnector
+/usr/share/cb/integrations/cb-yara-connector/yara-logo.png
+%dir /usr/share/cb/integrations/cb-yara-connector
+%dir /var/log/cb/integrations/cb-yara-connector
+/var/log/cb/integrations/cb-yara-connector/yaraconnector.log
+/etc/cb/integrations/cb-yara-connector/yara_rules
+/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
+%dir /var/cb/data/cb-yara-connector
+%dir /var/cb/data/cb-yara-connector/feed_db
+/tmp/yaraconnectorceleryworker
+/etc/systemd/system/cb-yara-connector.service
