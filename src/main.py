@@ -47,7 +47,7 @@ celery_logger = logging.getLogger("celery.app.trace")
 celery_logger.setLevel(logging.CRITICAL)
 
 
-def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue) -> None:
+def analysis_minion(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue) -> None:
     """
     The promise worker scanning function.
 
@@ -78,7 +78,7 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
                 except Empty:
                     exit_event.wait(1)
                 except WorkerLostError as err:
-                    logger.debug(f"Lost connection to remote worker and exiting \n {err}")
+                    logger.debug(f"Lost connection to remote minion and exiting: {err}")
                     exit_event.set()
                     break
                 except Exception as err:
@@ -87,12 +87,12 @@ def analysis_worker(exit_event: Event, hash_queue: Queue, scanning_results_queue
             else:
                 exit_event.wait(1)
     finally:
-        logger.debug(f"ANALYSIS WORKER EXITING {exit_event.is_set()}")
+        logger.debug(f"ANALYSIS MINION EXITING {exit_event.is_set()}")
 
 
-def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
+def results_minion_chunked(exit_event: Event, results_queue: Queue) -> None:
     """
-    Prossess entries in the results queue in chunks.
+    Process entries in the results queue in chunks.
 
     :param exit_event: event signaller
     :param results_queue: the results queue
@@ -110,7 +110,7 @@ def results_worker_chunked(exit_event: Event, results_queue: Queue) -> None:
             else:
                 exit_event.wait(1)
     finally:
-        logger.debug(f"Results worker thread exiting {exit_event.is_set()}")
+        logger.debug(f"Results minion thread exiting {exit_event.is_set()}")
 
 
 def generate_feed_from_db() -> None:
@@ -304,8 +304,8 @@ def perform(yara_rule_dir: str, conn, hash_queue: Queue) -> None:
     :param conn: The postgres connection
     :param hash_queue: the queue of hashes to handle
     """
-    if globals.g_mode == "master":
-        logger.info("Uploading yara rules to workers...")
+    if globals.g_mode == "master" or globals.g_mode == "primary":
+        logger.info("Uploading Yara rules to minions...")
         generate_rule_map_remote(yara_rule_dir)
 
     # Determine our binaries window (date forward)
@@ -395,7 +395,7 @@ def run_to_exit_signal(exit_event: Event) -> None:
     last_numbins = 0
     while not (exit_event.is_set()):
         exit_event.wait(30.0)
-        if "master" in globals.g_mode:
+        if "master" in globals.g_mode or "primary" in globals.g_mode:
             numbins = BinaryDetonationResult.select().count()
             if numbins != last_numbins:
                 logger.info(f"Analyzed {numbins} binaries so far ... ")
@@ -444,10 +444,10 @@ def wait_all_worker_exit_threads(threads, timeout=None):
             return
 
 
-def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue,
+def start_minions(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue,
                   run_only_once=False) -> List[Thread]:
     """
-    Starts worker-threads (not celery workers). Worker threads do work until they get the exit_event signal
+    Starts minion-threads (not celery workers). Minion threads do work until they get the exit_event signal
     :param exit_event: event signaller
     :param hash_queue: promises queue
     :param scanning_results_queue: results queue
@@ -464,18 +464,18 @@ def start_workers(exit_event: Event, hash_queue: Queue, scanning_results_queue: 
     perf_thread.start()
 
     logger.debug("Starting analysis thread")
-    analysis_worker_thread = Thread(
-        target=analysis_worker, args=(exit_event, hash_queue, scanning_results_queue)
+    analysis_minion_thread = Thread(
+        target=analysis_minion, args=(exit_event, hash_queue, scanning_results_queue)
     )
-    analysis_worker_thread.start()
+    analysis_minion_thread.start()
 
     logger.debug("Starting results saver thread")
-    results_worker_thread = Thread(
-        target=results_worker_chunked, args=(exit_event, scanning_results_queue)
+    results_minion_thread = Thread(
+        target=results_minion_chunked, args=(exit_event, scanning_results_queue)
     )
-    results_worker_thread.start()
+    results_minion_thread.start()
 
-    return [perf_thread, results_worker_thread, analysis_worker_thread]
+    return [perf_thread, results_minion_thread, analysis_minion_thread]
 
 
 class DatabaseScanningThread(Thread):
@@ -583,7 +583,7 @@ def start_celery_worker_thread(worker_obj, workerkwargs: dict = None, config_fil
     """
     Start celery worker in a daemon-thread.
 
-    TODO: - Aggresive autoscaling config options
+    TODO: - Aggressive autoscaling config options
     :param worker_obj: worker object
     :param workerkwargs: dictionary of arguments
     :param config_file: path to the yara configuration file
@@ -593,7 +593,7 @@ def start_celery_worker_thread(worker_obj, workerkwargs: dict = None, config_fil
         target=launch_celery_worker,
         kwargs={
             "worker_obj": worker_obj,
-            "workerkwargs": workerkwargs,
+            "worker_kwargs": workerkwargs,
             "config_file": config_file,
         },
     )
@@ -603,20 +603,20 @@ def start_celery_worker_thread(worker_obj, workerkwargs: dict = None, config_fil
     return t
 
 
-def launch_celery_worker(worker_obj, workerkwargs=None, config_file: str = None) -> None:
+def launch_celery_worker(worker_obj, worker_kwargs=None, config_file: str = None) -> None:
     """
     Launch a celery worker using the imported app context
     :param worker_obj: worker object
-    :param workerkwargs: dictionary of arguments
+    :param worker_kwargs: dictionary of arguments
     :param config_file: optional path to a configuration file
     """
-    logger.debug(f"Celery worker args are  {workerkwargs} ")
-    if workerkwargs is None:
+    logger.debug(f"Celery minion args are  {worker_kwargs} ")
+    if worker_kwargs is None:
         worker_obj.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker')
     else:
         worker_obj.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker',
-                       **workerkwargs)
-    logger.debug("CELERY WORKER LAUNCHING THREAD EXITED")
+                       **worker_kwargs)
+    logger.debug("CELERY MINION LAUNCHING THREAD EXITED")
 
 
 ################################################################################
@@ -731,16 +731,16 @@ def main():
         write_pid_file(args.pid_file)
 
         # noinspection PyUnusedLocal
-        # used for local worker handling in some scenarios
-        localworker = None
+        # used for local minion handling in some scenarios
+        local_minion = None
 
         exit_rc = 0
         try:
             """
             3 modes of operation
-            1) task master
-            2) standalone worker
-            3) worker+master unit
+            1) task primary
+            2) standalone minion
+            3) minion+primary unit
             """
             if args.daemon:
                 logger.debug("RUNNING AS DEMON")
@@ -758,12 +758,12 @@ def main():
                     stderr=sys.stderr if args.debug else None
                 )
 
-                # Operating mode - are we the master a worker?
-                run_as_master = "master" in globals.g_mode
+                # Operating mode - are we the primary?
+                run_as_primary = "master" in globals.g_mode or "primary" in globals.g_mode
 
                 # noinspection PyBroadException
                 try:
-                    if run_as_master and not test_database_conn():
+                    if run_as_primary and not test_database_conn():
                         sys.exit(1)
                 except Exception as ex:
                     logger.error(F"Failed database connection test: {ex}")
@@ -780,30 +780,30 @@ def main():
                 threads = []
                 with context:
                     write_pid_file(args.pid_file)
-                    # only connect to cbr if we're the master
-                    if run_as_master:
+                    # only connect to cbr if we're the primary
+                    if run_as_primary:
                         # initialize local resources
                         init_local_resources()
 
                         # start working threads
-                        threads = start_workers(
+                        threads = start_minions(
                             exit_event, hash_queue, scanning_results_queue
                         )
 
                         # start local celeryD worker if working mode is local
-                        if "worker" in globals.g_mode:
-                            localworker = worker(app=app)
+                        if "worker" in globals.g_mode or "minion" in globals.g_mode:
+                            local_minion = worker(app=app)
                             threads.append(
                                 start_celery_worker_thread(
-                                    localworker, globals.g_celeryworkerkwargs, args.config_file
+                                    local_minion, globals.g_celery_worker_kwargs, args.config_file
                                 )
                             )
                     else:
                         # otherwise, we must start a celeryD worker since we are not the master
-                        localworker = worker(app=app)
+                        local_minion = worker(app=app)
                         threads.append(
                             start_celery_worker_thread(
-                                localworker, globals.g_celeryworkerkwargs, args.config_file
+                                local_minion, globals.g_celery_worker_kwargs, args.config_file
                             )
                         )
 
@@ -826,25 +826,25 @@ def main():
                 init_local_resources()
 
                 # start necessary worker threads
-                threads = start_workers(
+                threads = start_minions(
                     exit_event, hash_queue, scanning_results_queue, run_only_once=True
                 )
 
                 # Start a celery worker if we need one
-                if "worker" in globals.g_mode:
-                    localworker = worker(app=app)
+                if "worker" in globals.g_mode or "minion" in globals.g_mode:
+                    local_minion = worker(app=app)
                     threads.append(
                         start_celery_worker_thread(
-                            localworker, globals.g_celeryworkerkwargs, args.config_file
+                            local_minion, globals.g_celery_worker_kwargs, args.config_file
                         )
                     )
                 run_to_exit_signal(exit_event)
                 wait_all_worker_exit_threads(threads, timeout=4.0)
         except KeyboardInterrupt:
-            logger.info("\n\n##### Interupted by User!\n")
+            logger.info("\n\n##### Interrupted by user!\n")
             exit_rc = 3
         except Exception as err:
-            logger.error(f"There were errors executing yara rules: {err}")
+            logger.error(f"There were errors executing Yara rules: {err}")
             exit_rc = 4
         finally:
             exit_event.set()

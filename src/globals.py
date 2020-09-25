@@ -11,8 +11,8 @@ g_output_file = ""
 g_yara_rule_map = {}
 g_yara_rule_map_hash_list = []
 
-# configuiration
-g_mode = "master"
+# configuration
+g_mode = "primary"
 
 g_cb_server_url = ""
 g_cb_server_token = ""
@@ -40,6 +40,6 @@ g_utility_interval = 0
 g_utility_script = ""
 g_utility_debug = False  # dev use only, reduces interval from minutes to seconds!
 
-g_worker_network_timeout = 5
+g_minion_network_timeout = 5
 
-g_celeryworkerkwargs = None
+g_celery_worker_kwargs = None
