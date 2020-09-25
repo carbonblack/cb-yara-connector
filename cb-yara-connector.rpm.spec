@@ -1,5 +1,6 @@
 %define version 2.1.1
 %define release 2
+%define _build_id_links none
 
 Name: python-cb-yara-connector
 Version: %{version}
