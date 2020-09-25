@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+# Copyright © 2014-2020 VMware, Inc. All Rights Reserved.
 
 import configparser
 import json
@@ -49,7 +49,7 @@ KNOWN = [
 
 MODES = [
     "master", "primary",
-    "worker", "minion"
+    "worker", "minion",
     "master+worker", "primary+minion"
 ]
 

@@ -199,3 +199,5 @@ pip3 install -r requirements.txt
 * View all API and integration offerings on the [Developer Network](https://developer.carbonblack.com) along with reference documentation, video tutorials, and how-to guides.
 * Use the [Developer Community Forum](https://community.carbonblack.com/community/resources/developer-relations) to discuss issues and get answers from other API developers in the Carbon Black Community.
 * Report bugs and change requests to [Carbon Black Support](http://carbonblack.com/resources/support/).
+
+Copyright &copy; 2014-2020 VMware, Inc. All Rights Reserved.
