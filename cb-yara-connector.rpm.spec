@@ -1,18 +1,18 @@
-%define version 2.1.1
-%define release 2
+%define version 2.1.2
+%define release 1
 %define _build_id_links none
 
 Name: python-cb-yara-connector
 Version: %{version}
 Release: %{release}%{?dist}
-Summary: Carbon Black Yara Agent
+Summary: VMware Carbon Black Yara Agent
 License: MIT
 BuildArch: x86_64
-Vendor: Carbon Black
+Vendor: VMware Carbon Black
 Url: http://www.carbonblack.com/
 
 %description
-Carbon Black Yara Agent - Scans binaries with configured yara rules
+VMware Carbon Black Yara Agent - Scans binaries with configured yara rules
 
 %build
 cd %_sourcedir ; pyinstaller cb-yara-connector.spec

@@ -1,8 +1,14 @@
 # Installing YARA Agent (CentOS/RHEL 6/7/8)
 
-[YARA](https://virustotal.github.io/yara/) Integration is made up of two parts -- a master and one or more workers. The master service must be installed on the same system as CB EDR, while workers are usually installed on other systems (but can also be on the master system, if so desired). The YARA connector itself uses [Celery](http://www.celeryproject.org/) to distribute work to and remote (or local) workers - you will need to install and configure a [broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (e.g., [Redis](https://redis.io/)) that is accessible to both the task-master and the remote worker instance(s).
+[YARA](https://virustotal.github.io/yara/) Integration has two parts -- a primary and one or more minions. The primary
+service must be installed on the same system as VMware CB EDR, while minions are usually installed on other systems (but 
+can also be on the primary system, if so desired). The YARA connector itself uses [Celery](http://www.celeryproject.org/) 
+to distribute work to and remote (or local) minions - you will need to install and configure a 
+[broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (e.g., [Redis](https://redis.io/)) that is 
+accessible to both the primary and remote minion instance(s).
 
-The connector reads YARA rules from a configured directory to efficiently scan binaries as they are seen by the CB EDR server. The generated threat information is used to produce an intelligence feed for ingest by the CB EDR Server.
+The connector reads YARA rules from a configured directory to efficiently scan binaries as they are seen by the EDR server. T
+he generated threat information is used to produce an intelligence feed for ingest by the EDR Server.
 
 1. Install the CbOpenSource repository if it isn't already present:
     
@@ -21,21 +27,22 @@ The connector reads YARA rules from a configured directory to efficiently scan b
 The installation process creates a sample configuration file: `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample`.  Copy
 this sample template to `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`,
 which is the filename and location that the connector expects.  You will likely have to edit this
-configuration file on each system (master and workers) to supply any missing
-information:
-* There are two operating modes to support the two roles: `mode=master` and `mode=worker`. Both modes require a broker for Celery communications. Worker systems will need to change the mode to `worker`; 
-
-* Remote worker systems will require the master's URL for `cb_server_url` (local workers need no modification);
+configuration file on each system (primary and minions) to supply any missing information:
+* There are two operating modes to support the two roles: `mode=primary` and `mode=minion`. Both modes require a broker 
+for Celery communications. Minion systems will need to change the mode to `minion`; 
+* Remote minion systems will require the primary's URL for `cb_server_url` (local minions need no modification);
  they also require  the token of a global admin user for `cb_server_token`. 
-* Remote workers will require the URL of the master's Redis server 
+* Remote minions will require the URL of the primary's Redis server 
 
-The daemon will attempt to load the PostgreSQL credentials from the CB EDR server's `cb.conf` file, 
-if available, falling back to the PostgreSQL connection information in the master's configuration file using the `postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and `cb_server_token` keys, respectively. 
+The daemon will attempt to load the PostgreSQL credentials from the EDR server's `cb.conf` file, 
+if available, falling back to the PostgreSQL connection information in the primary's configuration file using the 
+`postgres_xxxx` keys in the config. The REST API location and credentials are specified in the `cb_server_url` and 
+`cb_server_token` keys, respectively. 
 
 ```ini
 ;
-; Cb Response PostgreSQL Database settings, required for 'master' and 'master+worker' systems
-; The seever will attempt to read from local cb.conf file first and fall back
+; Cb Response PostgreSQL Database settings, required for 'primary' and 'primary+minion' systems
+; The server will attempt to read from local cb.conf file first and fall back
 ; to these settings if it cannot do so.
 ;
 postgres_host=127.0.0.1
@@ -47,8 +54,8 @@ postgres_port=5002
 
 ```ini
 ;
-; Cb EDR server settings, required for 'worker' and 'master+worker' systems
-; For remote workers, the cb_server_url mus be that of the master
+; EDR server settings, required for 'primary' and 'primary+minion' systems
+; For remote workers, the cb_server_url mus be that of the primary
 ;
 cb_server_url=https://127.0.0.1
 cb_server_token=<API TOKEN GOES HERE>
@@ -59,9 +66,9 @@ Set this appropriately as per the [Celery documentation](https://docs.celeryproj
 
 ```ini
 ;
-; URL of the Redis server, defaulting to the local CB EDR server Redis for the master.  If this is a worker
-; system, alter to point to the master system.  If you are using a standalone Redis server, both master and
-; workers must point to the same server.
+; URL of the Redis server, defaulting to the local EDR server Redis for the primary.  If this is a minion
+; system, alter to point to the primary system.  If you are using a standalone Redis server, both primary and
+; minions must point to the same server.
 ;
 broker_url=redis://127.0.0.1
 ```
@@ -72,7 +79,7 @@ specifying one or more YARA rule. Your rules must have `meta` section with a
 `score = [1-10]` tag to appropriately score matching binaries.  This directory is 
 configurable in your configuration file. C-style comments are supported.
 
-#### Sample YARA Rule File
+### Sample YARA Rule File
 ```
 // Sample rule to match binaries over 100kb in size
 
@@ -84,9 +91,9 @@ rule matchover100kb {
 }
 ```
 
-## Controlling the YARA Agent 
+# Controlling the YARA Agent 
 
-#### CentOS / Red Hat 6
+## CentOS / Red Hat 6
 
 | Action | Command |
 | ------ | ------- |
@@ -94,7 +101,7 @@ rule matchover100kb {
 | Stop the service | `service cb-yara-connector stop` |
 | Display service status | `service cb-yara-connector status` | 
 
-#### CentOS / Red Hat 7
+## CentOS / Red Hat 7
 
 | Action | Command |
 | ------ | ------- |
@@ -102,6 +109,45 @@ rule matchover100kb {
 | Stop the service | `systemctl stop cb-yara-connector` |
 | Display service status | `systemctl status -l cb-yara-connector` |
 | Displaying verbose logs | `journalctl -u cb-yara-connector` |
+
+## Command-line Options
+```text
+usage: yaraconnector [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
+                     [--output-file OUTPUT_FILE] [--working-dir WORKING_DIR]
+                     [--pid-file PID_FILE] [--daemon]
+                     [--validate-yara-rules] [--debug]
+
+Yara Agent for Yara Connector
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --config-file CONFIG_FILE
+                        location of the config file
+  --log-file LOG_FILE   file location for log output
+  --output-file OUTPUT_FILE
+                        file location for feed file
+  --working-dir WORKING_DIR
+                        working directory
+  --pid-file PID_FILE   pid file location - if not supplied, will not write a
+                        pid file
+  --daemon              run in daemon mode (run as a service)
+  --validate-yara-rules
+                        only validate the yara rules, then exit
+  --debug               enabled debug level logging
+```
+### --config-file
+Provides the path of the configuration file to be used _**(REQUIRED)**_
+
+### --log-file
+Provides the path of the YARA log file.  If not supplied, defaults to `local/yara_agent.log`
+within the current YARA package.
+
+### --output-file
+Provides the path containing the feed description file.  If not supplied, defaults to
+`feed.json` in the same location as the configured `feed_database_dir` folder.
+
+### --validate-yara-rules
+If supplied, YARA rules will be validated and the script will exit.
 
 # Development Notes	
 
@@ -137,48 +183,9 @@ the connector.
 
 The provided script `docker-build-rpm.sh` will use docker to build the project, and place the RPM(s) in `${PWD}/RPMS`. 
 
-
-##### Command-line Options
-```text
-usage: yaraconnector [-h] --config-file CONFIG_FILE [--log-file LOG_FILE]
-                     [--output-file OUTPUT_FILE] [--working-dir WORKING_DIR]
-                     [--pid-file PID_FILE] [--daemon]
-                     [--validate-yara-rules] [--debug]
-
-Yara Agent for Yara Connector
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --config-file CONFIG_FILE
-                        location of the config file
-  --log-file LOG_FILE   file location for log output
-  --output-file OUTPUT_FILE
-                        file location for feed file
-  --working-dir WORKING_DIR
-                        working directory
-  --pid-file PID_FILE   pid file location - if not supplied, will not write a
-                        pid file
-  --daemon              run in daemon mode (run as a service)
-  --validate-yara-rules
-                        only validate the yara rules, then exit
-  --debug               enabled debug level logging
-```
-###### --config-file
-Provides the path of the configuration file to be used _**(REQUIRED)**_
-
-###### --log-file
-Provides the path of the YARA log file.  If not supplied, defaults to `local/yara_agent.log`
-within the current YARA package.
-
-###### --output-file
-Provides the path containing the feed description file.  If not supplied, defaults to
-`feed.json` in the same location as the configured `feed_database_dir` folder.
-
-###### --validate-yara-rules
-If supplied, YARA rules will be validated and the script will exit.
-
 ---
-# Dev install 
+
+## Dev install 
 
 Use Git to retrieve the project, create a new virtual environment using Python 3.6+, and use pip to install the requirements:
 
@@ -186,3 +193,11 @@ Use Git to retrieve the project, create a new virtual environment using Python 3
 git clone https://github.com/carbonblack/cb-yara-connector
 pip3 install -r requirements.txt
 ```
+
+# Support
+
+* View all API and integration offerings on the [Developer Network](https://developer.carbonblack.com) along with reference documentation, video tutorials, and how-to guides.
+* Use the [Developer Community Forum](https://community.carbonblack.com/community/resources/developer-relations) to discuss issues and get answers from other API developers in the Carbon Black Community.
+* Report bugs and change requests to [Carbon Black Support](http://carbonblack.com/resources/support/).
+
+Copyright &copy; 2014-2020 VMware, Inc. All Rights Reserved.

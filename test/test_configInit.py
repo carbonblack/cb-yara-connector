@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+# Copyright © 2014-2020 VMware, Inc. All Rights Reserved.
 
 import os
 from typing import List
@@ -13,7 +13,7 @@ TESTS = os.path.abspath(os.path.dirname(__file__))
 
 TESTCONF = os.path.join(TESTS, "conf-testing.conf")
 BASE = """[general]
-mode=master
+mode=primary
 
 cb_server_url=https://127.0.0.1:443
 cb_server_token=abcdefghijklmnopqrstuvwxyz012345
@@ -38,7 +38,7 @@ utility_debug=false
 
 feed_database_dir=./feed_db
 
-worker_network_timeout=5
+minion_network_timeout=5
 database_scanning_interval=360
 
 celery_worker_kwargs={"autoscale":"4,4"}
@@ -75,9 +75,9 @@ class TestConfigurationInit(TestCase):
         globals.g_utility_script = ""
         globals.g_utility_debug = False
         globals.g_feed_database_dir = "./feed_db"
-        globals.g_worker_network_timeout = 5
+        globals.g_minion_network_timeout = 5
         globals.g_scanning_interval = 360
-        globals.g_celeryworkerkwargs = None
+        globals.g_celery_worker_kwargs = None
 
         with open(TESTCONF, "w") as fp:
             fp.write(BASE)
@@ -135,9 +135,9 @@ class TestConfigurationInit(TestCase):
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertTrue(globals.g_output_file.endswith("sample.json"))
 
-    def test_00b_validate_config_worker(self):
+    def test_00b_validate_config_minion(self):
         """
-        Ensure our base configuration is valid for worker types.
+        Ensure our base configuration is valid for minion types.
         """
         ConfigurationInit(TESTCONF)
         self.assertTrue(globals.g_output_file.endswith("feed.json"))
@@ -178,11 +178,11 @@ class TestConfigurationInit(TestCase):
 
     def test_03a_mode_missing(self):
         """
-        Ensure we detect a configuration file without a 'mode' definition (defaults to "master")
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "primary")
         """
         self.mangle(change={"mode": None})
         ConfigurationInit(TESTCONF)
-        self.assertEqual("master", globals.g_mode)
+        self.assertEqual("primary", globals.g_mode)
 
     def test_03b_mode_invalid(self):
         """
@@ -191,12 +191,12 @@ class TestConfigurationInit(TestCase):
         self.mangle(change={"mode": "bogus"})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
-        assert "does not specify an allowed value: ['master', 'worker', 'master+worker']" in "{0}".format(
-            err.exception.args[0])
+            assert "does not specify an allowed value: ['master', 'primary, 'worker', 'minion', " \
+               "master+worker', 'primary+minion']" in "{0}".format(err.exception.args[0])
 
     def test_03c_mode_duplicated(self):
         """
-        Ensure we detect a configuration file with a duplicate 'mode' defintion (same logic applies
+        Ensure we detect a configuration file with a duplicate 'mode' definition (same logic applies
         to all parameter duplicates).
         """
         self.mangle(add=["mode=bogus"])
@@ -204,56 +204,106 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(TESTCONF)
         assert "option 'mode' in section 'general' already exists" in "{0}".format(err.exception.args[0])
 
+    def test_03d_deprecated_mode_master(self):
+        """
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "primary")
+        """
+        self.mangle(change={"mode": "master"})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("master", globals.g_mode)
+
+    def test_03e_deprecated_mode_worker(self):
+        """
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "primary")
+        """
+        self.mangle(change={"mode": "worker"})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("worker", globals.g_mode)
+
+    def test_03f_deprecated_mode_master_worker(self):
+        """
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "primary")
+        """
+        self.mangle(change={"mode": "master+worker"})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("master+worker", globals.g_mode)
+
+    def test_03g_new_mode_primary(self):
+        """
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "primary")
+        """
+        self.mangle(change={"mode": "primary"})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("primary", globals.g_mode)
+
+    def test_03h_new_mode_minion(self):
+        """
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "primary")
+        """
+        self.mangle(change={"mode": "minion"})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("minion", globals.g_mode)
+
+    def test_03i_new_mode_primary_minion(self):
+        """
+        Ensure we detect a configuration file without a 'mode' definition (defaults to "primary")
+        """
+        self.mangle(change={"mode": "primary+minion"})
+        ConfigurationInit(TESTCONF)
+        self.assertEqual("primary+minion", globals.g_mode)
+
     # test_04 worker_type removed
 
-    def test_05a_cb_server_url_missing_for_master(self):
+    def test_05a_cb_server_url_missing_for_minion(self):
         """
-        Ensure that 'cb_server_url' is not required if mode==master
+        Ensure that 'cb_server_url' is not required if mode==primary
         """
-        self.mangle(change={"mode": "master", "cb_server_url": None})
-        ConfigurationInit(TESTCONF)
+        self.mangle(change={"mode": "primary", "cb_server_url": None})
+        with self.assertRaises(CbInvalidConfig):
+            ConfigurationInit(TESTCONF)
         self.assertEqual("", globals.g_cb_server_url)
 
-    def test_05b_cb_server_url_empty_for_master(self):
+    def test_05b_cb_server_url_empty_for_primary(self):
         """
-        Ensure that 'cb_server_url' is not required if mode==master
+        Ensure that 'cb_server_url' is not required if mode==primary
         """
-        self.mangle(change={"mode": "master", "cb_server_url": ""})
-        ConfigurationInit(TESTCONF)
+        self.mangle(change={"mode": "primary", "cb_server_url": ""})
+        with self.assertRaises(CbInvalidConfig):
+            ConfigurationInit(TESTCONF)
         self.assertEqual("", globals.g_cb_server_url)
 
-    def test_05c_cb_server_url_missing_for_worker(self):
+    def test_05c_cb_server_url_missing_for_minion(self):
         """
-        Ensure that 'cb_server_url' is required and detected if mode=worker.
+        Ensure that 'cb_server_url' is required and detected if mode=minion.
         """
-        self.mangle(change={"mode": "worker", "cb_server_url": None})
+        self.mangle(change={"mode": "minion", "cb_server_url": None})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
+        # assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
+
+    def test_05d_cb_server_url_empty_for_minion(self):
+        """
+        Ensure that 'cb_server_url' is required and detected if mode=minion.
+        """
+        self.mangle(change={"mode": "minion", "cb_server_url": ""})
+        with self.assertRaises(CbInvalidConfig) as err:
+            ConfigurationInit(TESTCONF)
+        # assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
+
+    def test_05e_cb_server_url_missing_for_primary_minion(self):
+        """
+        Ensure that 'cb_server_url' is not required if mode==primary+minion
+        """
+        self.mangle(change={"mode": "primary+minion", "cb_server_url": None})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
 
-    def test_05d_cb_server_url_empty_for_worker(self):
+    def test_05f_cb_server_url_empty_for_primary_minion(self):
         """
-        Ensure that 'cb_server_url' is required and detected if mode=worker.
+        Ensure that 'cb_server_url' is not required if mode==primary+minion
         """
-        self.mangle(change={"mode": "worker", "cb_server_url": ""})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
-
-    def test_05e_cb_server_url_missing_for_master_worker(self):
-        """
-        Ensure that 'cb_server_url' is not required if mode==master+worker
-        """
-        self.mangle(change={"mode": "master+worker", "cb_server_url": None})
-        with self.assertRaises(CbInvalidConfig) as err:
-            ConfigurationInit(TESTCONF)
-        assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
-
-    def test_05f_cb_server_url_empty_for_master_worker(self):
-        """
-        Ensure that 'cb_server_url' is not required if mode==master+worker
-        """
-        self.mangle(change={"mode": "master+worker", "cb_server_url": ""})
+        self.mangle(change={"mode": "primary+minion", "cb_server_url": ""})
         with self.assertRaises(CbInvalidConfig) as err:
             ConfigurationInit(TESTCONF)
         assert "has no 'cb_server_url' definition" in "{0}".format(err.exception.args[0])
@@ -665,31 +715,31 @@ class TestConfigurationInit(TestCase):
             ConfigurationInit(TESTCONF, "sample.json")
         assert "cannot be parsed" in "{0}".format(err.exception.args[0])
 
-    def test_22a_worker_network_timeout_missing(self):
+    def test_22a_minion_network_timeout_missing(self):
         """
-        Ensure that config with missing worker_network_timeout reverts to default
+        Ensure that config with missing minion_network_timeout reverts to default
         """
-        check = globals.g_worker_network_timeout
+        check = globals.g_minion_network_timeout
 
-        self.mangle(change={"worker_network_timeout": None})
+        self.mangle(change={"minion_network_timeout": None})
         ConfigurationInit(TESTCONF, "sample.json")
-        self.assertEqual(check, globals.g_worker_network_timeout)
+        self.assertEqual(check, globals.g_minion_network_timeout)
 
-    def test_22b_worker_network_timeout_empty(self):
+    def test_22b_minion_network_timeout_empty(self):
         """
-        Ensure that config with empty worker_network_timeout reverts to default
+        Ensure that config with empty minion_network_timeout reverts to default
         """
-        check = globals.g_worker_network_timeout
+        check = globals.g_minion_network_timeout
 
-        self.mangle(change={"worker_network_timeout": ""})
+        self.mangle(change={"minion_network_timeout": ""})
         ConfigurationInit(TESTCONF, "sample.json")
-        self.assertEqual(check, globals.g_worker_network_timeout)
+        self.assertEqual(check, globals.g_minion_network_timeout)
 
-    def test_22c_worker_network_timeout_bogus(self):
+    def test_22c_minion_network_timeout_bogus(self):
         """
-        Ensure that config with bogus (non-int) worker_network_timeout is detected.
+        Ensure that config with bogus (non-int) minion_network_timeout is detected.
         """
-        self.mangle(change={"worker_network_timeout": "BOGUS"})
+        self.mangle(change={"minion_network_timeout": "BOGUS"})
         with self.assertRaises(ValueError) as err:
             ConfigurationInit(TESTCONF, "sample.json")
         assert "invalid literal for int" in "{0}".format(err.exception.args[0])
@@ -772,9 +822,9 @@ class TestConfigurationInit(TestCase):
         Ensure that basic celery worker config is handled
         """
         ConfigurationInit(TESTCONF, "sample.json")
-        self.assertEqual(1, len(globals.g_celeryworkerkwargs))
-        self.assertTrue("autoscale" in globals.g_celeryworkerkwargs)
-        self.assertEqual("4,4", globals.g_celeryworkerkwargs['autoscale'])
+        self.assertEqual(1, len(globals.g_celery_worker_kwargs))
+        self.assertTrue("autoscale" in globals.g_celery_worker_kwargs)
+        self.assertEqual("4,4", globals.g_celery_worker_kwargs['autoscale'])
 
     def test_25b_celery_worker_config_bad_json(self):
         """
@@ -790,7 +840,7 @@ class TestConfigurationInit(TestCase):
         Ensure that basic celery worker config is handled when missing
         """
         self.mangle(change={"celery_worker_kwargs": None})
-        self.assertEqual(None, globals.g_celeryworkerkwargs)
+        self.assertEqual(None, globals.g_celery_worker_kwargs)
 
     # ----- Unknown configuration (typo detection)
 
@@ -809,7 +859,7 @@ class TestConfigurationInit(TestCase):
         """
         Ensure that minimal configuration does not set extra globals
         """
-        self.mangle(change={"mode": "worker"})
+        self.mangle(change={"mode": "minion"})
         globals.g_postgres_host = None
         ConfigurationInit(TESTCONF)
-        self.assertIsNone(globals.g_postgres_host)
+        self.assertEqual(globals.g_postgres_host, "localhost")

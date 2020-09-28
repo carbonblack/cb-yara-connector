@@ -1,5 +1,5 @@
 [Unit]
-Description=Carbon Black Response Yara Connector
+Description=VMware Carbon Black Response Yara Connector
 After=syslog.target network.target
 
 [Service]
