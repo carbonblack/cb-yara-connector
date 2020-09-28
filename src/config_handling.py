@@ -19,6 +19,17 @@ __all__ = ["ConfigurationInit"]
 
 ################################################################################
 # Configuration reader/validator
+#
+# Note: As of version 2.1.2, some terminology changes have been made that
+# affects one configuration parameter, and the values used for the "mode"
+# parameter. Some previous terms are now deprecated, but are still honored
+# at runtime for compatibility, so that existing configuration file will continue
+# to work:
+#
+#   - the parameter 'worker_network_timeout' os now 'minion_network_timeout'
+#   - for the 'mode' parameter, the values "master", "worker" and "master+worker"
+#     are now "primary", "minion" and "primary+minion"
+#
 ################################################################################
 
 # Known parameters -- flag others as potential typos!
