@@ -23,10 +23,10 @@ __all__ = ["ConfigurationInit"]
 # Note: As of version 2.1.2, some terminology changes have been made that
 # affects one configuration parameter, and the values used for the "mode"
 # parameter. Some previous terms are now deprecated, but are still honored
-# at runtime for compatibility, so that existing configuration file will continue
-# to work:
+# at runtime for compatibility, so that existing configuration files will
+# continue to work:
 #
-#   - the parameter 'worker_network_timeout' os now 'minion_network_timeout'
+#   - the parameter 'worker_network_timeout' is now 'minion_network_timeout'
 #   - for the 'mode' parameter, the values "master", "worker" and "master+worker"
 #     are now "primary", "minion" and "primary+minion"
 #
