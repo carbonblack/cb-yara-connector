@@ -1,8 +1,4 @@
 # -*- mode: python -*-
-#import distutils
-#if distutils.distutils_path.endswith('__init__.py'):
-#    distutils.distutils_path = os.path.dirname(distutils.distutils_path)
-
 a = Analysis(['./src/main.py'],
              pathex=['./src'],
              binaries=[],
@@ -15,11 +11,6 @@ a = Analysis(['./src/main.py'],
              datas=[],
              hookspath=None,
              runtime_hooks=None)
-#             excludes=[],
-#             win_no_prefer_redirects=False,
-#             win_private_assemblies=False,
-#             cipher=block_cipher,
-#             noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz,
           a.scripts,
@@ -35,4 +26,4 @@ coll = COLLECT(exe,
                a.datas,
                strip=None,
                upx=True,
-               name='cb-tara-connector')
+               name='cb-yara-connector')
