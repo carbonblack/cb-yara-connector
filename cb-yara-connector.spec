@@ -3,9 +3,7 @@
 #if distutils.distutils_path.endswith('__init__.py'):
 #    distutils.distutils_path = os.path.dirname(distutils.distutils_path)
 
-block_cipher = None
-
-a = Analysis(['cb-yara-connector'],
+a = Analysis(['./src/main.py'],
              pathex=['./src'],
              binaries=[],
              hiddenimports=['billiard','billiard.heap','lockfile','mmap','pkg_resources.py2_warn','celery.app.control',
