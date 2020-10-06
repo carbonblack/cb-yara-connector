@@ -20,6 +20,7 @@ a = Analysis(['./src/main.py'],
 #             win_private_assemblies=False,
 #             cipher=block_cipher,
 #             noarchive=False)
+pyz = PYZ(a.pure)
 exe = EXE(pyz,
           a.scripts,
           exclude_binaries=True,
