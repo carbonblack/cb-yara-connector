@@ -37,6 +37,12 @@ BuildArch: x86_64
 Vendor: VMware Carbon Black
 Url: http://www.carbonblack.com/
 
+Source1: cb-yara-connector
+Source2: cb-yara-connector.service
+Source3: example-conf/yara.conf
+Source4: dist/yaraconnector
+Source5: yara-logo.png
+
 %description
 VMware Carbon Black EDR Yara Agent - Scans binaries with configured Yara rules
 
@@ -53,23 +59,17 @@ mkdir -p ${RPM_BUILD_ROOT}/var/run/
 mkdir -p ${RPM_BUILD_ROOT}/var/cb/data/cb-yara-connector/feed_db
 
 %if %{defined el6}
-Source1: cb-yara-connector
 mkdir -p ${RPM_BUILD_ROOT}/etc/init
 mkdir -p ${RPM_BUILD_ROOT}/etc/init.d/
 install -m 700 ${SOURCE1} ${RPM_BUILD_ROOT}/etc/init.d/cb-yara-connector
 %else # EL7 and up
-Source1: cb-yara-connector.service
 mkdir -p ${RPM_BUILD_ROOT}/etc/systemd/system
 install -m 0644 ${SOURCE2} ${RPM_BUILD_ROOT}/etc/systemd/system/cb-yara-connector.service
 %endif
 
-Source2: example-conf/yara.conf
-Source3: dist/yaraconnector
-Source4: yara-logo.png
-
-cp ${SOURCE2} ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
-install -m 0755 ${SOURCE3} ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/
-install ${SOURCE3} ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/yara-logo.png
+cp ${SOURCE3} ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
+install -m 0755 ${SOURCE4} ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/
+install ${SOURCE5} ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/yara-logo.png
 touch ${RPM_BUILD_ROOT}/var/log/cb/integrations/cb-yara-connector/yaraconnector.log
 touch ${RPM_BUILD_ROOT}/tmp/yaraconnectorceleryworker
 
