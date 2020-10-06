@@ -29,7 +29,6 @@ Summary: VMware Carbon Black EDR Yara Agent
 Name: %{name}
 Version: %{decorated_version}
 Release: %{release}%{?dist}
-Source0: %{name}-%{bare_version}.tar.gz
 License: MIT
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
