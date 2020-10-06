@@ -3,6 +3,11 @@ BUILDDIR = ~/rpmbuild/BUILD
 RPMDIR = ~/rpmbuild/RPMS
 EL_VERSION := $(shell rpm -E %{rhel})
 
+# non-release builds include a timestamp in the RPM name
+# use "RELEASE=1 make rpm" for a release build, which will not use the timestamp
+# RELEASE has a default value of 0
+RELEASE ?= 0
+
 clean:
 	rm -rf ~/rpmbuild
 	rm -rf dist
@@ -24,4 +29,5 @@ rpm:
 	mkdir -p ${BUILDDIR}
 	cp -p MANIFEST${EL_VERSION} ${BUILDDIR}/MANIFEST
 
-	rpmbuild -ba cb-yara-connector.rpm.spec
+	$(info RELEASE is ${RELEASE})
+	rpmbuild -v --define 'release_pkg ${RELEASE}' -ba cb-yara-connector.rpm.spec
