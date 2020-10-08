@@ -24,7 +24,7 @@ he generated threat information is used to produce an intelligence feed for inge
 
 # Create YARA Connector Config
 
-The installation process creates a sample configuration file: `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.sample`.  Copy
+The installation process creates a sample configuration file: `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example`.  Copy
 this sample template to `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`,
 which is the filename and location that the connector expects.  You will likely have to edit this
 configuration file on each system (primary and minions) to supply any missing information:
