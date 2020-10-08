@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+# Copyright © 2014-2020 VMware, Inc. All Rights Reserved.
 
 import datetime
 import glob
@@ -99,17 +99,17 @@ compiled_rules_hash = None
 compiled_rules_lock = ReadWriteLock()
 
 
-def add_worker_arguments(parser) -> None:
+def add_minion_arguments(parser) -> None:
     """
-    Add yara worker configuration option.
+    Add yara min minion configuration option.
     :param parser: option parser
     """
     parser.add_argument(
-        "--config-file", default="yara_worker.conf", help="Yara Worker Config"
+        "--config-file", default="yara_minion.conf", help="Yara minion config"
     )
 
 
-app.user_options["worker"].add(add_worker_arguments)
+app.user_options["worker"].add(add_minion_arguments)
 
 
 class MyBootstep(bootsteps.Step):
@@ -118,7 +118,7 @@ class MyBootstep(bootsteps.Step):
     """
 
     # noinspection PyUnusedLocal
-    def __init__(self, worker, config_file="yara_worker.conf", **options):
+    def __init__(self, minion, config_file="yara_minion.conf", **options):
         super().__init__(self)
         ConfigurationInit(config_file, None)
 
@@ -166,10 +166,10 @@ def update_yara_rules_remote(yara_rules: dict) -> None:
 # Caller is obliged to compiled_rules_lock.release_read()
 def update_yara_rules():
     """
-        gets a read-acess on the in-memory set of yara rules , which are locked with multiple possible readers
-        if there is no current in memory reference to the current yara rules
-        this function attemps to read the yara-rules directory on the worker, and a produce a new set of compiled rules
-        the rules are written to disk so that other workers can load them from disk rather than re-compiling them
+    gets a read-access on the in-memory set of yara rules , which are locked with multiple possible readers
+    if there is no current in memory reference to the current yara rules
+    this function attempts to read the yara-rules directory on the minion, and a produce a new set of compiled rules
+    the rules are written to disk so that other minions can load them from disk rather than re-compiling them
     """
     global compiled_yara_rules
     global compiled_rules_hash
@@ -179,7 +179,7 @@ def update_yara_rules():
     if compiled_yara_rules:
         logger.debug("Reading the Compiled rules")
     else:
-        logger.debug("Updating yara rules in worker(s)")
+        logger.debug("Updating Yara rules in minion(s)")
         yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
         generate_yara_rule_map_hash(globals.g_yara_rules_dir)
         md5sum = hashlib.md5()
@@ -190,7 +190,7 @@ def update_yara_rules():
         compiled_rules_filepath = os.path.join(
             globals.g_yara_rules_dir, ".YARA_RULES_{0}".format(rules_hash)
         )
-        logger.debug("yara rule path is {0}".format(compiled_rules_filepath))
+        logger.debug("Yara rule path is {0}".format(compiled_rules_filepath))
 
         rules_already_exist = os.path.exists(compiled_rules_filepath)
         if not rules_already_exist:
@@ -209,7 +209,7 @@ def update_yara_rules():
             new_rules_object.save(compiled_rules_filepath)
         compiled_yara_rules = new_rules_object
         compiled_rules_hash = rules_hash
-        logger.debug("Succesfully updated yara rules")
+        logger.debug("Successfully updated Yara rules")
         compiled_rules_lock.release_write()
         compiled_rules_lock.acquire_read()
     # logger.debug("Exiting update routine ok")
@@ -228,11 +228,11 @@ def get_binary_by_hash(url: str, hsum: str, token: str):
         headers=headers,
         stream=True,
         verify=False,
-        timeout=globals.g_worker_network_timeout,
+        timeout=globals.g_minion_network_timeout,
     )
     if response:
         with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
-            # the response contains the file ziped in 'filedata'
+            # the response contains the file zipped in 'filedata'
             fp = the_binary_zip.open("filedata")
             the_binary_zip.close()
             return fp
@@ -263,7 +263,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
         )
 
         if not binary_data:
-            logger.debug(f"No binary agailable for {md5sum}")
+            logger.debug(f"No binary available for {md5sum}")
             analysis_result.binary_not_available = True
             return analysis_result
 
@@ -312,7 +312,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
 
 def get_high_score(matches) -> int:
     """
-    Find the higest match score.
+    Find the highest match score.
 
     :param matches: List of rule matches.
     :return: highest score

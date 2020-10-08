@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright © 2014-2019 VMware, Inc. All Rights Reserved.
+# Copyright © 2014-2020 VMware, Inc. All Rights Reserved.
 
 import configparser
 import json
@@ -19,6 +19,17 @@ __all__ = ["ConfigurationInit"]
 
 ################################################################################
 # Configuration reader/validator
+#
+# Note: As of version 2.1.2, some terminology changes have been made that
+# affects one configuration parameter, and the values used for the "mode"
+# parameter. Some previous terms are now deprecated, but are still honored
+# at runtime for compatibility, so that existing configuration files will
+# continue to work:
+#
+#   - the parameter 'worker_network_timeout' is now 'minion_network_timeout'
+#   - for the 'mode' parameter, the values "master", "worker" and "master+worker"
+#     are now "primary", "minion" and "primary+minion"
+#
 ################################################################################
 
 # Known parameters -- flag others as potential typos!
@@ -43,20 +54,27 @@ KNOWN = [
     "utility_interval",
     "utility_script",
     "worker_network_timeout",
+    "minion_network_timeout",
     "yara_rules_dir",
 ]
 
+MODES = [
+    "master", "primary",
+    "worker", "minion",
+    "master+worker", "primary+minion"
+]
 
 class ConfigurationInit(object):
     """
     Class to deal with all configuration loading and validation.
     """
+    ALLOWED_MODES = []
 
     def __init__(self, config_file: str, output_file: str = None, **kwargs) -> None:
         """
         Validate the config file.
         :param config_file: The config file to validate
-        :param output_file: the output file; if not specified assume we are a task worker (simplified validation)
+        :param output_file: the output file; if not specified assume we are a task minion (simplified validation)
         """
         self.abs_config = os.path.abspath(os.path.expanduser(config_file))
         self.source = f"Config file '{self.abs_config}'"
@@ -92,25 +110,29 @@ class ConfigurationInit(object):
         except configparser.InterpolationSyntaxError as err:
             raise CbInvalidConfig(f"{self.source} cannot be parsed: {err}")
 
-        globals.g_mode = self._as_str("mode", required=False, default="master",
-                                      allowed=["master", "worker", "master+worker"])
+        globals.g_mode = self._as_str("mode",
+                                      required=False,
+                                      default="primary",
+                                      allowed=MODES)
 
         # do the config checks
-        self._worker_check()
+        self._minion_check()
 
-        if globals.g_mode in ["master", "master+worker"]:
-            self._master_check(output_file)
+        if globals.g_mode in MODES:
+            self._primary_check(output_file)
 
-    def _worker_check(self) -> None:
+    def _minion_check(self) -> None:
         """
-        Validate entries used by task workers as well as the main process.
+        Validate entries used by task minions as well as the main process.
 
         :raises CbInvalidConfig:
         """
         globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
 
-        # we need the cb_server_api information whenever  required (ie, we are a worker)
-        cb_req = "worker" in globals.g_mode or "master+worker" in globals.g_mode
+        # we need the cb_server_api information whenever required (ie, we are a minion)
+        cb_req = False
+        if globals.g_mode in MODES:
+            cb_req = True
 
         globals.g_cb_server_url = self._as_str("cb_server_url", required=cb_req)
         globals.g_cb_server_token = self._as_str("cb_server_token", required=cb_req)
@@ -118,11 +140,17 @@ class ConfigurationInit(object):
         value = self._as_str("broker_url", required=True)
         app.conf.update(broker_url=value, result_backend=value)
 
-        globals.g_worker_network_timeout = self._as_int("worker_network_timeout",
-                                                        default=globals.g_worker_network_timeout)
-        globals.g_celeryworkerkwargs = self._as_json("celery_worker_kwargs")
+        # newer terminology takes precedence
+        globals.g_minion_network_timeout = self._as_int("worker_network_timeout",
+                                                        default=globals.g_minion_network_timeout)
+        globals.g_minion_network_timeout = self._as_int("minion_network_timeout",
+                                                        default=globals.g_minion_network_timeout)
 
-    def _master_check(self, output_file) -> None:
+        # newer terminology takes precedence
+        globals.g_celery_worker_kwargs = self._as_json("celery_worker_kwargs")
+        globals.g_celery_worker_kwargs = self._as_json("celery_worker_kwargs")
+
+    def _primary_check(self, output_file) -> None:
         """
         Validate entries used by the main process.
 
@@ -201,7 +229,11 @@ class ConfigurationInit(object):
 
     # ----- Type Handlers ------------------------------------------------------------
 
-    def _as_str(self, param: str, required: bool = False, default: str = "", allowed: List[str] = None) -> str:
+    def _as_str(self,
+                param: str,
+                required: bool = False,
+                default: str = "",
+                allowed: List[str] = None) -> str:
         """
         Get a string parameter from the configuration.
 
@@ -229,8 +261,13 @@ class ConfigurationInit(object):
 
         return value
 
-    def _as_path(self, param: str, required: bool = False, check_exists: bool = True, expect_dir: bool = False,
-                 default: str = "", create_if_needed: bool = False) -> str:
+    def _as_path(self,
+                 param: str,
+                 required: bool = False,
+                 check_exists: bool = True,
+                 expect_dir: bool = False,
+                 default: str = "",
+                 create_if_needed: bool = False) -> str:
         """
         Get a string parameter from the configuration and treat it as a path, performing normalization
         to produce an absolute path.  a "~/" at the beginning will be treated as the current user's home
@@ -268,7 +305,11 @@ class ConfigurationInit(object):
                             f"{self.source} specified path parameter '{param}' ({value}) does not exist")
             return value
 
-    def _as_int(self, param: str, required: bool = False, default: int = -1, min_value: int = None) -> int:
+    def _as_int(self,
+                param: str,
+                required: bool = False,
+                default: int = -1,
+                min_value: int = None) -> int:
         """
         Get an integer configuration parameter from the configuration.  A parameter that cannot be converted
         to an int will return a ValueError.
@@ -288,7 +329,10 @@ class ConfigurationInit(object):
         return value
 
     # noinspection PySameParameterValue
-    def _as_bool(self, param: str, required: bool = False, default: bool = False) -> Optional[bool]:
+    def _as_bool(self,
+                 param: str,
+                 required: bool = False,
+                 default: bool = False) -> Optional[bool]:
         """
         Get a boolean configuration parameter from the configuration.  A parameter not one of
         ["true", "yes", "false", "no"] will return a ValueError.
@@ -310,7 +354,9 @@ class ConfigurationInit(object):
             return value if value is None else value.lower() in ["true", "yes"]
 
     # noinspection PySameParameterValue
-    def _as_json(self, param: str, required: bool = False) -> Optional[dict]:
+    def _as_json(self,
+                 param: str,
+                 required: bool = False) -> Optional[dict]:
         """
         Get a single-line JSON string and convert to a python dict for use as a kwargs.
         :param param: Name of the configuration parameter

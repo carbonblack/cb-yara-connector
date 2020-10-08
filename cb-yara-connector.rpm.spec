@@ -1,13 +1,12 @@
-%define name python-cb-yara-connector
-%define version 2.1.1
-%define bare_version 2.1.1
+%define name python-cb-yara-manager
+%define version 2.1.3
 %define release 1
-
 %global _enable_debug_package 0
 %global debug_package %{nil}
 %global __os_install_post /usr/lib/rpm/brp-compress %{nil}
 %define _build_id_links none
 
+%define bare_version 2.1.3
 %define build_timestamp %(date +%%y%%m%%d.%%H%%m%%S)
 
 # If release_pkg is defined and has the value of 1, use a plain version string;
@@ -25,11 +24,12 @@
 %endif
 %endif
 
-Summary: VMware Carbon Black EDR Yara Agent
+Summary: VMware Carbon Black EDR Yara Manager
 Name: %{name}
 Version: %{decorated_version}
 Release: %{release}%{?dist}
-License: MIT
+Source0: %{name}-%{bare_version}.tar.gz
+License: Commercial
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
 Prefix: %{_prefix}
@@ -38,42 +38,38 @@ Vendor: VMware Carbon Black
 Url: http://www.carbonblack.com/
 
 %description
-VMware Carbon Black EDR Yara Agent - Scans binaries with configured Yara rules
+UNKNOWN
+
+%prep
+%setup -n %{name}-%{bare_version}
 
 %build
-cd %_sourcedir ; pyinstaller cb-yara-connector.spec
+pyinstaller cb-yara-manager.spec
 
 %install
-mkdir -p ${RPM_BUILD_ROOT}/var/log/cb/integrations/cb-yara-connector
-mkdir -p ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector
-mkdir -p ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector
-mkdir -p ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yara_rules
-mkdir -p ${RPM_BUILD_ROOT}/tmp
-mkdir -p ${RPM_BUILD_ROOT}/var/run/
-mkdir -p ${RPM_BUILD_ROOT}/var/cb/data/cb-yara-connector/feed_db
+python setup.py install_cb --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES
 
-%if %{defined el6}
-mkdir -p ${RPM_BUILD_ROOT}/etc/init
-mkdir -p ${RPM_BUILD_ROOT}/etc/init.d/
-install -m 700 ${RPM_SOURCE_DIR}/cb-yara-connector ${RPM_BUILD_ROOT}/etc/init.d/cb-yara-connector
-%else # EL7 and up
-mkdir -p ${RPM_BUILD_ROOT}/etc/systemd/system
-install -m 0644 ${RPM_SOURCE_DIR}/cb-yara-connector.service ${RPM_BUILD_ROOT}/etc/systemd/system/cb-yara-connector.service
-%endif
+%clean
+rm -rf $RPM_BUILD_ROOT
 
-cp ${RPM_SOURCE_DIR}/example-conf/yara.conf ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
-install -m 0755 ${RPM_SOURCE_DIR}/dist/yaraconnector ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/
-install ${RPM_SOURCE_DIR}/yara-logo.png ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/yara-logo.png
-touch ${RPM_BUILD_ROOT}/var/log/cb/integrations/cb-yara-connector/yaraconnector.log
-touch ${RPM_BUILD_ROOT}/tmp/yaraconnectorceleryworker
+%posttrans
+mkdir -p /var/log/cb/integrations/cb-yara-manager
+chkconfig --add cb-yara-manager
+chkconfig --level 345 cb-yara-manager on
 
-%files -f MANIFEST
-%config /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
+# not auto-starting because conf needs to be updated
+#/etc/init.d/cb-yara-connector start
 
 %preun
-%if %{defined el6}
-service cb-yara-connector stop
-%else # EL7 and up
-systemctl stop cb-yara-connector
-%endif
+/etc/init.d/cb-yara-manager stop
 
+# only delete the chkconfig entry when we uninstall for the last time,
+# not on upgrades
+if [ "X$1" = "X0" ]
+then
+    chkconfig --del cb-yara-manager
+fi
+
+
+%files -f INSTALLED_FILES
+%defattr(-,root,root)

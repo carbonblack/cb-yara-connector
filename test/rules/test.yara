@@ -1,7 +1,7 @@
 rule test
 {
     meta:
-        author = "Bit9 + Carbon Black <dev-support@bit9.com>"
+        author = "VMware Carbon Black (http://carbonblack.com/resources/support)"
         date = "2015/08"
         filetype = "exe"
         testing = "yep"
