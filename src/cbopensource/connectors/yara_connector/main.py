@@ -29,13 +29,13 @@ from daemon import daemon
 from peewee import SqliteDatabase
 
 import globals
-from analysis_result import AnalysisResult
-from binary_database import BinaryDetonationResult, db
-from celery_app import app
-from config_handling import ConfigurationInit
-from feed import CbFeed, CbFeedInfo, CbReport
-from rule_handling import generate_yara_rule_map_hash
-from tasks import analyze_binary, generate_rule_map, update_yara_rules_remote
+from .analysis_result import AnalysisResult
+from .binary_database import BinaryDetonationResult, db
+from .celery_app import app
+from .config_handling import ConfigurationInit
+from .feed import CbFeed, CbFeedInfo, CbReport
+from .rule_handling import generate_yara_rule_map_hash
+from .tasks import analyze_binary, generate_rule_map, update_yara_rules_remote
 
 logging_format = "%(asctime)s-%(name)s-%(lineno)d-%(levelname)s-%(message)s"
 logging.basicConfig(format=logging_format)

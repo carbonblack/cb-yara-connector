@@ -4,7 +4,7 @@
 import time
 from unittest import TestCase
 
-from feed import CbInvalidReport, CbReport
+from cbopensource.connectors.yara_connector.feed import CbInvalidReport, CbReport
 
 
 # noinspection DuplicatedCode
