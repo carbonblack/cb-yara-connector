@@ -32,4 +32,4 @@ rpm:
 	mkdir -p $(BUILDDIR)
 	cp -p MANIFEST $(BUILDDIR)/MANIFEST
 
-	rpmbuild -vv --define '_topdir $(RPMROOT)' -ba cb-yara-connector.rpm.spec
+	rpmbuild --define '_topdir $(RPMROOT)' -ba cb-yara-connector.rpm.spec

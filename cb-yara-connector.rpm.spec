@@ -33,7 +33,6 @@ VMware Carbon Black EDR Yara Agent - Scans binaries with configured Yara rules
 %{venv_location}/bin/pyinstaller %{_topdir}/SOURCES/cb-yara-connector.spec
 
 %install
-set -x
 mkdir -p ${RPM_BUILD_ROOT}/var/log/cb/integrations/cb-yara-connector
 mkdir -p ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector
 mkdir -p ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector
