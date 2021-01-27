@@ -5,7 +5,7 @@
 block_cipher = None
 
 a = Analysis(['src/cbopensource/connectors/yara_connector/main.py'],
-             pathex=['./src.cbopensource/connectors/yara_connector'],
+             pathex=['./src'],
              binaries=[],
              hiddenimports=['billiard','billiard.heap','lockfile','mmap','pkg_resources.py2_warn','celery.app.control','celery.worker.strategy','celery.worker.consumer','celery.events.state','celery.worker.autoscale','celery.worker.components','celery.concurrency.prefork','celery.apps','celery.apps.worker','celery.app.log','celery.fixups', 'celery.fixups.django', 'celery.loaders.app','celery.app.amqp', 'kombu.transport.redis', 'redis', 'celery.backends','celery.backends.redis', 'celery.app.events', 'celery.events', 'kombu.transport.pyamqp'],
              hookspath=[],
