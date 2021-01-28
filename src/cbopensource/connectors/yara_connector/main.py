@@ -28,7 +28,7 @@ from celery.exceptions import WorkerLostError
 from daemon import daemon
 from peewee import SqliteDatabase
 
-import globals
+from . import globals
 from .analysis_result import AnalysisResult
 from .binary_database import BinaryDetonationResult, db
 from .celery_app import app
@@ -680,7 +680,7 @@ def write_pid_file(file_location: str):
         sys.exit(1)
 
 
-def main():
+def run():
     """
     Main execution function.  Script will exit with a non-zero value based on the following:
         1: Configuration problem
@@ -849,7 +849,3 @@ def main():
         finally:
             exit_event.set()
         sys.exit(exit_rc)
-
-
-if __name__ == "__main__":
-    main()
