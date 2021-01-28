@@ -23,8 +23,12 @@ echo Running smoke test on file: "$RPM_FILE"
 yum install -y "$RPM_FILE"
 
 echo Running connector...
+
 cp /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example /etc/cb/integrations/cb-yara-connector/yaraconnector.conf
-systemctl start cb-yara-connector
+mkdir -p /etc/cb/integrations/cb-yara-connector/yara_rules
+
+#systemctl start cb-yara-connector
+/usr/share/cb/integrations/cb-yara-connector/yaraconnector --config-file /etc/cb/integrations/cb-yara-connector/yaraconnector.conf
 
 # Uncomment the following line to leave the container running.
 # sleep 9999999999
