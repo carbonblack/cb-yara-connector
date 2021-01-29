@@ -8,9 +8,9 @@ import os
 import re
 from typing import List, Optional
 
-import globals
-from celery_app import app
-from exceptions import CbInvalidConfig
+from . import globals
+from .celery_app import app
+from .exceptions import CbInvalidConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

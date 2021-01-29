@@ -5,9 +5,9 @@ import os
 from typing import List
 from unittest import TestCase
 
-import globals
-from config_handling import ConfigurationInit
-from exceptions import CbInvalidConfig
+from cbopensource.connectors.yara_connector import globals
+from cbopensource.connectors.yara_connector.config_handling import ConfigurationInit
+from cbopensource.connectors.yara_connector.exceptions import CbInvalidConfig
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 
@@ -19,7 +19,7 @@ cb_server_url=https://127.0.0.1:443
 cb_server_token=abcdefghijklmnopqrstuvwxyz012345
 broker_url=redis://
 
-yara_rules_dir=./rules
+yara_rules_dir=./test/rules
 
 postgres_host=localhost
 postgres_username=cb
@@ -33,7 +33,7 @@ disable_rescan=False
 num_days_binaries=365
 
 utility_interval=360
-utility_script=../scripts/vacuumscript.sh
+utility_script=./scripts/vacuumscript.sh
 utility_debug=false
 
 feed_database_dir=./feed_db
@@ -668,7 +668,7 @@ class TestConfigurationInit(TestCase):
         """
         Ensure that config with utility_script and utility_interval is ready to go.
         """
-        self.mangle(change={"utility_script": "../scripts/vacuumscript.sh", "utility_interval": "10"})
+        self.mangle(change={"utility_script": "./scripts/vacuumscript.sh", "utility_interval": "10"})
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(10, globals.g_utility_interval)
         self.assertTrue(globals.g_utility_script.endswith("/scripts/vacuumscript.sh"))
@@ -677,7 +677,7 @@ class TestConfigurationInit(TestCase):
         """
         Ensure that config with utility_script but utility_interval == 0 has it disabled.
         """
-        self.mangle(change={"utility_script": "../scripts/vacuumscript.sh", "utility_interval": "0"})
+        self.mangle(change={"utility_script": "./scripts/vacuumscript.sh", "utility_interval": "0"})
         ConfigurationInit(TESTCONF, "sample.json")
         self.assertEqual(0, globals.g_utility_interval)
         self.assertEqual("", globals.g_utility_script)

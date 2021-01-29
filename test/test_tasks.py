@@ -4,7 +4,7 @@
 import os
 from unittest import TestCase
 
-from tasks import generate_rule_map
+from cbopensource.connectors.yara_connector.tasks import generate_rule_map
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 

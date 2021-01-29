@@ -21,6 +21,8 @@ develop-eggs
 .installed.cfg
 lib
 lib64
+.gradle/
+MANIFEST
 
 # Installer logs
 pip-log.txt

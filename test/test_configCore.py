@@ -6,8 +6,8 @@ import shutil
 from typing import Union
 from unittest import TestCase
 
-from config_handling import ConfigurationInit
-from exceptions import CbInvalidConfig
+from cbopensource.connectors.yara_connector.config_handling import ConfigurationInit
+from cbopensource.connectors.yara_connector.exceptions import CbInvalidConfig
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 JUNK = os.path.join(TESTS, "test-artifacts")

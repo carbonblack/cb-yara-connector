@@ -4,8 +4,8 @@
 import os
 from unittest import TestCase
 
-import globals
-from rule_handling import generate_yara_rule_map_hash
+from cbopensource.connectors.yara_connector import globals
+from cbopensource.connectors.yara_connector.rule_handling import generate_yara_rule_map_hash
 
 TESTS = os.path.abspath(os.path.dirname(__file__))
 
