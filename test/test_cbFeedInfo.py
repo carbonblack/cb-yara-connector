@@ -3,7 +3,7 @@
 
 from unittest import TestCase
 
-from feed import CbFeedInfo, CbIconError, CbInvalidFeed
+from cbopensource.connectors.yara_connector.feed import CbFeedInfo, CbIconError, CbInvalidFeed
 
 
 class TestCbFeedInfo(TestCase):

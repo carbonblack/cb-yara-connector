@@ -1,0 +1,6 @@
+from cbopensource.connectors.yara_connector import main
+
+if __name__ == "__main__":
+    name = "cb-yara-connector"
+
+    main.run()

@@ -5,7 +5,7 @@ import hashlib
 import os
 from typing import List, Optional
 
-import globals
+from . import globals
 
 
 def generate_yara_rule_map_hash(yara_rule_path: str, return_list: bool = False) -> Optional[List[str]]:

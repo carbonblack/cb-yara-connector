@@ -12,7 +12,7 @@ import string
 import time
 from typing import List
 
-from exceptions import CbIconError, CbInvalidFeed, CbInvalidReport
+from .exceptions import CbIconError, CbInvalidFeed, CbInvalidReport
 
 # noinspection PyUnusedName
 logger = logging.getLogger(__name__)

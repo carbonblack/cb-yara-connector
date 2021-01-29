@@ -19,11 +19,11 @@ import yara
 from celery import bootsteps, Task
 from celery.utils.log import get_task_logger
 
-import globals
-from analysis_result import AnalysisResult
-from celery_app import app
-from config_handling import ConfigurationInit
-from rule_handling import generate_yara_rule_map_hash
+from . import globals
+from .analysis_result import AnalysisResult
+from .celery_app import app
+from .config_handling import ConfigurationInit
+from .rule_handling import generate_yara_rule_map_hash
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
