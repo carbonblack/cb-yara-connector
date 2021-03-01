@@ -10,8 +10,6 @@ ENV ARTIFACTORY_SERVER=${ARTIFACTORY_SERVER}
 ARG BASE_IMAGE
 ENV BASE_IMAGE=${BASE_IMAGE}
 
-RUN yum install --disablerepo=nodesource -y libxml2 libxml2-devel libxslt libxslt-devel
-
 ADD entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
