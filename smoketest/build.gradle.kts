@@ -37,12 +37,12 @@ buildDir = rootProject.buildDir
 
 val createDockerFile = tasks.register<Dockerfile>("createSmokeTestDockerfile") {
     from(System.getenv()["BASE_IMAGE"])
-    runCommand("yum -y install postgresql-server sudo")
+    runCommand("yum -y install --disablerepo=nodesource postgresql-server sudo")
     runCommand("echo Adding cb user")
     runCommand("groupadd cb --gid 8300 && useradd --shell /sbin/nologin --gid cb --comment \"Service account for VMware Carbon Black EDR\" -M cb")
     runCommand("mkdir /postgres ; chown -R cb:cb /postgres ; chown -R cb:cb /var/run/postgresql")
     runCommand("sudo -u cb /usr/bin/initdb -D /postgres")
-    runCommand("yum -y install redis")
+    runCommand("yum -y install --disablerepo=nodesource redis")
     runCommand("python3.8 -m ensurepip && python3.8 -m pip install flask pyopenssl")
 }
 
