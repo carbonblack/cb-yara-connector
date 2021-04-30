@@ -11,5 +11,5 @@ python-daemon==2.2.4
 redis==3.3.11
 requests==2.22.0
 simplejson==3.17.0
-urllib3==1.25.7
+urllib3==1.25.8
 yara-python==3.11.0
