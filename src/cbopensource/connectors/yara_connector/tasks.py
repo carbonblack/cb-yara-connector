@@ -23,7 +23,7 @@ from . import globals
 from .analysis_result import AnalysisResult
 from .celery_app import app
 from .config_handling import ConfigurationInit
-from .rule_handling import generate_yara_rule_map_hash
+from .rule_handling import generate_yara_rule_map_hash, generate_rule_map
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -124,29 +124,6 @@ class MyBootstep(bootsteps.Step):
 
 
 app.steps["worker"].add(MyBootstep)
-
-
-def generate_rule_map(yara_rule_path: str) -> dict:
-    """
-    Create a dictionary keyed by filename containing file paths
-    :param yara_rule_path: location of yara rules
-    :return: dict of paths keyed by namespace
-    """
-    rule_map = {}
-    for fn in os.listdir(yara_rule_path):
-        if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
-            fullpath = os.path.join(yara_rule_path, fn)
-            if not os.path.isfile(fullpath):
-                continue
-
-            last_dot = fn.rfind(".")
-            if last_dot != -1:
-                namespace = fn[:last_dot]
-            else:
-                namespace = fn
-            rule_map[namespace] = fullpath
-
-    return rule_map
 
 
 @app.task(base=MyTask)
