@@ -1,11 +1,6 @@
 # Installing YARA Agent (CentOS/RHEL 6/7/8)
 
-[YARA](https://virustotal.github.io/yara/) Integration has two parts -- a primary and one or more minions. The primary
-service must be installed on the same system as VMware CB EDR, while minions are usually installed on other systems (but 
-can also be on the primary system, if so desired). The YARA connector itself uses [Celery](http://www.celeryproject.org/) 
-to distribute work to and remote (or local) minions - you will need to install and configure a 
-[broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (e.g., [Redis](https://redis.io/)) that is 
-accessible to both the primary and remote minion instance(s).
+[YARA](https://virustotal.github.io/yara/)
 
 The connector reads YARA rules from a configured directory to efficiently scan binaries as they are seen by the EDR server. T
 he generated threat information is used to produce an intelligence feed for ingest by the EDR Server.
@@ -26,13 +21,7 @@ he generated threat information is used to produce an intelligence feed for inge
 
 The installation process creates a sample configuration file: `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example`.  Copy
 this sample template to `/etc/cb/integrations/cb-yara-connector/yaraconnector.conf`,
-which is the filename and location that the connector expects.  You will likely have to edit this
-configuration file on each system (primary and minions) to supply any missing information:
-* There are two operating modes to support the two roles: `mode=primary` and `mode=minion`. Both modes require a broker 
-for Celery communications. Minion systems will need to change the mode to `minion`; 
-* Remote minion systems will require the primary's URL for `cb_server_url` (local minions need no modification);
- they also require  the token of a global admin user for `cb_server_token`. 
-* Remote minions will require the URL of the primary's Redis server 
+which is the filename and location that the connector expects. Users must edit this file to supply any missing information:
 
 The daemon will attempt to load the PostgreSQL credentials from the EDR server's `cb.conf` file, 
 if available, falling back to the PostgreSQL connection information in the primary's configuration file using the 
@@ -41,37 +30,13 @@ if available, falling back to the PostgreSQL connection information in the prima
 
 ```ini
 ;
-; Cb Response PostgreSQL Database settings, required for 'primary' and 'primary+minion' systems
-; The server will attempt to read from local cb.conf file first and fall back
-; to these settings if it cannot do so.
-;
-postgres_host=127.0.0.1
-postgres_username=cb
-postgres_password=<POSTGRES PASSWORD GOES HERE>
-postgres_db=cb
-postgres_port=5002
-```
-
-```ini
-;
-; EDR server settings, required for 'primary' and 'primary+minion' systems
+; EDR server settings, required for standalone mode
 ; For remote workers, the cb_server_url mus be that of the primary
 ;
 cb_server_url=https://127.0.0.1
 cb_server_token=<API TOKEN GOES HERE>
 ```
 
-You must configure `broker=` which sets the broker and results_backend for Celery. 
-Set this appropriately as per the [Celery documentation](https://docs.celeryproject.org/en/latest/getting-started/brokers/).
-
-```ini
-;
-; URL of the Redis server, defaulting to the local EDR server Redis for the primary.  If this is a minion
-; system, alter to point to the primary system.  If you are using a standalone Redis server, both primary and
-; minions must point to the same server.
-;
-broker_url=redis://127.0.0.1
-```
 ## Create your YARA rules
 
 The YARA connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each 
@@ -147,34 +112,44 @@ Provides the path containing the feed description file.  If not supplied, defaul
 `feed.json` in the same location as the configured `feed_database_dir` folder.
 
 ### --validate-yara-rules
-If supplied, YARA rules will be validated and the script will exit.
+If supplied, YARA rules will be validated and then the service will exit
 
-# Development Notes	
+### Distributed operations
+The Yara integration for EDR supports a distributed mode of operation where a primary instance queues binaries 
+to be scanned by a set of yara rules on a remote minion instance. 
 
-## Utility Script
-Included with this version is a feature for discretionary use by advanced users and
-should be used with caution.
+The primary instance must be installed on an EDR primary node, and configured to access the EDR modulestore (postgres).
+The minion instance must be installed on another machine, and needs to be configured with the API credentials for EDR.
+The primary and minion communicate using the celery framework, which requires a celery-supported broker and 
+results backend. 
 
-When `utility_interval` is defined with a value greater than 0, it represents the interval
-in minutes at which the YARA connector will pause its work and execute an external
-shell script.  A sample script, `vacuumscript.sh`  is provided within the `scripts` folder
-of the current YARA connector installation. After execution, the YARA connector continues with
-its work.
+* There are two operating modes to support the two roles: `mode=primary` and `mode=minion`. Both modes require a broker 
+for Celery communications. Minion systems will need to change the mode to `minion`; 
+* Remote minion systems will require the primary's URL for `cb_server_url` (local minions need no modification);
+ they also require  the token of a global admin user for `cb_server_token`. 
+* Remote minions will require the URL of the desired celery broker & results backend
 
-> _**NOTE:** As a safety for this feature, if an interval is defined but no script is defined, nothing is done.
-> By default, no script is defined._
+The primary service must be installed on the same system as VMware CB EDR, while minions are usually installed on other systems (but 
+can also be on the primary system, if so desired). The YARA connector itself uses [Celery](http://www.celeryproject.org/) 
+to distribute work to and remote (or local) minions - you will need to install and configure a 
+[broker](https://docs.celeryproject.org/en/latest/getting-started/brokers/) (e.g., [Redis](https://redis.io/)) that is 
+accessible to both the primary and remote minion instance(s).
+
+You must configure `broker=` which sets the broker and can optionally configure `results_backend=` for Celery. 
+Set this appropriately as per the [Celery documentation](https://docs.celeryproject.org/en/latest/getting-started/brokers/).
 
 ```ini
 ;
-; The use of the utility script is an ADVANCED FEATURE and should be used with caution!
+; URL of the celery broker, typically the EDR local redis service
 ;
-; If "utility_interval" is greater than 0 it represents the interval in minutes after which the YARA connector will
-; pause to execute a shell script for general maintenance. This can present risks. Be careful what you allow the
-; script to do, and use this option at your own discretion.
+broker_url=redis://127.0.0.1
 ;
-utility_interval=-1
-utility_script=./scripts/vacuumscript.sh
+; the URL of the desired results backend, either redis again or another supported backend
+;
+results_backend=redis://
 ```
+
+# Development Notes	
 
 ## YARA Agent Build Instructions 
 

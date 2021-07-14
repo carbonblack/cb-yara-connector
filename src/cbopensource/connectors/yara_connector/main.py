@@ -7,7 +7,7 @@ import logging
 import mmap  # NEEDED FOR RPM BUILD
 import sys
 
-from .config_handling import ConfigurationInit
+from .config_handling import YaraConnectorConfig
 from .loggers import logger, handle_logging
 from .rule_handling import validate_yara_rules
 from .yaraconnector import YaraConnector
@@ -80,13 +80,12 @@ def run():
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    # check for additional log file
-    if args.log_file:
-        handle_logging(args.log_file)
-
     # Verify the configuration file and load up important global variables
     try:
-        ConfigurationInit(args.config_file, args.output_file)
+        config = YaraConnectorConfig(args.config_file, args.output_file)
+        # check for additional log file
+        if args.log_file:
+            handle_logging(args.log_file, config.log_level)
     except Exception as err:
         logger.error(f"Unable to continue due to a configuration problem: {err}")
         sys.exit(1)
@@ -94,7 +93,7 @@ def run():
     if args.validate_yara_rules:
         validate_yara_rules()
     else:
-        yara_connector = YaraConnector(args)
+        yara_connector = YaraConnector(args, config=config)
         exit_rc = 0
         try:
             yara_connector.run()
@@ -105,5 +104,5 @@ def run():
             logger.error(f"There were errors executing Yara rules: {err}")
             exit_rc = 4
         finally:
-            yara_connector.exit_event.set()
+            yara_connector.exit(5.0)
         sys.exit(exit_rc)

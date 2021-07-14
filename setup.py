@@ -73,7 +73,7 @@ class build_rpm(Command):
 
 setup(
     name='python-cb-yara-connector',
-    version='2.1.2',
+    version='2.2.0',
     packages=['cbopensource', 'cbopensource.connectors', 'cbopensource.connectors.yara_connector'],
     package_dir={'': 'src'},
     url='https://github.com/carbonblack/cb-yara-connector',

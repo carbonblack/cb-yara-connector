@@ -3,7 +3,7 @@
 # All versions are latest viable at date of package version release
 ################################################################################
 
-celery==4.4.0
+celery==4.4.7
 humanfriendly==4.18
 peewee==3.13.1
 psycopg2-binary==2.8.4

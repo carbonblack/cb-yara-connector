@@ -1,37 +1,39 @@
-import json
-from datetime import datetime
 from queue import Empty, Queue
 from threading import Event
 from typing import List
 
 from cbopensource.connectors.yara_connector.analysis_result import AnalysisResult
-from cbopensource.connectors.yara_connector.binary_database import BinaryDetonationResult
-from cbopensource.connectors.yara_connector.feed import generate_feed_from_db
-from . import globals
+from cbopensource.connectors.yara_connector.binary_database import save_analysis_result
 from .loggers import logger
 
 
-def results_minion_chunked(exit_event: Event, results_queue: Queue) -> None:
-    """
-    Process entries in the results queue in chunks.
-
-    :param exit_event: event signaller
-    :param results_queue: the results queue
-    :return:
-    """
+def results_minion(exit_event: Event, results_queue: Queue, chunked=True) -> None:
+    logger.debug("Results thread starting")
+    exception = None
     try:
         while not (exit_event.is_set()):
             if not (results_queue.empty()):
                 try:
-                    results = results_queue.get()
-                    save_results(results)
-                    results_queue.task_done()
+                    if chunked:
+                        results = results_queue.get()
+                        save_results(results)
+                    else:
+                        result = results_queue.get()
+                        save_result(result)
                 except Empty:
                     exit_event.wait(1)
+                except Exception as e:
+                    logger.exception(f"Error saving analysis result {e}")
+                    exception = e
+                finally:
+                    results_queue.task_done()
             else:
-                exit_event.wait(1)
+                exit_event.wait(0.25)
     finally:
-        logger.debug(f"Results minion thread exiting {exit_event.is_set()}")
+        if exit_event.is_set():
+            logger.debug(f"Results minion thread exiting normally")
+        else:
+            logger.exception(f"Results minion exiting due to error {exception}")
 
 
 def save_results(analysis_results: List[AnalysisResult]) -> None:
@@ -53,23 +55,6 @@ def save_result(analysis_result: AnalysisResult) -> None:
 
     :param analysis_result: result to be saved
     """
-    if analysis_result.binary_not_available:
-        globals.g_num_binaries_not_available += 1
-        return
+    logger.debug(f"Saving result: md5 = {analysis_result.md5} score = {analysis_result.score}")
 
-    bdr, created = BinaryDetonationResult.get_or_create(md5=analysis_result.md5)
-
-    try:
-        bdr.md5 = analysis_result.md5
-        bdr.last_scan_date = datetime.now()
-        bdr.score = analysis_result.score
-        bdr.last_error_msg = analysis_result.last_error_msg
-        bdr.last_success_msg = analysis_result.short_result
-        bdr.misc = json.dumps(globals.g_yara_rule_map_hash_list)
-        bdr.save()
-        globals.g_num_binaries_analyzed += 1
-    except Exception as err:
-        logger.exception("Error saving to database: {0}".format(err))
-    else:
-        if analysis_result.score > 0:
-            generate_feed_from_db()
+    save_analysis_result(analysis_result)
