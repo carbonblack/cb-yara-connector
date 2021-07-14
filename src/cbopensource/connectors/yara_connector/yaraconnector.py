@@ -1,5 +1,4 @@
 import logging
-import logging
 import logging.handlers
 # noinspection PyUnresolvedReferences
 import mmap  # NEEDED FOR RPM BUILD
@@ -9,7 +8,7 @@ import sys
 import time
 from functools import partial
 from queue import Queue
-from threading import Event, Thread
+from threading import Event, Thread, Condition
 from typing import List
 
 # noinspection PyPackageRequirements
@@ -19,29 +18,50 @@ from celery.bin.worker import worker
 from daemon import daemon
 from peewee import SqliteDatabase
 
-from . import globals
 from .analysis_worker import analysis_minion
-from .binary_database import BinaryDetonationResult, db
+from .binary_database import get_analyzed_binaries, db, BinaryDetonationResult
 from .celery_app import app
+from .config_handling import YaraConnectorMode, YaraConnectorConfig
 from .database_scanning import DatabaseScanningThread, ModuleStoreConnection
-from .feed import generate_feed_from_db
-from .loggers import logger
-from .results_worker import results_minion_chunked
-from .rule_handling import generate_yara_rule_map_hash
-from .tasks import generate_rule_map
+from .feed import generate_feed_from_db, feed_worker
+from .loggers import logger, get_log_file_handles
+from .results_worker import results_minion
+from .tasks import set_task_config
 
 
 class YaraConnector(object):
 
-    def __init__(self, args):
+    def __init__(self, args, config: YaraConnectorConfig):
         self.exit_event = Event()
         self.hash_queue = Queue()
         self.scanning_results_queue = Queue()
         write_pid_file(args.pid_file)
         self.args = args
+        # Operating mode - are we the primary?
+        self.operation_mode = config.operation_mode
+        self.config = config
+        self.set_celery_conf_as_needed()
 
-    def run_as_deamon(self):
-        logger.debug("RUNNING AS DEMON")
+    def set_celery_conf_as_needed(self):
+        if self.operation_mode in [YaraConnectorMode.PRIMARY, YaraConnectorMode.MINION]:
+            app.conf.update(broker_url=self.config.broker_url, result_backend=self.config.results_backend)
+
+    def alert_user_feed_location(self):
+        if self.operation_mode in [YaraConnectorMode.PRIMARY, YaraConnectorMode.STANDALONE]:
+            logger.critical(f"Manually add the feed to EDR by path file://{self.args.output_file}")
+
+    def test_database_connectivity(self):
+        # noinspection PyBroadException
+        try:
+            if self.operation_mode in [YaraConnectorMode.PRIMARY,
+                                       YaraConnectorMode.STANDALONE] and not ModuleStoreConnection(
+                self.config).test_database_conn():
+                sys.exit(1)
+        except Exception as ex:
+            logger.error(F"Failed database connection test: {ex}")
+            sys.exit(1)
+
+    def run_daemon_mode(self):
         # Get working dir setting
         working_dir = os.path.abspath(os.path.expanduser(self.args.working_dir))
 
@@ -56,17 +76,6 @@ class YaraConnector(object):
             stderr=sys.stderr if self.args.debug else None
         )
 
-        # Operating mode - are we the primary?
-        run_as_primary = "master" in globals.g_mode or "primary" in globals.g_mode
-
-        # noinspection PyBroadException
-        try:
-            if run_as_primary and not ModuleStoreConnection.test_database_conn():
-                sys.exit(1)
-        except Exception as ex:
-            logger.error(F"Failed database connection test: {ex}")
-            sys.exit(1)
-
         # Signal handler
         sig_handler = partial(handle_sig, self.exit_event)
         context.signal_map = {
@@ -74,41 +83,29 @@ class YaraConnector(object):
             signal.SIGQUIT: sig_handler,
         }
 
-        # Make sure we close the deamon context at the end
+        # Make sure we close the daemon context at the end
         threads = []
         with context:
             write_pid_file(self.args.pid_file)
             # only connect to cbr if we're the primary
-            if run_as_primary:
+            if self.operation_mode in [YaraConnectorMode.PRIMARY, YaraConnectorMode.STANDALONE]:
                 # initialize local resources
-                init_local_resources()
+                self.init_local_resources()
 
                 # start working threads
-                threads = start_minions(
-                    self.exit_event, self.hash_queue, self.scanning_results_queue
-                )
-
-                # start local celeryD worker if working mode is local
-                if "worker" in globals.g_mode or "minion" in globals.g_mode:
-                    local_minion = worker(app=app)
-                    threads.append(
-                        start_celery_worker_thread(
-                            local_minion, globals.g_celery_worker_kwargs, self.args.config_file
-                        )
-                    )
+                threads = self.start_worker_threads(run_only_once=False)
             else:
                 # otherwise, we must start a celeryD worker since we are not the master
                 local_minion = worker(app=app)
                 threads.append(
                     start_celery_worker_thread(
-                        local_minion, globals.g_celery_worker_kwargs, self.args.config_file
+                        local_minion, self.config.celery_worker_kwargs, self.args.config_file
                     )
                 )
 
             # run until the service/daemon gets a quitting sig
             try:
-                logger.debug("Started as demon OK")
-                run_to_exit_signal(self.exit_event)
+                self.run_until_told_to_exit()
             except Exception as e:
                 logger.exception(f"Error while executing: {e}")
             finally:
@@ -116,34 +113,110 @@ class YaraConnector(object):
                     wait_all_worker_exit_threads(threads, timeout=4.0)
                 finally:
                     logger.info("Yara connector shutdown")
-                    # noinspection PyProtectedMember
-                    os._exit(0)
 
     def run_batch(self):
-        logger.debug("BATCH MODE")
-        init_local_resources()
+        if self.operation_mode in [YaraConnectorMode.STANDALONE, YaraConnectorMode.PRIMARY]:
+            self.init_local_resources()
 
         # start necessary worker threads
-        threads = start_minions(
-            self.exit_event, self.hash_queue, self.scanning_results_queue, run_only_once=True
-        )
+        threads = self.start_worker_threads(run_only_once=True)
 
         # Start a celery worker if we need one
-        if "worker" in globals.g_mode or "minion" in globals.g_mode:
+        if self.operation_mode == YaraConnectorMode.MINION:
             local_minion = worker(app=app)
             threads.append(
                 start_celery_worker_thread(
-                    local_minion, globals.g_celery_worker_kwargs, self.args.config_file
+                    local_minion, self.config.celery_worker_kwargs, self.args.config_file
                 )
             )
-        run_to_exit_signal(self.exit_event)
+        self.run_until_told_to_exit()
         wait_all_worker_exit_threads(threads, timeout=4.0)
 
     def run(self):
+        logger.info(f"Running in {self.operation_mode.name} mode")
+        self.test_database_connectivity()
+        if self.operation_mode in [YaraConnectorMode.PRIMARY, YaraConnectorMode.MINION] and self.config.celery_app_conf:
+            app.conf.update(**self.config.celery_app_conf)
+        elif self.operation_mode == YaraConnectorMode.STANDALONE:
+            set_task_config(self.config)
         if self.args.daemon:
-            self.run_as_deamon()
+            self.run_daemon_mode()
         else:
             self.run_batch()
+
+    def exit(self, wait_timeout=None):
+        self.exit_event.set()
+        if wait_timeout:
+            time.sleep(wait_timeout)
+
+    def init_local_resources(self) -> None:
+        """
+        Initialize the local resources required to get module information
+        from cbr module store as well as local storage of module and scanning
+        metadata in sqlite 'binary.db' - generate an initial fead from the
+        database.
+
+        generate yara_rule_set metadata
+        """
+        database = SqliteDatabase(os.path.join(self.config.feed_database_dir, "binary.db"))
+        db.initialize(database)
+        db.connect()
+        db.create_tables([BinaryDetonationResult])
+        generate_feed_from_db(self.args.output_file)
+
+        #
+
+    # wait until the exit_event has been set by the signal handler
+    #
+    def run_until_told_to_exit(self) -> None:
+        last_numbins = 0
+        while not (self.exit_event.is_set()):
+            self.exit_event.wait(30.0)
+            if self.operation_mode in [YaraConnectorMode.STANDALONE, YaraConnectorMode.PRIMARY]:
+                numbins = get_analyzed_binaries()
+                if numbins != last_numbins:
+                    logger.info(f"Analyzed {numbins} binaries so far ... ")
+                    last_numbins = numbins
+        self.exit(5.0)
+
+    def start_worker_threads(self, run_only_once=False) -> List[Thread]:
+        is_standalone_mode = self.config.operation_mode == YaraConnectorMode.STANDALONE
+        threads = []
+
+        feed_thread = Thread(
+            target=feed_worker, args=(self.exit_event, self.config.output_file)
+        )
+        feed_thread.start()
+        threads.append(feed_thread)
+
+        perf_thread = DatabaseScanningThread(self.config,
+                                             self.hash_queue,
+                                             self.scanning_results_queue,
+                                             self.exit_event,
+                                             run_only_once,
+                                             is_standalone_mode=is_standalone_mode
+                                             )
+        perf_thread.start()
+        threads.append(perf_thread)
+
+        max_hashes = self.config.max_hashes
+
+        number_of_analysis_workers = max_hashes * 2 if is_standalone_mode else 1
+        for i in range(0, number_of_analysis_workers):
+            analysis_minion_thread = Thread(
+                target=analysis_minion,
+                args=(i, self.exit_event, self.hash_queue, self.scanning_results_queue, not is_standalone_mode)
+            )
+            analysis_minion_thread.start()
+            threads.append(analysis_minion_thread)
+
+        results_minion_thread = Thread(
+            target=results_minion, args=(self.exit_event, self.scanning_results_queue, not is_standalone_mode)
+        )
+        results_minion_thread.start()
+        threads.append(results_minion_thread)
+
+        return threads
 
 
 def write_pid_file(file_location: str):
@@ -170,59 +243,18 @@ def handle_sig(exit_event: Event, sig: int, frame) -> None:
     exit_sigs = (signal.SIGTERM, signal.SIGQUIT, signal.SIGKILL, signal.SIGQUIT)
     if sig in exit_sigs:
         exit_event.set()
-        logger.debug("Sig handler set exit event")
-
-
-#
-# wait until the exit_event has been set by the signal handler
-#
-def run_to_exit_signal(exit_event: Event) -> None:
-    """
-    Wait-until-exit polling loop function.  Spam reduced by only updating when count changes.
-    :param exit_event: the event handler
-    """
-    last_numbins = 0
-    while not (exit_event.is_set()):
-        exit_event.wait(30.0)
-        if "master" in globals.g_mode or "primary" in globals.g_mode:
-            numbins = BinaryDetonationResult.select().count()
-            if numbins != last_numbins:
-                logger.info(f"Analyzed {numbins} binaries so far ... ")
-                last_numbins = numbins
-    logger.debug("Begin graceful shutdown...")
-
-
-def init_local_resources() -> None:
-    """
-    Initialize the local resources required to get module information
-    from cbr module store as well as local storage of module and scanning
-    metadata in sqlite 'binary.db' - generate an initial fead from the
-    database.
-
-    generate yara_rule_set metadata
-    """
-    globals.g_yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-    generate_yara_rule_map_hash(
-        globals.g_yara_rules_dir, return_list=False
-    )  # save to globals
-
-    database = SqliteDatabase(os.path.join(globals.g_feed_database_dir, "binary.db"))
-    db.initialize(database)
-    db.connect()
-    db.create_tables([BinaryDetonationResult])
-    generate_feed_from_db()
 
 
 def wait_all_worker_exit_threads(threads, timeout=None):
     """ return when all of the given threads
          have exited (sans daemon threads) """
-    living_threads_count = 2
+    living_threads_count = len(threads)
     start = time.time()
     while living_threads_count > 1:
         living_threads_count = len(
             list(
                 filter(
-                    lambda t: t.isAlive() and not getattr(t, "daemon", True), threads
+                    lambda t: t.is_alive() and not getattr(t, "daemon", True), threads
                 )
             )
         )
@@ -231,40 +263,6 @@ def wait_all_worker_exit_threads(threads, timeout=None):
         elapsed = now - start
         if timeout and elapsed >= timeout:
             return
-
-
-def start_minions(exit_event: Event, hash_queue: Queue, scanning_results_queue: Queue,
-                  run_only_once=False) -> List[Thread]:
-    """
-    Starts minion-threads (not celery workers). Minion threads do work until they get the exit_event signal
-    :param exit_event: event signaller
-    :param hash_queue: promises queue
-    :param scanning_results_queue: results queue
-    :param run_only_once: if True, run once an exit (default False)
-    """
-    logger.debug("Starting perf thread")
-    perf_thread = DatabaseScanningThread(
-        globals.g_scanning_interval,
-        hash_queue,
-        scanning_results_queue,
-        exit_event,
-        run_only_once,
-    )
-    perf_thread.start()
-
-    logger.debug("Starting analysis thread")
-    analysis_minion_thread = Thread(
-        target=analysis_minion, args=(exit_event, hash_queue, scanning_results_queue)
-    )
-    analysis_minion_thread.start()
-
-    logger.debug("Starting results saver thread")
-    results_minion_thread = Thread(
-        target=results_minion_chunked, args=(exit_event, scanning_results_queue)
-    )
-    results_minion_thread.start()
-
-    return [perf_thread, results_minion_thread, analysis_minion_thread]
 
 
 def start_celery_worker_thread(worker_obj, workerkwargs: dict = None, config_file: str = None) -> Thread:
@@ -304,19 +302,3 @@ def launch_celery_worker(worker_obj, worker_kwargs=None, config_file: str = None
     else:
         worker_obj.run(loglevel=logging.ERROR, config_file=config_file, pidfile='/tmp/yaraconnectorceleryworker',
                        **worker_kwargs)
-    logger.debug("CELERY MINION LAUNCHING THREAD EXITED")
-
-
-def get_log_file_handles(use_logger) -> List:
-    """
-    Get a list of filehandle numbers from logger to be handed to DaemonContext.files_preserve.
-
-    :param use_logger: logger to check
-    :return: List of file handlers
-    """
-    handles = []
-    for handler in use_logger.handlers:
-        handles.append(handler.stream.fileno())
-    if use_logger.parent:
-        handles += get_log_file_handles(use_logger.parent)
-    return handles

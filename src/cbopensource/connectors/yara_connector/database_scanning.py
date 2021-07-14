@@ -1,22 +1,24 @@
 import os
-import subprocess
-import time
 from datetime import datetime, timedelta
 from queue import Queue
 from threading import Event, Thread
 
 import psycopg2
 
-from . import globals
-from .binary_database import BinaryDetonationResult
-from .loggers import logger
-from .tasks import update_yara_rules_remote
+from .binary_database import does_hash_exist
+from .config_handling import YaraConnectorConfig
+from .loggers import logger, log_extra_information
+from .tasks import update_yara_rules, update_yara_rules_task
 
 
 class ModuleStoreConnection(object):
 
-    def __init__(self):
+    def __init__(self, config):
         self._conn = None
+        self.config = config
+        self._is_initial_search = True
+        self._initial_search_time = datetime.now() - timedelta(days=self.config.num_days_binaries)
+        self._last_search_time = None
 
     @property
     def conn(self):
@@ -24,37 +26,42 @@ class ModuleStoreConnection(object):
             self._conn = self.get_database_connection()
         return self._conn
 
+    @property
+    def last_search_time(self):
+        return self._last_search_time
+
+    @last_search_time.setter
+    def last_search_time(self, value):
+        self._last_search_time = value
+
     def get_hashes(self):
         try:
             # Determine our binaries window (date forward)
-            start_date_binaries = datetime.now() - timedelta(days=globals.g_num_days_binaries)
-            cursor = self.get_binary_file_cursor(start_date_binaries)
+            cursor = self.get_binary_file_cursor(
+                self._initial_search_time if self._is_initial_search else self._last_search_time)
             rows = cursor.fetchall()
             # Closing since there are no more binaries of interest to scan
             cursor.close()
             self.conn.commit()
-            logger.info(f"Enumerating modulestore...found {len(rows)} resident binaries")
+            if self._is_initial_search:
+                logger.info(f"Initial search found {len(rows)} resident binaries in EDR")
+            else:
+                logger.info(f"Found {len(rows)} new resident binaries in EDR since last check")
+            self._last_search_time = datetime.now()
+            self._is_initial_search = False
             return rows
-        except Exception:
+        except Exception as ex:
             self.reset_connection()
-            logger.info(f"Enumerating modulestore...connection is dead will retry")
+            logger.warning(f"EDR modulestore connection not working - will retry {ex}")
             return []
 
     def get_binary_file_cursor(self, start_date_binaries: datetime):
-        """
-        Get the cursor index to the binaries.
-
-        :param conn: the postgres connection
-        :param start_date_binaries: earliest start time for the search window (up to now)
-        :return: the results cursor
-        """
-        logger.debug("Getting database cursor...")
 
         cur = self.conn.cursor(name="yara_agent")
 
         # noinspection SqlDialectInspection,SqlNoDataSourceInspection
         query = (
-                "SELECT md5hash FROM storefiles WHERE present_locally = TRUE AND "
+                "SELECT md5hash, node_id FROM storefiles WHERE present_locally = TRUE AND "
                 + "timestamp >= '{0}' ORDER BY timestamp DESC".format(start_date_binaries)
         )
 
@@ -63,33 +70,31 @@ class ModuleStoreConnection(object):
 
         return cur
 
-    @staticmethod
-    def get_database_connection(should_log=True):
+    def get_database_connection(self, should_log=True):
         """
         Get a postgres database connection.
 
         :return: the connection
         """
         if should_log:
-            logger.info("Connecting to Postgres database...")
+            log_extra_information("Connecting to Postgres database...")
         conn = psycopg2.connect(
-            host=globals.g_postgres_host,
-            database=globals.g_postgres_db,
-            user=globals.g_postgres_username,
-            password=globals.g_postgres_password,
-            port=globals.g_postgres_port,
+            host=self.config.postgres_host,
+            database=self.config.postgres_db,
+            user=self.config.postgres_username,
+            password=self.config.postgres_password,
+            port=self.config.postgres_port,
         )
         return conn
 
-    @staticmethod
-    def test_database_conn() -> bool:
+    def test_database_conn(self) -> bool:
         """
         Tests the connection to the postgres database.  Closes the connection if successful.
         :return: Returns True if connection to db was successful.
         """
-        logger.info("Testing connection to Postgres database...")
+        logger.debug("Testing connection to Postgres database...")
         try:
-            conn = ModuleStoreConnection.get_database_connection(False)
+            conn = self.get_database_connection(False)
             conn.close()
         except psycopg2.DatabaseError as ex:
             logger.error(F"Failed to connect to postgres database: {ex}")
@@ -105,90 +110,50 @@ class ModuleStoreConnection(object):
 
 class Performer(object):
 
-    def __init__(self, hash_queue: Queue):
+    def __init__(self, hash_queue: Queue, config: YaraConnectorConfig, is_standalone_mode=False):
         self._hash_queue = hash_queue
-        self._module_store_connection = ModuleStoreConnection()
-        self._yara_rules_dir = globals.g_yara_rules_dir
+        self._module_store_connection = ModuleStoreConnection(config)
+        self._yara_rules_dir = config.yara_rules_dir
+        self.standalone_mode = is_standalone_mode
+        self.current_ruleset_time = None
 
     def close(self):
         self._module_store_connection.close()
 
-    @staticmethod
-    def execute_script() -> None:
-        """
-        Execute an external utility script.
-        """
-        logger.info(
-            "----- Executing utility script ----------------------------------------"
-        )
-        prog = subprocess.Popen(
-            globals.g_utility_script, shell=True, universal_newlines=True
-        )
-        stdout, stderr = prog.communicate()
-        if stdout is not None and len(stdout.strip()) > 0:
-            logger.info(stdout)
-        if stderr is not None and len(stderr.strip()) > 0:
-            logger.error(stderr)
-        if prog.returncode:
-            logger.warning(f"program returned error code {prog.returncode}")
-        logger.info(
-            "---------------------------------------- Utility script completed -----\n"
-        )
+    def queue_hashes_for_scanning(self, md5_hashes, last_search_time):
+        if self.standalone_mode:
+            if self._hash_queue.empty():
+                for entry in md5_hashes:
+                    self._hash_queue.put(entry)
+            else:
+                # ensure that the last search time is not updated in this case
+                self._module_store_connection.last_search_time = last_search_time
+                logger.warning(
+                    f"There are still too many outstanding scans - please increase the database scanning interval if "
+                    f"this condition persists in your environment")
+        else:
+            self._hash_queue.put(md5_hashes)
+
+        if len(md5_hashes) > 0:
+            logger.info(f"Queued new binaries for analysis")
+        else:
+            logger.info("There were no new binaries queued for analysis")
 
     def perform(self) -> None:
-        """
-        Main routine - checks the cbr modulestore/storfiles table for new hashes by comparing the sliding-window
-        with the contents of the feed database on disk.
+        self.ensure_yara_rules_up_to_date()
 
-        :param yara_rule_dir: location of the rules directory
-        :param conn: The postgres connection
-        :param hash_queue: the queue of hashes to handle
-        """
-        if globals.g_mode == "master" or globals.g_mode == "primary":
-            logger.info("Uploading Yara rules to minions...")
-            self.generate_rule_map_remote()
-
-        # utility script window start
-        utility_window_start = datetime.now()
-
-        rows = self._module_store_connection.get_hashes()
-
-        md5_hashes = list(filter(Performer._check_hash_against_feed, (row[0].hex() for row in rows)))
-        self._hash_queue.put(md5_hashes)
-
-        # if gathering and analysis took longer than out utility script interval window, kick it off
-        if globals.g_utility_interval > 0:
-            seconds_since_start = (datetime.now() - utility_window_start).seconds
-            if (
-                    seconds_since_start >= globals.g_utility_interval * 60
-                    if not globals.g_utility_debug
-                    else 1
-            ):
-                Performer.execute_script()
-
-        logger.info(f"Queued {len(md5_hashes)} new binaries for analysis")
-
-        logger.debug("Exiting database sweep routine")
+        self.get_and_queue_hashes()
 
     @staticmethod
-    def _check_hash_against_feed(md5_hash: str) -> bool:
-        """
-        Check discovered hash against the current feed.
-        :param md5_hash: md5 hash
-        :return: True if the hash needs to be added
-        """
-        query = BinaryDetonationResult.select().where(
-            BinaryDetonationResult.md5 == md5_hash
-        )
-        # logger.debug(f"Hash = {md5_hash} exists = {query.exists()}")
-        return not query.exists()
+    def filter_hashes(rows):
+        return list(filter(Performer._check_hash_against_feed, ((row[0].hex(), row[1]) for row in rows)))
 
-    def generate_rule_map_remote(self) -> None:
-        """
-        Get remote rules and store into an internal map keyed by file name.
+    @staticmethod
+    def _check_hash_against_feed(row) -> bool:
+        md5_hash = row[0]
+        return does_hash_exist(md5_hash)
 
-        :param yara_rule_path: path to where the rules are stored
-        """
+    def get_rules_as_json(self):
         ret_dict = {}
         for fn in os.listdir(self._yara_rules_dir):
             if fn.lower().endswith(".yar") or fn.lower().endswith(".yara"):
@@ -197,11 +162,46 @@ class Performer(object):
                     continue
                 with open(os.path.join(self._yara_rules_dir, fn), "rb") as fp:
                     ret_dict[fn] = fp.read()
+        return ret_dict
 
-        result = update_yara_rules_remote.delay(ret_dict)
-        globals.g_yara_rule_map = ret_dict
-        while not result.ready():
-            time.sleep(0.1)
+    @property
+    def ruleset_has_changed(self):
+        current_mod_time = os.path.getmtime(self._yara_rules_dir)
+        return_value = current_mod_time != self.current_ruleset_time
+        self.current_ruleset_time = current_mod_time
+        return return_value
+
+    def ensure_yara_rules_up_to_date(self) -> None:
+        if self.ruleset_has_changed:
+            log_extra_information("Configured yara ruleset has changed...updating compiled rules")
+            if self.standalone_mode:
+                update_yara_rules()
+            else:
+                self.do_remote_rule_update()
+        else:
+            logger.debug("Ruleset has not changed... Scanning with previous ruleset")
+
+    def get_and_queue_hashes(self):
+        original_last_scan_time = self._module_store_connection.last_search_time
+
+        rows = self._module_store_connection.get_hashes()
+
+        md5_hashes = Performer.filter_hashes(rows)
+
+        self.queue_hashes_for_scanning(md5_hashes, original_last_scan_time)
+
+    def do_remote_rule_update(self):
+        rule_map = self.get_rules_as_json()
+        result = update_yara_rules_task.delay(remote=True, yara_rules=rule_map)
+        logger.debug("Waiting for remote minion to process ruleset...")
+        try:
+            result.wait(timeout=120)
+        except Exception:
+            logger.warning(
+                "The remote minion has not finished processing yara ruleset update for 120 seconds. Ensure the "
+                "remote minion is available and can reach the configured celery broker")
+            raise Exception
+        logger.info("Yara rules are up to date")
 
 
 class DatabaseScanningThread(Thread):
@@ -213,11 +213,12 @@ class DatabaseScanningThread(Thread):
 
     def __init__(
             self,
-            interval: int,
+            config: YaraConnectorConfig,
             hash_queue: Queue,
             scanning_results_queue: Queue,
             exit_event: Event,
             run_only_once: bool,
+            is_standalone_mode: bool = False,
             *args,
             **kwargs,
     ):
@@ -234,11 +235,11 @@ class DatabaseScanningThread(Thread):
         """
         super().__init__(*args, **kwargs)
 
-        self.performer = Performer(hash_queue)
+        self.performer = Performer(hash_queue, config, is_standalone_mode=is_standalone_mode)
         self._args = args
         self._kwargs = kwargs
         self.exit_event = exit_event
-        self._interval = interval
+        self._interval = config.scanning_interval
         self._hash_queue = hash_queue
         self._scanning_results_queue = scanning_results_queue
         self._run_only_once = run_only_once
@@ -277,8 +278,8 @@ class DatabaseScanningThread(Thread):
         """
         Do the actual database scan, traping any problems.
         """
-        logger.debug("START database sweep")
         try:
+            logger.debug("Looking for new modules in EDR modulestore...")
             self.performer.perform()
         except Exception as err:
             logger.exception(
@@ -289,7 +290,7 @@ class DatabaseScanningThread(Thread):
         """
         Represents the lifetime of the thread.
         """
-
+        logger.debug("Database sweeping thread starting")
         try:
             if self._target:
                 # noinspection PyArgumentList
@@ -300,5 +301,5 @@ class DatabaseScanningThread(Thread):
             # shutdown database connection
             self.performer.close()
             del self._target, self._args, self._kwargs
-            logger.debug("Database scanning Thread Exiting gracefully")
+            logger.debug("Database scanning thread exiting")
             self.exit_event.set()

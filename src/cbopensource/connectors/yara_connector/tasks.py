@@ -3,15 +3,11 @@
 
 import datetime
 import glob
-import hashlib
-import io
 import logging
 import multiprocessing
 import os
 import traceback
-import zipfile
 
-import requests
 import urllib3
 # noinspection PyPackageRequirements
 import yara
@@ -19,11 +15,11 @@ import yara
 from celery import bootsteps, Task
 from celery.utils.log import get_task_logger
 
-from . import globals
 from .analysis_result import AnalysisResult
 from .celery_app import app
-from .config_handling import ConfigurationInit
-from .rule_handling import generate_yara_rule_map_hash, generate_rule_map
+from .config_handling import YaraConnectorConfig
+from .rule_handling import generate_rule_map
+from .task_utils import lookup_binary_by_hash, lookup_local_module
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -111,6 +107,13 @@ def add_minion_arguments(parser) -> None:
 
 app.user_options["worker"].add(add_minion_arguments)
 
+yara_connector_configuration: YaraConnectorConfig = None
+
+
+def set_task_config(config: YaraConnectorConfig):
+    global yara_connector_configuration
+    yara_connector_configuration = config
+
 
 class MyBootstep(bootsteps.Step):
     """
@@ -120,114 +123,127 @@ class MyBootstep(bootsteps.Step):
     # noinspection PyUnusedLocal
     def __init__(self, minion, config_file="yara_minion.conf", **options):
         super().__init__(self)
-        ConfigurationInit(config_file, None)
+        set_task_config(YaraConnectorConfig(config_file, None))
 
 
 app.steps["worker"].add(MyBootstep)
 
 
-@app.task(base=MyTask)
-def update_yara_rules_remote(yara_rules: dict) -> None:
-    """
-    Update remote yara rules.
-    :param yara_rules: dict of rules, keyed by file name
-    """
+def write_rules_from_json(yara_rules: dict):
+    global yara_connector_configuration
     try:
         for key in yara_rules:
-            with open(os.path.join(globals.g_yara_rules_dir, key), "wb") as fp:
+            with open(os.path.join(yara_connector_configuration.yara_rules_dir, key), "wb") as fp:
                 fp.write(yara_rules[key])
     except Exception as err:
         logger.exception(f"Error writing rule file: {err}")
 
 
+@app.task(base=MyTask)
+def update_yara_rules_task(remote=False, yara_rules=None):
+    return update_yara_rules(remote, yara_rules)
+
+
+def update_yara_rules(remote=False, yara_rules: dict = None) -> None:
+    """
+    Update remote yara rules.
+    :param yara_rules: dict of rules, keyed by file name
+    """
+    if remote and yara_rules:
+        write_rules_from_json(yara_rules)
+    compile_yara_rules()
+
+
 # Caller is obliged to compiled_rules_lock.release_read()
-def update_yara_rules():
+def compile_yara_rules():
     """
     gets a read-access on the in-memory set of yara rules , which are locked with multiple possible readers
     if there is no current in memory reference to the current yara rules
     this function attempts to read the yara-rules directory on the minion, and a produce a new set of compiled rules
     the rules are written to disk so that other minions can load them from disk rather than re-compiling them
     """
+    global yara_connector_configuration
+
+    rule_location = yara_connector_configuration.yara_rules_dir
+
+    logger.debug("Updating Yara rules in minion(s)")
+    yara_rule_map, ruleset_hash = generate_rule_map(rule_location)
+
+    compiled_rules_filepath = os.path.join(
+        rule_location, ".YARA_RULES_{0}".format(ruleset_hash)
+    )
+    logger.debug("Yara rule path is {0}".format(compiled_rules_filepath))
+
+    new_rules_object = yara.compile(filepaths=yara_rule_map)
+    rulelogger.info(f"Compiled new set of yara-rules  - {ruleset_hash} - ")
+    for rulesetfp in glob.glob(os.path.join(rule_location, ".YARA_RULES_*")):
+        os.remove(rulesetfp)
+    rulelogger.info(f"Saved ruleset to disk {compiled_rules_filepath}")
+    new_rules_object.save(compiled_rules_filepath)
+    set_compiled_rules(new_rules_object, ruleset_hash)
+
+
+def set_compiled_rules(new_rules_object, ruleset_hash: str):
     global compiled_yara_rules
     global compiled_rules_hash
     global compiled_rules_lock
-
-    compiled_rules_lock.acquire_read()
-    if compiled_yara_rules:
-        logger.debug("Reading the Compiled rules")
-    else:
-        logger.debug("Updating Yara rules in minion(s)")
-        yara_rule_map = generate_rule_map(globals.g_yara_rules_dir)
-        generate_yara_rule_map_hash(globals.g_yara_rules_dir)
-        md5sum = hashlib.md5()
-        for h in globals.g_yara_rule_map_hash_list:
-            md5sum.update(h.encode("utf-8"))
-        rules_hash = md5sum.hexdigest()
-
-        compiled_rules_filepath = os.path.join(
-            globals.g_yara_rules_dir, ".YARA_RULES_{0}".format(rules_hash)
-        )
-        logger.debug("Yara rule path is {0}".format(compiled_rules_filepath))
-
-        rules_already_exist = os.path.exists(compiled_rules_filepath)
-        if not rules_already_exist:
-            new_rules_object = yara.compile(filepaths=yara_rule_map)
-            rulelogger.info(f"Compiled new set of yara-rules  - {rules_hash} - ")
-            # remove old rule set files
-            for rulesetfp in glob.glob(os.path.join(globals.g_yara_rules_dir, ".YARA_RULES_*")):
-                os.remove(rulesetfp)
-        else:
-            rulelogger.info(f"Loaded compiled rule set from disk at {compiled_rules_filepath}")
-            new_rules_object = yara.load(compiled_rules_filepath)
-        compiled_rules_lock.release_read()
-        compiled_rules_lock.acquire_write()
-        if not rules_already_exist:
-            rulelogger.info(f"Saved ruleset to disk {compiled_rules_filepath}")
-            new_rules_object.save(compiled_rules_filepath)
-        compiled_yara_rules = new_rules_object
-        compiled_rules_hash = rules_hash
-        logger.debug("Successfully updated Yara rules")
-        compiled_rules_lock.release_write()
-        compiled_rules_lock.acquire_read()
-    # logger.debug("Exiting update routine ok")
+    compiled_rules_lock.acquire_write()
+    compiled_yara_rules = new_rules_object
+    compiled_rules_hash = ruleset_hash
+    logger.debug("Successfully updated Yara rules")
+    compiled_rules_lock.release_write()
 
 
-def get_binary_by_hash(url: str, hsum: str, token: str):
+def get_module(md5hash, node_id: int):
+    global yara_connector_configuration
+    md5_up = md5hash.upper()
+    current_node_id = yara_connector_configuration.node_id
+    is_local = node_id == current_node_id
+    module_store_path = yara_connector_configuration.module_store_location
+
+    if is_local:
+        found = lookup_local_module(md5_up, module_store_path)
+        if found:
+            return found
+
+    return get_remote_binary_by_hash(md5_up)
+
+
+def get_remote_binary_by_hash(hsum: str):
     """
 
-        do a binary-retrival-by hash (husm) api call 
+        do a binary-retrival-by hash (husm) api call
         the configured server-by (url) using (token)
     """
-    headers = {"X-Auth-Token": token}
-    request_url = f"{url}/api/v1/binary/{hsum}"
-    response = requests.get(
-        request_url,
-        headers=headers,
-        stream=True,
-        verify=False,
-        timeout=globals.g_minion_network_timeout,
-    )
-    if response:
-        with zipfile.ZipFile(io.BytesIO(response.content)) as the_binary_zip:
-            # the response contains the file zipped in 'filedata'
-            fp = the_binary_zip.open("filedata")
-            the_binary_zip.close()
-            return fp
-    else:
-        # otherwise return None which will be interpreted correctly in analyze_binary as haven failed to lookup the hash
-        return None
+    global yara_connector_configuration
+    token = yara_connector_configuration.cb_server_token
+    url = yara_connector_configuration.cb_server_url
+    timeout = yara_connector_configuration.minion_network_timeout
+    return lookup_binary_by_hash(hsum, url, token, timeout)
+
+
+def scan_with_compiled_rules(binary_data):
+    global compiled_yara_rules
+    global compiled_rules_lock
+    try:
+        compiled_rules_lock.acquire_read()
+        matches = compiled_yara_rules.match(data=binary_data.read(), timeout=30)
+    finally:
+        compiled_rules_lock.release_read()
+    return matches
 
 
 @app.task(base=MyTask)
-def analyze_binary(md5sum: str) -> AnalysisResult:
+def analyze_binary_task(md5sum: str, node_id=0) -> AnalysisResult:
+    return analyze_binary(md5sum, node_id)
+
+
+def analyze_binary(md5sum: str, node_id=0) -> AnalysisResult:
     """
     Analyze binary information.
     :param md5sum: md5 binary to check
     :return: AnalysisResult instance
     """
-    global compiled_yara_rules
-    global compiled_rules_hash
-    global compiled_rules_lock
 
     logger.debug(f"{md5sum}: in analyze_binary")
     analysis_result = AnalysisResult(md5sum)
@@ -235,9 +251,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
     try:
         analysis_result.last_scan_date = datetime.datetime.now()
 
-        binary_data = get_binary_by_hash(
-            globals.g_cb_server_url, md5sum.upper(), globals.g_cb_server_token
-        )
+        binary_data = get_module(md5sum, node_id)
 
         if not binary_data:
             logger.debug(f"No binary available for {md5sum}")
@@ -245,10 +259,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             return analysis_result
 
         try:
-            update_yara_rules()
-
-            matches = compiled_yara_rules.match(data=binary_data.read(), timeout=30)
-
+            matches = scan_with_compiled_rules(binary_data)
             # NOTE: Below is for debugging use only
             # matches = "debug"
 
@@ -258,9 +269,7 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
                 analysis_result.short_result = "Matched yara rules: %s" % ", ".join(
                     [match.rule for match in matches]
                 )
-                # analysis_result.short_result = "Matched yara rules: debug"
-                analysis_result.long_result = analysis_result.long_result
-                analysis_result.misc = compiled_rules_hash
+                analysis_result.long_result = analysis_result.short_result
             else:
                 analysis_result.score = 0
                 analysis_result.short_result = "No Matches"
@@ -268,17 +277,20 @@ def analyze_binary(md5sum: str) -> AnalysisResult:
             # yara timed out
             analysis_result.last_error_msg = "Analysis timed out after 60 seconds"
             analysis_result.stop_future_scans = True
+            analysis_result.score = 0
         except yara.Error as err:
             # Yara errored while trying to scan binary
             analysis_result.last_error_msg = f"Yara exception: {err}"
+            analysis_result.score = 0
         except Exception as err:
+            analysis_result.score = 0
             analysis_result.last_error_msg = (
                     f"Other exception while matching rules: {err}\n"
                     + traceback.format_exc()
             )
         finally:
-            compiled_rules_lock.release_read()
             binary_data.close()
+            compiled_rules_lock.release_read()
         return analysis_result
     except Exception as err:
         error = f"Unexpected error: {err}\n" + traceback.format_exc()

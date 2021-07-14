@@ -6,16 +6,15 @@ import json
 import logging
 import os
 import re
+from enum import Enum
 from typing import List, Optional
 
-from . import globals
-from .celery_app import app
 from .exceptions import CbInvalidConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-__all__ = ["ConfigurationInit"]
+__all__ = ["YaraConnectorConfig"]
 
 ################################################################################
 # Configuration reader/validator
@@ -56,21 +55,50 @@ KNOWN = [
     "worker_network_timeout",
     "minion_network_timeout",
     "yara_rules_dir",
+    "log_level",
+    "results_backend",
+    "celery_app_conf",
+    "node_id",
+    "module_store_location"
 ]
 
 MODES = [
     "master", "primary",
     "worker", "minion",
-    "master+worker", "primary+minion"
+    "master+worker", "primary+minion", "standalone"
 ]
 
-class ConfigurationInit(object):
+ALLOWED_LOG_LEVELS = ["VERBOSE", "VERBOSE", 'info',"INFO", 'debug', "DEBUG", 'critical', "CRITICAL", 'warn', 'WARN', 'warning', 'WARNING', 'ERROR']
+
+
+class YaraConnectorMode(Enum):
+    STANDALONE = 1
+    PRIMARY = 2
+    MINION = 3
+
+    @staticmethod
+    def get_mode_from_string(mode_string: str):
+        is_primary = False
+        is_minion = False
+        if 'minion' in mode_string or 'worker' in mode_string:
+            is_minion = True
+        if 'primary' in mode_string or 'master' in mode_string:
+            is_primary = True
+        if is_minion and is_primary:
+            return YaraConnectorMode.STANDALONE
+        elif is_minion:
+            return YaraConnectorMode.MINION
+        elif is_primary:
+            return YaraConnectorMode.PRIMARY
+        return YaraConnectorMode.STANDALONE
+
+
+class YaraConnectorConfig(object):
     """
     Class to deal with all configuration loading and validation.
     """
-    ALLOWED_MODES = []
 
-    def __init__(self, config_file: str, output_file: str = None, **kwargs) -> None:
+    def __init__(self, config_file: str, output_file: str = None, load=True) -> None:
         """
         Validate the config file.
         :param config_file: The config file to validate
@@ -78,6 +106,60 @@ class ConfigurationInit(object):
         """
         self.abs_config = os.path.abspath(os.path.expanduser(config_file))
         self.source = f"Config file '{self.abs_config}'"
+        self.output_file = ""
+        self.yara_rule_map = {}
+        self.yara_rule_map_hash_list = []
+
+        # configuration
+        self.mode = "standalone"
+
+        self.cb_server_url = None
+        self.cb_server_token = None
+        self.broker_url = None
+
+        self.yara_rules_dir = "./yara_rules"
+
+        self.postgres_host = "127.0.0.1"
+        self.postgres_db = "cb"
+        self.postgres_username = "cb"
+        self.postgres_password = ""
+        self.postgres_port = 5002
+
+        self.max_hashes = 8
+        self.num_binaries_not_available = 0
+        self.num_binaries_analyzed = 0
+        self.disable_rescan = True
+        self.num_days_binaries = 365
+
+        self.feed_database_dir = "./feed_db"
+
+        self.scanning_interval = 360
+
+        self.utility_interval = 0
+        self.utility_script = ""
+        self.utility_debug = False  # dev use only, reduces interval from minutes to seconds!
+
+        self.minion_network_timeout = 5
+
+        self.celery_worker_kwargs = None
+
+        self.log_level = "VERBOSE"
+        self.operation_mode = YaraConnectorMode.STANDALONE
+
+        self.output_file = output_file
+
+        self.the_config = None
+        self.results_backend = None
+        self.node_id = None
+        self.module_store_location = "/var/cb/data/modulestore"
+
+        self.celery_app_conf = None
+
+
+        if load:
+            self.load_config()
+
+    def load_config(self):
 
         config = configparser.ConfigParser()
         if not os.path.exists(self.abs_config):
@@ -95,10 +177,6 @@ class ConfigurationInit(object):
             raise CbInvalidConfig(f"{self.source} does not have a 'general' section")
         self.the_config = config["general"]
 
-        # if testing core methods, get out now
-        if "TESTING_ONLY" in kwargs:
-            return
-
         # warn about unknown parameters -- typos?
         extras = []
         try:
@@ -110,16 +188,28 @@ class ConfigurationInit(object):
         except configparser.InterpolationSyntaxError as err:
             raise CbInvalidConfig(f"{self.source} cannot be parsed: {err}")
 
-        globals.g_mode = self._as_str("mode",
-                                      required=False,
-                                      default="primary",
-                                      allowed=MODES)
+        self.mode = self._as_str("mode",
+                                 required=False,
+                                 default="standalone",
+                                 allowed=MODES)
+
+        self.log_level = self._as_str("log_level", required=False, default="INFO",
+                                      allowed=ALLOWED_LOG_LEVELS).upper()
+        self.operation_mode = YaraConnectorMode.get_mode_from_string(self.mode)
 
         # do the config checks
+
+        standalone_or_primary = self.operation_mode in [YaraConnectorMode.STANDALONE, YaraConnectorMode.PRIMARY]
+        self.node_id = self._as_int("node_id", False, default=0 if standalone_or_primary else -1)
+        self.module_store_location = self._as_path("module_store_location", required=False, check_exists=standalone_or_primary, expect_dir=True , default=self.module_store_location)
+
+        if self.operation_mode != YaraConnectorMode.STANDALONE:
+            self.celery_app_conf = self._as_json("celery_app_conf", False)
+
         self._minion_check()
 
-        if globals.g_mode in MODES:
-            self._primary_check(output_file)
+        if self.operation_mode in [YaraConnectorMode.PRIMARY, YaraConnectorMode.STANDALONE]:
+            self._primary_check()
 
     def _minion_check(self) -> None:
         """
@@ -127,34 +217,34 @@ class ConfigurationInit(object):
 
         :raises CbInvalidConfig:
         """
-        globals.g_yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
+        self.yara_rules_dir = self._as_path("yara_rules_dir", required=True, check_exists=True, expect_dir=True)
 
         # we need the cb_server_api information whenever required (ie, we are a minion)
         cb_req = False
-        if globals.g_mode in MODES:
+        if self.operation_mode in [YaraConnectorMode.STANDALONE, YaraConnectorMode.MINION]:
             cb_req = True
 
-        globals.g_cb_server_url = self._as_str("cb_server_url", required=cb_req)
-        globals.g_cb_server_token = self._as_str("cb_server_token", required=cb_req)
+        self.cb_server_url = self._as_str("cb_server_url", required=cb_req)
+        self.cb_server_token = self._as_str("cb_server_token", required=cb_req)
 
-        value = self._as_str("broker_url", required=True)
-        app.conf.update(broker_url=value, result_backend=value)
-
-        # newer terminology takes precedence
-        globals.g_minion_network_timeout = self._as_int("worker_network_timeout",
-                                                        default=globals.g_minion_network_timeout)
-        globals.g_minion_network_timeout = self._as_int("minion_network_timeout",
-                                                        default=globals.g_minion_network_timeout)
+        self.broker_url = self._as_str("broker_url", required=self.operation_mode != YaraConnectorMode.STANDALONE,
+                                       default=None)
+        self.results_backend = self._as_str("results_backend", required=False, default=self.broker_url)
 
         # newer terminology takes precedence
-        globals.g_celery_worker_kwargs = self._as_json("celery_worker_kwargs")
-        globals.g_celery_worker_kwargs = self._as_json("celery_worker_kwargs")
+        self.minion_network_timeout = self._as_int("worker_network_timeout",
+                                                   default=self.minion_network_timeout)
+        self.minion_network_timeout = self._as_int("minion_network_timeout",
+                                                   default=self.minion_network_timeout)
 
-    def _primary_check(self, output_file) -> None:
+        # newer terminology takes precedence
+        self.celery_worker_kwargs = self._as_json("celery_worker_kwargs")
+        self.celery_worker_kwargs = self._as_json("celery_worker_kwargs")
+
+    def _primary_check(self) -> None:
         """
         Validate entries used by the main process.
 
-        :param output_file: output file location from command line
         :raises CbInvalidConfig:
         :raises ValueError:
         """
@@ -167,11 +257,11 @@ class ConfigurationInit(object):
                         if line.startswith("DatabaseURL="):
                             dbregex = r"DatabaseURL=postgresql\+psycopg2:\/\/(.+):(.+)@localhost:(\d+)/(.+)"
                             matches = re.match(dbregex, line)
-                            globals.g_postgres_user = "cb"
-                            globals.g_postgres_password = matches.group(2) if matches else "NONE"
-                            globals.g_postgres_port = 5002
-                            globals.g_postgres_db = "cb"
-                            globals.g_postgres_host = "127.0.0.1"
+                            self.postgres_user = "cb"
+                            self.postgres_password = matches.group(2) if matches else "NONE"
+                            self.postgres_port = 5002
+                            self.postgres_db = "cb"
+                            self.postgres_host = "127.0.0.1"
                             break
                 use_fallback = False  # we good!
             except Exception as err:
@@ -179,53 +269,53 @@ class ConfigurationInit(object):
 
         if use_fallback:
             logger.debug("Falling back to config settings for postgres...")
-            globals.g_postgres_host = self._as_str("postgres_host", default=globals.g_postgres_host)
-            globals.g_postgres_username = self._as_str("postgres_username", default=globals.g_postgres_username)
-            globals.g_postgres_password = self._as_str("postgres_password", required=True)
-            globals.g_postgres_db = self._as_str("postgres_db", default=globals.g_postgres_username)
-            globals.g_postgres_port = self._as_int("postgres_port", default=globals.g_postgres_port)
+            self.postgres_host = self._as_str("postgres_host", default=self.postgres_host)
+            self.postgres_username = self._as_str("postgres_username", default=self.postgres_username)
+            self.postgres_password = self._as_str("postgres_password", required=True)
+            self.postgres_db = self._as_str("postgres_db", default=self.postgres_username)
+            self.postgres_port = self._as_int("postgres_port", default=self.postgres_port)
 
         value = self._as_str("niceness")
         if value != "":
             os.nice(self._as_int("niceness", min_value=0))
 
-        globals.g_max_hashes = self._as_int("concurrent_hashes", default=globals.g_max_hashes)
-        globals.g_disable_rescan = self._as_bool("disable_rescan", default=globals.g_disable_rescan)
-        globals.g_num_days_binaries = self._as_int("num_days_binaries", default=globals.g_num_days_binaries,
-                                                   min_value=1)
+        self.max_hashes = self._as_int("concurrent_hashes", default=self.max_hashes)
+        self.disable_rescan = self._as_bool("disable_rescan", default=self.disable_rescan)
+        self.num_days_binaries = self._as_int("num_days_binaries", default=self.num_days_binaries,
+                                              min_value=1)
 
-        globals.g_utility_interval = self._as_int("utility_interval", default=globals.g_utility_interval,
-                                                  min_value=0)
-        if globals.g_utility_interval > 0:
-            if self._as_str("utility_script", default=globals.g_utility_script) == "":
+        self.utility_interval = self._as_int("utility_interval", default=self.utility_interval,
+                                             min_value=0)
+        if self.utility_interval > 0:
+            if self._as_str("utility_script", default=self.utility_script) == "":
                 logger.warning(f"{self.source} 'utility_interval' supplied but no script defined -- feature disabled")
-                globals.g_utility_interval = 0
-                globals.g_utility_script = ""
+                self.utility_interval = 0
+                self.utility_script = ""
             else:
-                globals.g_utility_script = self._as_path("utility_script", required=True, expect_dir=False,
-                                                         default=globals.g_utility_script)
-                logger.warning(f"{self.source} utility script '{globals.g_utility_script}' is enabled; " +
+                self.utility_script = self._as_path("utility_script", required=True, expect_dir=False,
+                                                    default=self.utility_script)
+                logger.warning(f"{self.source} utility script '{self.utility_script}' is enabled; " +
                                "use this advanced feature at your own discretion!")
         else:
-            if self._as_str("utility_script", required=False, default=globals.g_utility_script) != "":
+            if self._as_str("utility_script", required=False, default=self.utility_script) != "":
                 logger.debug(f"{self.source} has 'utility_script' defined, but it is disabled")
-                globals.g_utility_script = ""
+                self.utility_script = ""
 
         # developer use only
-        globals.g_utility_debug = self._as_bool("utility_debug", default=False)
+        self.utility_debug = self._as_bool("utility_debug", default=False)
 
-        globals.g_feed_database_dir = self._as_path("feed_database_dir", required=True, expect_dir=True,
-                                                    default=globals.g_feed_database_dir, create_if_needed=True)
+        self.feed_database_dir = self._as_path("feed_database_dir", required=True, expect_dir=True,
+                                               default=self.feed_database_dir, create_if_needed=True)
 
-        if output_file is not None and output_file != "":
-            globals.g_output_file = os.path.abspath(os.path.expanduser(output_file))
+        if self.output_file is not None and self.output_file != "":
+            self.output_file = os.path.abspath(os.path.expanduser(self.output_file))
         else:  # same location as feed db, called "feed.json"
-            globals.g_output_file = os.path.join(os.path.dirname(globals.g_feed_database_dir), "feed.json")
+            self.output_file = os.path.join(os.path.dirname(self.feed_database_dir), "feed.json")
 
-        logger.debug(f"NOTE: output file will be '{globals.g_output_file}'")
+        logger.debug(f"NOTE: output file will be '{self.output_file}'")
 
-        globals.g_scanning_interval = self._as_int('database_scanning_interval', default=globals.g_scanning_interval,
-                                                   min_value=360)
+        self.scanning_interval = self._as_int('database_scanning_interval', default=self.scanning_interval,
+                                              min_value=360)
 
     # ----- Type Handlers ------------------------------------------------------------
 
@@ -253,7 +343,7 @@ class ConfigurationInit(object):
         except Exception as err:
             raise CbInvalidConfig(f"{self.source} parameter '{param}' cannot be parsed: {err}")
 
-        if required and value == "":
+        if required and (value == "" or value == None):
             raise CbInvalidConfig(f"{self.source} has no '{param}' definition")
 
         if allowed is not None and value not in allowed:
