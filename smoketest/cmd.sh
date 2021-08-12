@@ -40,7 +40,7 @@ echo Running connector...
 
 cp $2/yaraconnector.conf /etc/cb/integrations/cb-yara-connector/
 mkdir -p /etc/cb/integrations/cb-yara-connector/yara_rules
-cp $2/smoketest.yar /etc/cb/integrations/cb-yara-connector/yara_rules
+cp $2/smoketest*.yar /etc/cb/integrations/cb-yara-connector/yara_rules
 
 #sleep 99999
 systemctl start cb-yara-connector

@@ -10,6 +10,7 @@ ENV ARTIFACTORY_SERVER=${ARTIFACTORY_SERVER}
 ARG BASE_IMAGE
 ENV BASE_IMAGE=${BASE_IMAGE}
 
+RUN yum -y install openssl openssl-devel
 ADD entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
