@@ -41,8 +41,14 @@ mkdir -p ${RPM_BUILD_ROOT}/tmp
 mkdir -p ${RPM_BUILD_ROOT}/var/run/
 mkdir -p ${RPM_BUILD_ROOT}/var/cb/data/cb-yara-connector/feed_db
 
+%if %{defined el6}
+mkdir -p ${RPM_BUILD_ROOT}/etc/init
+mkdir -p ${RPM_BUILD_ROOT}/etc/init.d/
+install -m 700 ${RPM_SOURCE_DIR}/cb-yara-connector ${RPM_BUILD_ROOT}/etc/init.d/cb-yara-connector
+%else
 mkdir -p ${RPM_BUILD_ROOT}/etc/systemd/system
 install -m 0644 ${RPM_SOURCE_DIR}/cb-yara-connector.service ${RPM_BUILD_ROOT}/etc/systemd/system/cb-yara-connector.service
+%endif
 
 cp ${RPM_SOURCE_DIR}/example-conf/yara.conf ${RPM_BUILD_ROOT}/etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
 install -m 0755 ${RPM_BUILD_DIR}/%{name}-%{version}/dist/yaraconnector ${RPM_BUILD_ROOT}/usr/share/cb/integrations/cb-yara-connector/
@@ -53,12 +59,21 @@ touch ${RPM_BUILD_ROOT}/tmp/yaraconnectorceleryworker
 %files
 %defattr(-,root,root)
 %config /etc/cb/integrations/cb-yara-connector/yaraconnector.conf.example
+%if %{defined el6}
+/etc/init.d/cb-yara-connector
+%else
 /etc/systemd/system/cb-yara-connector.service
+%endif
 /tmp/yaraconnectorceleryworker
 /usr/share/cb/integrations/cb-yara-connector/yara-logo.png
 /usr/share/cb/integrations/cb-yara-connector/yaraconnector
 /var/log/cb/integrations/cb-yara-connector/yaraconnector.log
+%dir /etc/cb/integrations/cb-yara-connector/yara_rules
 
 %preun
+%if %{defined el6}
+service cb-yara-connector stop
+%else
 systemctl stop cb-yara-connector
+%endif
 

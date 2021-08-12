@@ -1,15 +1,17 @@
-#import distutils
-#if distutils.distutils_path.endswith('__init__.py'):
-#    distutils.distutils_path = os.path.dirname(distutils.distutils_path)
+from PyInstaller.utils.hooks import collect_submodules
+
+hiddenimports = collect_submodules('encodings')
 
 block_cipher = None
+hiddenimports.extend(['encodings.cp437', 'encodings','billiard','billiard.heap','lockfile','mmap','pkg_resources.py2_warn','celery.app.control','celery.worker.strategy','celery.worker.consumer','celery.events.state','celery.worker.autoscale','celery.worker.components','celery.concurrency.prefork','celery.apps','celery.apps.worker','celery.app.log','celery.fixups', 'celery.fixups.django', 'celery.loaders.app','celery.app.amqp', 'kombu.transport.redis', 'redis', 'celery.backends','celery.backends.redis', 'celery.app.events', 'celery.events', 'kombu.transport.pyamqp'])
+
 
 a = Analysis(['src/cb-yara-connector'],
              pathex=['./src'],
              binaries=[],
-             hiddenimports=['billiard','billiard.heap','lockfile','mmap','pkg_resources.py2_warn','celery.app.control','celery.worker.strategy','celery.worker.consumer','celery.events.state','celery.worker.autoscale','celery.worker.components','celery.concurrency.prefork','celery.apps','celery.apps.worker','celery.app.log','celery.fixups', 'celery.fixups.django', 'celery.loaders.app','celery.app.amqp', 'kombu.transport.redis', 'redis', 'celery.backends','celery.backends.redis', 'celery.app.events', 'celery.events', 'kombu.transport.pyamqp'],
              hookspath=[],
              runtime_hooks=[],
+             hiddenimports=hiddenimports,
              excludes=[],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,

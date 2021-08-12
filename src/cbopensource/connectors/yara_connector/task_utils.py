@@ -3,7 +3,9 @@ import os
 import zipfile
 
 import requests
+from encodings import cp437
 
+cp437encoding = cp437
 
 def lookup_binary_by_hash(hsum, url, token, timeout=30):
     headers = {"X-Auth-Token": token}
