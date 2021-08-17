@@ -310,11 +310,11 @@ def get_high_score(matches) -> int:
     if matches == "debug":
         return 100
 
-    score = 0
+    score = -1
     for match in matches:
         if match.meta.get("score", 0) > score:
             score = match.meta.get("score")
-    if score == 0:
+    if score == -1:
         return 100
     else:
         return score
