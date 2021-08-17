@@ -74,7 +74,7 @@ def does_hash_exist(md5_hash):
 
 def get_scoring_binaries():
     query = BinaryDetonationResult.select().where(
-        BinaryDetonationResult.score > 0 and BinaryDetonationResult.binary_not_available == False)
+        (BinaryDetonationResult.score > 0) & (BinaryDetonationResult.binary_not_available == False))
     return query
 
 

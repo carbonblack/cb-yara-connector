@@ -1,7 +1,7 @@
 %define name python-cb-yara-connector
 %define version 2.2.0
 %define bare_version 2.2.0
-%define release 2
+%define release 3
 
 %global _enable_debug_package 0
 %global debug_package %{nil}
