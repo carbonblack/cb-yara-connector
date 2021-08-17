@@ -158,7 +158,9 @@ class YaraConnector(object):
 
         generate yara_rule_set metadata
         """
-        database = SqliteDatabase(os.path.join(self.config.feed_database_dir, "binary.db"))
+        database = SqliteDatabase(os.path.join(self.config.feed_database_dir, "binary.db"), pragmas={
+            'journal_mode': 'wal',
+            'cache_size': -1024 * 64})
         db.initialize(database)
         db.connect()
         db.create_tables([BinaryDetonationResult])
