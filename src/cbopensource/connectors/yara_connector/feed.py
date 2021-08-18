@@ -55,6 +55,8 @@ def generate_feed_from_db(feed_location: str, previous_report_count=0, honour_re
     if honour_report_count and exists_new_reports:
         logger.debug(f"There are {report_count} new analysis results available. Feed updating")
         write_feed(feed_location, reports)
+    elif not honour_report_count:
+        write_feed(feed_location, reports)
     else:
         logger.debug("There are no new reports...skipping feed update")
     return report_count
