@@ -91,7 +91,7 @@ def run():
         sys.exit(1)
 
     if args.validate_yara_rules:
-        validate_yara_rules()
+        validate_yara_rules(config.yara_rules_dir)
     else:
         yara_connector = YaraConnector(args, config=config)
         exit_rc = 0
