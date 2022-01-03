@@ -148,6 +148,16 @@ broker_url=redis://127.0.0.1
 ;
 results_backend=redis://
 ```
+# Troubleshooting
+
+Some systems may experience an issue getting the Yara feed to appear on the EDR Threat Intelligence page. 
+The underlying issue has to do with Redis configuration, and is documented with a solution in [this knowledge base article](https://community.carbonblack.com/t5/Knowledge-Base/EDR-Yara-Feed-Not-Visible-on-Threat-Intelligence-Feed-Page/ta-p/91250).
+
+However, you may still need to add the feed manuallly, which is done using the following steps:
+1. Go to the Threat Intelligence page (click on "Threat Intelligence" in navigation panel on the left side of the EDR console),
+2. Click "Add New Feed"
+3. In the "Feed URL" field, use file://var/cb/data/cb-yara-connector/feed.json
+4. Click Save.
 
 # Development Notes	
 
