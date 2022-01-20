@@ -6,12 +6,12 @@
 celery==4.4.7
 humanfriendly==4.18
 peewee==3.13.1
-psycopg2-binary==2.8.4
+psycopg2-binary
 python-daemon==2.2.4
 redis==3.3.11
 requests==2.22.0
 simplejson==3.17.0
 urllib3==1.25.7
-yara-python==3.11.0
-pyinstaller==4.3
+yara-python
+pyinstaller==4.8
 cbfeeds==1.0.0

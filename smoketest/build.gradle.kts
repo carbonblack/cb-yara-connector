@@ -17,7 +17,7 @@ val osVersionClassifier: String
                 else -> "centos7"
             }
         } catch (ignored: Exception) {
-            "centos7"
+            "photon4"
         }
     }
 
@@ -37,13 +37,24 @@ buildDir = rootProject.buildDir
 
 val createDockerFile = tasks.register<Dockerfile>("createSmokeTestDockerfile") {
     from(System.getenv()["BASE_IMAGE"])
-    runCommand("yum -y install --disablerepo=nodesource postgresql-server sudo")
+    val python : String = if (osVersionClassifier == "photon4") {
+        "python3.10"
+    } else {
+        "python3.8"
+    }
+    if (osVersionClassifier != "photon4") {
+    	runCommand("yum -y install --disablerepo=nodesource postgresql-server sudo")
+    	runCommand("yum -y install --disablerepo=nodesource redis")
+    } else {
+	    runCommand("tdnf -y install redis postgresql sudo ")
+    }
+    environmentVariable("PYTHON", python)
     runCommand("echo Adding cb user")
     runCommand("groupadd cb --gid 8300 && useradd --shell /sbin/nologin --gid cb --comment \"Service account for VMware Carbon Black EDR\" -M cb")
-    runCommand("mkdir /postgres ; chown -R cb:cb /postgres ; chown -R cb:cb /var/run/postgresql")
+    runCommand("mkdir -p /var/run/postgresql ; mkdir /postgres ; chown -R cb:cb /postgres ; chown -R cb:cb /var/run/postgresql")
     runCommand("sudo -u cb /usr/bin/initdb -D /postgres")
-    runCommand("yum -y install --disablerepo=nodesource redis")
-    runCommand("python3.8 -m ensurepip && python3.8 -m pip install flask pyopenssl")
+    runCommand("$python -m ensurepip")
+    runCommand("$python -m pip install flask pyopenssl")
 }
 
 val createSmokeTestImage = tasks.register<DockerBuildImage>("createSmokeTestImage") {
