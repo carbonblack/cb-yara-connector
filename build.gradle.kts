@@ -9,6 +9,9 @@ plugins {
     id("com.bmuschko.docker-remote-api") version "6.4.0" apply false
 }
 
+import com.bmuschko.gradle.docker.tasks.image.*
+
+
 // This is running in a docker container so this value comes from the container OS.
 val osVersionClassifier: String
     get() {

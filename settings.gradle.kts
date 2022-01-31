@@ -9,3 +9,4 @@ pluginManagement {
 rootProject.name = "yara-connector"
 
 include(":smoketest")
+include(":docker")
