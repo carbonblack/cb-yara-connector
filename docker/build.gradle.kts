@@ -48,9 +48,13 @@ val createProdImage = tasks.register<DockerBuildImage>("createProdImage") {
     images.add("yaraconnector/${osVersionClassifier}:latest")
 }
 
+
+val prodTestDockerFile = File("build/docker/Dockerfile.prodtest")
 val createProdTestDockerFile = tasks.register<Dockerfile>("createProdTestDockerfile") {
-    dependsOn(createProdDockerFile)
+    dependsOn(createProdImage)
+    destFile.set(prodTestDockerFile)
     from("yaraconnector/${osVersionClassifier}:latest")
+    runCommand("yum -y install sudo")
     runCommand("yum -y install --disablerepo=nodesource postgresql-server sudo")
     runCommand("echo Adding cb user")
     runCommand("groupadd cb --gid 8300 && useradd --shell /sbin/nologin --gid cb --comment \"Service account for VMware Carbon Black EDR\" -M cb")
@@ -62,6 +66,7 @@ val createProdTestDockerFile = tasks.register<Dockerfile>("createProdTestDockerf
 
 val createProdTestImage = tasks.register<DockerBuildImage>("createProdTestImage") {
     dependsOn(createProdTestDockerFile)
+    dockerFile.set(prodTestDockerFile)
     images.add("yaraconnectorprodtest/${osVersionClassifier}:latest")
 }
 

@@ -6,7 +6,7 @@ plugins {
     id("com.carbonblack.gradle-connector-python") version "2.1.1"
     id("com.jfrog.artifactory") version "4.15.1" apply false
     id("com.palantir.git-version") version "0.12.3" apply false
-    id("com.bmuschko.docker-remote-api") version "6.4.0" apply false
+    id("com.bmuschko.docker-remote-api") version "7.2.0" apply false
 }
 
 import com.bmuschko.gradle.docker.tasks.image.*
