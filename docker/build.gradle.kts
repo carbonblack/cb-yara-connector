@@ -134,7 +134,7 @@ val removeProdTestContainer = tasks.register<DockerRemoveContainer>("removeProdT
     }
 }
 
-val dockerProdTest = tasks.register<Task>("prodtest") {
+val dockerProdTest = tasks.register<Task>("dockerTest") {
     dependsOn(checkProdTestStatusCode)
     group = "Verification"
     description = "Executes the prod test docker container build and tests"
