@@ -25,8 +25,8 @@ print_help() {
   echo "  -h, --help             Print this help message."
   echo
   echo "COMMANDs:"
-  echo "  startup        Start the connector"
-  echo "  shutdown       Stop the connector"
+  echo "  start        Start the connector"
+  echo "  stop       Stop the connector"
   echo "  status         Stop the connector"
   exit 2
 }
@@ -41,11 +41,11 @@ if [[ "${1}" == "" ]]; then
   echo "COMMAND required"; print_help
 fi
 
-if [[ "${1^^}" =~ ^(STARTUP|SHUTDOWN|STATUS)$ ]]; then
+if [[ "${1^^}" =~ ^(START|STOP|STATUS)$ ]]; then
   echo "EDR Yara Connector: running ${1}..."
   case "${1^^}" in
-    STARTUP) $STARTUP_COMMAND ;;
-    SHUTDOWN) $SHUTDOWN_COMMAND ;;
+    START) $STARTUP_COMMAND ;;
+    STOP) $SHUTDOWN_COMMAND ;;
     STATUS) $STATUS_COMMAND ;;
   esac
 else
