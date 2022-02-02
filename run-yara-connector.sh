@@ -1,11 +1,15 @@
 #!/bin/bash
 LABEL=edryaraconnector
 IMAGE=yaraconnector/centos7:latest
+EDR_MODULE_STORE_EXTERNAL=/var/cb/data/modulestore
 EDR_MODULE_STORE=/var/cb/data/modulestore
+CONFIG_DIR_EXTERNAL=/etc/cb/integrations/cb-yara-connector
 CONFIG_DIR=/etc/cb/integrations/cb-yara-connector
+LOG_DIR_EXTERNAL=/var/log/cb/integrations/cb-yara-connector
 LOG_DIR=/var/log/cb/integrations/cb-yara-connector
+DATA_DIR_EXTERNAL=/var/cb/data/cb-yara-connector
 DATA_DIR=/var/cb/data/cb-yara-connector
-MOUNT_POINTS="--mount type=bind,source=$CONFIG_DIR,target=$CONFIG_DIR --mount type=bind,source=$DATA_DIR,target=$DATA_DIR --mount type=bind,source=$LOG_DIR,target=$LOG_DIR --mount type=bind,source=$EDR_MODULE_STORE,target=$EDR_MODULE_STORE"
+MOUNT_POINTS="--mount type=bind,source=$CONFIG_DIR_EXTERNAL,target=$CONFIG_DIR --mount type=bind,source=$DATA_DIR_EXTERNAL,target=$DATA_DIR --mount type=bind,source=$LOG_DIR_EXTERNAL,target=$LOG_DIR --mount type=bind,source=$EDR_MODULE_STORE_EXTERNAL,target=$EDR_MODULE_STORE"
 SERVICE_START='systemctl start cb-yara-connector'
 CONTAINER_RUNNING=$(docker inspect --format="{{.State.Running}}" $LABEL 2> /dev/null)
 if [ "$CONTAINER_RUNNING" == "true" ]; then

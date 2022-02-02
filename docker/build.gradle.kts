@@ -24,6 +24,7 @@ val osVersionClassifier: String
     }
 
 val createProdDockerFile = tasks.register<Dockerfile>("createProdDockerfile") {
+    dependsOn(":buildRpm")
     from(System.getenv()["BASE_IMAGE"])
     val rpmDir = "${rootProject.buildDir}/rpm"
     val findCommand = "find \"$rpmDir\" -name \"*.rpm\" -print -quit"
@@ -47,7 +48,6 @@ val createProdImage = tasks.register<DockerBuildImage>("createProdImage") {
     dependsOn(createProdDockerFile)
     images.add("yaraconnector/${osVersionClassifier}:latest")
 }
-
 
 val prodTestDockerFile = File("build/docker/Dockerfile.prodtest")
 val createProdTestDockerFile = tasks.register<Dockerfile>("createProdTestDockerfile") {
@@ -145,4 +145,8 @@ val dockerBuild = tasks.register<Task>("buildDocker") {
     dependsOn(createProdImage)
     group = "Verification"
     description = "build prod docker image"
+}
+
+tasks.named("build") {
+    this.finalizedBy(createProdDockerFile)
 }
