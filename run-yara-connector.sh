@@ -10,17 +10,26 @@ LOG_DIR=/var/log/cb/integrations/cb-yara-connector
 DATA_DIR_EXTERNAL=/var/cb/data/cb-yara-connector
 DATA_DIR=/var/cb/data/cb-yara-connector
 MOUNT_POINTS="--mount type=bind,source=$CONFIG_DIR_EXTERNAL,target=$CONFIG_DIR --mount type=bind,source=$DATA_DIR_EXTERNAL,target=$DATA_DIR --mount type=bind,source=$LOG_DIR_EXTERNAL,target=$LOG_DIR --mount type=bind,source=$EDR_MODULE_STORE_EXTERNAL,target=$EDR_MODULE_STORE"
-SERVICE_START='systemctl start cb-yara-connector'
-CONTAINER_RUNNING=$(docker inspect --format="{{.State.Running}}" $LABEL 2> /dev/null)
-if [ "$CONTAINER_RUNNING" == "true" ]; then
-  STARTUP_COMMAND="echo EDR Yara Connector container already running"
-  STATUS_COMMAND="docker exec $LABEL systemctl status cb-yara-connector"
-else
-  STARTUP_COMMAND="docker run -d --rm $MOUNT_POINTS --name $LABEL $IMAGE $SERVICE_START"
-  STATUS_COMMAND="echo EDR Yara Connector container is stopped"
-fi
-SHUTDOWN_COMMAND="docker stop $LABEL"
+STARTUP_COMMAND="docker run -d --rm $MOUNT_POINTS --name $LABEL $IMAGE $SERVICE_START"
+STATUS_COMMAND=get_container_status
 
+get_container_status () {
+    CONTAINER_NAME=$(docker ps | grep $LABEL | head -n1 | awk '{print $1}')
+    if [ "${#CONTAINER_NAME}" -gt 0 ]; then
+        CONTAINER_RUNNING=true
+        echo "EDR Yara Container status: Running"
+        echo "EDR Yara Container identifier: ${CONTAINER_NAME}"
+    else
+        # run ps with -a switch to see if stopped or non-existent
+        STOPPED_NAME=$(docker ps | grep $LABEL | head -n1 | awk '{print $1}')
+        if [ "${#STOPPED_NAME}" -gt 0 ]; then
+            echo "EDR Yara Container status: Stopped "
+        else
+            echo "EDR Yara Container status: No running container"
+        fi
+        CONTAINER_RUNNING=false
+    fi
+}
 
 print_help() {
   echo "Usage: edr-yara-connector-run COMMAND [options]"
