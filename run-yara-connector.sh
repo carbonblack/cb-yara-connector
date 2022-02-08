@@ -31,6 +31,12 @@ get_container_status () {
     fi
 }
 
+SHUTDOWN_COMMAND=stop_and_remove_container
+stop_and_remove_container() {
+    docker stop $LABEL > /dev/null
+    docker rm $LABEL > /dev/null
+}
+
 print_help() {
   echo "Usage: edr-yara-connector-run COMMAND [options]"
   echo
