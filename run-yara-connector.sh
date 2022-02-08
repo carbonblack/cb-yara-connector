@@ -10,7 +10,7 @@ LOG_DIR=/var/log/cb/integrations/cb-yara-connector
 DATA_DIR_EXTERNAL=/var/cb/data/cb-yara-connector
 DATA_DIR=/var/cb/data/cb-yara-connector
 MOUNT_POINTS="--mount type=bind,source=$CONFIG_DIR_EXTERNAL,target=$CONFIG_DIR --mount type=bind,source=$DATA_DIR_EXTERNAL,target=$DATA_DIR --mount type=bind,source=$LOG_DIR_EXTERNAL,target=$LOG_DIR --mount type=bind,source=$EDR_MODULE_STORE_EXTERNAL,target=$EDR_MODULE_STORE"
-STARTUP_COMMAND="docker run -d --rm $MOUNT_POINTS --name $LABEL $IMAGE $SERVICE_START"
+STARTUP_COMMAND="docker run -d --rm $MOUNT_POINTS --name $LABEL $IMAGE"
 STATUS_COMMAND=get_container_status
 
 get_container_status () {
