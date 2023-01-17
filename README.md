@@ -40,9 +40,9 @@ cb_server_token=<API TOKEN GOES HERE>
 ## Create your YARA rules
 
 The YARA connector monitors the directory `/etc/cb/integrations/cb-yara-connector/yara_rules` for files (`.yar`) each 
-specifying one or more YARA rule. Your rules must have `meta` section with a 
-`score = [1-10]` tag to appropriately score matching binaries.  This directory is 
-configurable in your configuration file. C-style comments are supported.
+specifying one or more YARA rule. Your rules should have a `meta` section with a
+`score = [1-100]` tag to appropriately score matching binaries.  Rules with no score defined will default to 100.
+This directory is configurable in your configuration file. C-style comments are supported.
 
 ### Sample YARA Rule File
 ```

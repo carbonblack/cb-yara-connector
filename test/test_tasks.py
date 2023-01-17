@@ -16,6 +16,13 @@ def get_mock_match(rule_name: str, score: int = 10):
     return mock_match
 
 
+def get_mock_default_score_match(rule_name: str):
+    mock_match = MagicMock()
+    mock_match.meta = {}
+    mock_match.rule = rule_name
+    return mock_match
+
+
 DEFAULT_MOCK_RULESET = ["rule 1", "rule two", "another rule"]
 
 
@@ -24,6 +31,14 @@ def get_working_mock_ruleset(rules=None):
         rules = DEFAULT_MOCK_RULESET
     mock_rules = MagicMock()
     mock_rules.match.return_value = [get_mock_match(rulename) for rulename in rules]
+    return mock_rules
+
+
+def get_mock_default_score_ruleset(rules=None):
+    if not rules:
+        rules = DEFAULT_MOCK_RULESET
+    mock_rules = MagicMock()
+    mock_rules.match.return_value = [get_mock_default_score_match(rulename) for rulename in rules]
     return mock_rules
 
 
@@ -38,6 +53,16 @@ class TaskTests(unittest.TestCase):
     def setUp(self) -> None:
         self.config = MockYaraConfig(0, "/var/cb/data/modulestore", "https://localhost", "someapikey", 30, "./rules")
         set_task_config(self.config)
+
+    @patch("cbopensource.connectors.yara_connector.tasks.lookup_local_module", new=get_mock_module_data())
+    def test_scan_local_default_score(self):
+        set_compiled_rules(get_mock_default_score_ruleset(DEFAULT_MOCK_RULESET), "DEADBEEF")
+        analysis_result = analyze_binary("14018EB9E2F4488101719C4D29DE2230", 0)
+        for rule in DEFAULT_MOCK_RULESET:
+            assert rule in analysis_result.long_result
+
+        assert analysis_result.md5 is not ""
+        assert analysis_result.score == 100
 
     @patch("cbopensource.connectors.yara_connector.tasks.lookup_local_module", new=get_mock_module_data())
     def test_scan_local(self):
