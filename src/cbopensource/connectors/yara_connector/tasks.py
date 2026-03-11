@@ -301,7 +301,7 @@ def analyze_binary(md5sum: str, node_id=0) -> AnalysisResult:
 
 def get_high_score(matches) -> int:
     """
-    Find the highest match score.
+    Find the highest match score. If score is unset, default to 100.
 
     :param matches: List of rule matches.
     :return: highest score
@@ -312,7 +312,7 @@ def get_high_score(matches) -> int:
 
     score = -1
     for match in matches:
-        if match.meta.get("score", 0) > score:
+        if match.meta.get("score", -1) > score:
             score = match.meta.get("score")
     if score == -1:
         return 100
